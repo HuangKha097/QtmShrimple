@@ -1,0 +1,252 @@
+.container {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background-color: var(--primary-backgroundColor);
+  overflow: hidden;
+  
+  /* Flexbox Centering */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  & .chat-wrapper {
+    position: relative;
+    display: flex;
+    width: 80%; /* Fixed width relative to viewport */
+    height: 85%; /* Fixed height relative to viewport */
+    background-color: transparent;
+    border: 1px solid var(--primary-borderColor);
+    border-radius: 0.8rem;
+    box-shadow: var(--surface-shadow);
+
+    &.feed-view {
+      width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none;
+      .block-left { flex: 0 0 264px; max-width: 264px; }
+    }
+
+    .block-left {
+      flex: 0 0 25%;
+      max-width: 25%;
+
+      
+
+    }
+
+    .no-slide-bar {
+      border-top-left-radius: 0.8rem;
+      border-bottom-left-radius: 0.8rem;
+      max-width: 50px;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-right: 1px solid var(--primary-borderColor);
+      background-color: var(--primary-backgroundColor);
+
+      
+    }
+
+    .more-btn {
+      background-color: transparent;
+      color: var(--primary-textColor);
+      border-radius: 50%;
+      width: 4.2rem;
+      height: 4.2rem;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: background-color 0.2s ease;
+
+      &:hover {
+        background-color: var(--primary-hoverBackgroundColor);
+        color: var(--primary-color);
+      }
+    }
+
+    /* When sidebar is present (normal state), this will be overridden by inline styles or specific flex logic if needed,
+       but for now let's make it flexible. */
+    .block-right {
+      flex-grow: 1;
+      /* Remove fixed max-width/flex-basis so it can expand when sidebar is collapsed */
+      width: auto; 
+      min-width: 0; /* Prevent overflow */
+    }
+
+    
+
+  }
+
+  .setting-wrapper {
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    border-radius: 0.8rem;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: flex-end;
+
+    
+  }
+
+  .copyright {
+    width: 100%;
+    text-align: center;
+    margin-top: 1rem;
+    color: var(--primary-textColor);
+    opacity: 0.2;
+    font-size: 1.4rem;
+  }
+
+}
+
+.add-friend-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  
+}
+
+.mobile-backdrop {
+    display: none;
+}
+
+/* MEDIA QUERIES FOR MOBILE */
+@media (max-width: 768px) {
+  .container {
+     padding: 0;
+     width: 100vw;
+     height: 100vh;
+  height: 100dvh;
+     overflow: hidden; /* Prevent scrolling on body */
+  }
+
+  /* Force wrapper to fill screen */
+  .chat-wrapper {
+      width: 100% !important;
+      height: 100% !important;
+      border: none;
+      border-radius: 0;
+      overflow: hidden; /* Ensure internal scrolling works */
+      
+      /* CHAT VIEW LOGIC */
+      
+      /* Default (List View): Show Sidebar, Hide Content */
+      &:not(.feed-view) {
+          .block-left {
+            display: flex;
+            width: 100%;
+            max-width: 100%;
+            flex: 1;
+            border-right: none;
+          }
+
+          .block-right {
+            display: none;
+            width: 100%;
+            flex: 1;
+          }
+      }
+
+      /* Active Chat (Content View): Hide Sidebar, Show Content */
+      &.has-active-chat:not(.feed-view) {
+           .block-left {
+               display: none;
+           }
+           .block-right {
+               display: flex;
+           }
+      }
+
+      /* FEED VIEW LOGIC */
+      &.feed-view {
+           position: relative; 
+
+           .block-right {
+               display: flex;
+               width: 100%;
+               flex: 1;
+           }
+
+           /* Sidebar as Drawer */
+           .block-left {
+               position: absolute;
+               top: 0;
+               left: 0;
+               height: 100%;
+               width: 85%;
+               max-width: 320px;
+               z-index: 1001;
+               background-color: var(--primary-blockBackgroundColor); 
+               box-shadow: 4px 0 15px rgba(0,0,0,0.5);
+               
+               
+               /* If it is rendered (isShowSlideBar=true), it shows. */
+               /* Ensure it overlays */
+           }
+           
+           .no-slide-bar {
+               display: none; /* Hide the collapse stub on mobile */
+           }
+      }
+  }
+  
+
+  .mobile-backdrop {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.6);
+      z-index: 1000;
+      backdrop-filter: blur(3px);
+      
+  }
+}
+ 
+/* Override setting wrapper for mobile specifically if needed */
+@media (max-width: 768px) {
+    .setting-wrapper {
+        position: fixed !important; /* Force fixed to cover everything */
+        top: 0;
+        left: 0;
+        width: 100% !important;
+        height: 100% !important;
+        z-index: 9999 !important; /* Highest priority */
+        border-radius: 0 !important;
+        background-color: var(--primary-backgroundColor); /* Ensure opaque */
+    }
+}
+/* Social pages use a full viewport; chat retains its original dimensions. */
+@media (max-width: 768px) {
+  .container .chat-wrapper.feed-view {
+    .block-left {
+      width: min(85vw, 320px); max-width: 320px;
+      visibility: hidden; opacity: 0; scale: .97; transform-origin: top left;
+      transition: opacity var(--motion-panel) var(--motion-ease), scale var(--motion-panel) var(--motion-ease), visibility 0s var(--motion-panel);
+    }
+    &.feed-menu-open .block-left { visibility: visible; opacity: 1; scale: 1; transition-delay: 0s; }
+  }
+  .container .copyright { display: none; }
+}

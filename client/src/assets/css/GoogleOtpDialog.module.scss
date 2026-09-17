@@ -1,0 +1,142 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: rgba(10, 14, 20, .58);
+  backdrop-filter: blur(10px);
+}
+
+.dialog {
+  position: relative;
+  width: min(100%, 46rem);
+  padding: 3.2rem;
+  border: 1px solid var(--primary-borderColor);
+  border-radius: 2rem;
+  background: var(--primary-blockBackgroundColor);
+  color: var(--primary-textColor);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .24);
+  text-align: center;
+}
+
+.closeButton {
+  position: absolute;
+  top: 1.6rem;
+  right: 1.6rem;
+  display: grid;
+  place-items: center;
+  width: 3.8rem;
+  height: 3.8rem;
+  border: 0;
+  border-radius: 50%;
+  color: var(--secondary-textColor);
+  background: var(--surface-subtle);
+  cursor: pointer;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 5.6rem;
+  height: 5.6rem;
+  margin: 0 auto 1.8rem;
+  border-radius: 1.6rem;
+  color: var(--primary-color);
+  background: rgba(var(--primary-rgb), .12);
+}
+
+.eyebrow {
+  color: var(--primary-color);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.dialog h2 {
+  margin: .6rem 0 1rem;
+  font-size: 2.8rem;
+}
+
+.description {
+  color: var(--secondary-textColor);
+  font-size: 1.45rem;
+  line-height: 1.6;
+}
+
+.description strong {
+  color: var(--primary-textColor);
+  overflow-wrap: anywhere;
+}
+
+.codeRow {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: .8rem;
+  margin: 2.6rem 0 2rem;
+}
+
+.codeRow input {
+  min-width: 0;
+  height: 5.6rem;
+  border: 1px solid var(--primary-borderColor);
+  border-radius: 1.2rem;
+  background: var(--surface-subtle);
+  color: var(--primary-textColor);
+  font-size: 2.2rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.codeRow input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), .12);
+}
+
+.verifyButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 5rem;
+  border: 0;
+  border-radius: 1.2rem;
+  background: var(--primary-color);
+  color: var(--on-primary);
+  font-size: 1.5rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.verifyButton:disabled,
+.resendButton:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.resendButton {
+  margin-top: 1.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--primary-color);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.spinner {
+  animation: otp-spin .8s linear infinite;
+}
+
+@keyframes otp-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 520px) {
+  .overlay { padding: 1.2rem; }
+  .dialog { padding: 2.8rem 1.8rem 2.4rem; }
+  .codeRow { gap: .5rem; }
+  .codeRow input { height: 5rem; border-radius: 1rem; font-size: 1.9rem; }
+}

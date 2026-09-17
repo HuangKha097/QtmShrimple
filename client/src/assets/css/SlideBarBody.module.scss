@@ -1,0 +1,95 @@
+
+.slidebar-body-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 1.5rem;
+  padding: 1.5rem 0;
+}
+
+// Khối tìm kiếm
+.search-box {
+  position: relative;
+  width: 100%;
+
+
+  .search-input {
+    background-color: transparent;
+    border: 2px solid var(--primary-borderColor);
+    border-radius: 0.8rem;
+    padding: 1.2rem 1.6rem;
+    color: var(--primary-textColor);
+    font-size: 1.4rem;
+    width: 100%;
+
+    &:focus {
+      outline: none;
+      border-color: var(--accent-text);
+    }
+
+    &::placeholder {
+      color: var(--primary-textColor);
+      opacity: 0.6;
+
+    }
+
+
+    &:focus {
+      outline: none;
+      border-color: var(--primary-color);
+
+    }
+  }
+}
+
+// Thanh điều hướng (Tabs)
+.slidebar-body-navigation {
+  border-top: 1px solid var(--primary-borderColor);
+  border-bottom: 1px solid var(--primary-borderColor);
+  display: flex;
+  list-style: none;
+  padding: 0.8rem 0;
+  margin: 0;
+  gap: 0.8rem;
+
+  .nav-item{
+    background: transparent;
+    border: none;
+    font-family: inherit;
+    padding: 0.6rem 1rem;
+    color: var(--primary-textColor);
+    opacity: 0.6;
+    font-size: 1.4rem;
+    font-weight: 400;
+    border-radius: 2rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    line-height: 2rem;
+
+    &.active {
+      color: var(--primary-color);
+      opacity: 1;
+      background-color: rgba(var(--primary-rgb), 0.1);
+    }
+
+    &:hover:not(.active) {
+      background-color: var(--primary-hoverBackgroundColor);
+      color: var(--primary-color);
+      opacity: 1;
+    }
+
+  }
+}
+
+// Danh sách chat
+.slidebar-body-list {
+  flex-grow: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+
+  // Tùy chỉnh thanh cuộn cho đẹp (Webkit browsers)
+}

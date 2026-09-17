@@ -1,0 +1,894 @@
+import {create} from "zustand";
+import {persist} from "zustand/middleware";
+import {chatService} from "../services/chatService.js";
+import {friendService} from "../services/friendService.js";
+import {useAuthStore} from "./useAuthStore.js"; // 1. Import thêm service
+
+
+export const useChatStore = create(
+    persist(
+        (set, get) => ({
+
+            conversations: [],
+            messages: {},
+            pinnedMessages: {},
+            pinnedMessagesLoading: false,
+            activeConversationId: null,
+            loading: false, // convo loading
+            messageLoading: false,
+            isCreatingGroup: false,
+
+            friends: [],
+            friendRequests: [],
+            suggestedFriends: [],
+            isFriendRequestsLoading: false,
+
+            setActiveConversationId: (id) => {
+                set({activeConversationId: id});
+                if (id && !id.startsWith('temp_')) {
+                    get().markAsReadAction(id);
+                }
+            },
+
+            reset: () => {
+                set({
+                    conversations: [],
+                    messages: {},
+                    pinnedMessages: {},
+                    pinnedMessagesLoading: false,
+                    activeConversationId: null,
+                    loading: false,
+                    messageLoading: false,
+
+                    friendRequests: [],
+                    isFriendRequestsLoading: false,
+                });
+            },
+
+            fetchConversations: async () => {
+                try {
+
+                    const {conversations} = await chatService.fetchConversations();
+                    set({
+                        conversations: conversations,
+                        loading: false
+                    });
+
+                } catch (error) {
+                    console.error("Error during fetching conversations", error);
+                    set({loading: false});
+                }
+            },
+            fetchFriendRequests: async () => {
+                try {
+                    set({isFriendRequestsLoading: true});
+
+                    const data = await friendService.getFriendRequests();
+
+                    set({
+
+                        friendRequests: data.received || [],
+                        isFriendRequestsLoading: false
+                    });
+                } catch (error) {
+                    console.error("Error fetching friend requests:", error);
+                    set({
+                        friendRequests: [],
+                        isFriendRequestsLoading: false
+                    });
+                }
+            },
+            declineRequestAction: async (requestId) => {
+                try {
+
+                    await friendService.declineRequest(requestId);
+                    set((state) => ({
+                        friendRequests: state.friendRequests.filter((req) => req._id !== requestId)
+                    }));
+                    return true;
+                } catch (error) {
+                    console.error("Error declining request:", error);
+                    throw error;
+                }
+            },
+            acceptRequestAction: async (requestId) => {
+                try {
+                    await friendService.acceptRequest(requestId);
+
+                    set((state) => {
+                        // 1. Remove from friendRequests 
+                        const newRequests = state.friendRequests.filter((req) => req._id !== requestId);
+                        
+                        // 2. Optionally fetch friends to update list, or we could optimistic update if we had user data
+                        // For now, just firing fetchFriends in background is safe enough without reloading app
+                        get().fetchFriends(); 
+                        
+                        return { friendRequests: newRequests };
+                    });
+                    
+                    return true;
+                } catch (error) {
+                    console.error("Error accepting request:", error);
+                    throw error;
+                }
+            },
+            fetchFriends: async () => {
+                try {
+                    const data = await friendService.getFriends();
+                    // API trả về { friends: [...] }
+                    set({friends: data.friends || []});
+                } catch (error) {
+                    console.error("Error fetching friends:", error);
+                    set({friends: []});
+                }
+            },
+            fetchSuggestedFriends: async () => {
+                try {
+                    const data = await friendService.getSuggestedFriends();
+                    set({suggestedFriends: data || []});
+                } catch (error) {
+                    console.error("Error fetching suggested friends:", error);
+                    set({suggestedFriends: []});
+                }
+            },
+            unfriendAction: async (friendId) => {
+                try {
+                    await friendService.unfriend(friendId);
+                    set((state) => ({
+                         friends: state.friends.filter(f => f._id !== friendId)
+                    }));
+                } catch (error) {
+                    console.error("Error unfriending user:", error);
+                    throw error;
+                }
+            },
+
+            sendRequestAction: async (targetUserId) => {
+                try {
+                    await friendService.sendRequest(targetUserId);
+                    // Optionally update state if needed, e.g. add to sent requests list
+                     set((state) => ({
+                         // Maybe track sent requests ID to disable button
+                     }));
+                } catch (error) {
+                    console.error("Error sending friend request:", error);
+                    throw error;
+                }
+            },
+
+            removeFriendRequest: (requestId) => {
+                set((state) => ({
+                    friendRequests: state.friendRequests.filter((req) => req._id !== requestId)
+                }));
+            },
+            fetchMessages: async (conversationId) => {
+                const {activeConversationId, messages} = get();
+                const {user} = useAuthStore.getState()
+
+                const convoId = conversationId ?? activeConversationId;
+                if (!convoId || convoId.startsWith('temp_')) return;
+
+                const current = messages?.[convoId];
+                const nextCursor = current?.nextCursor === undefined ? "" : current?.nextCursor;
+
+                if (nextCursor === null) return;
+
+                set({messageLoading: true});
+
+                try {
+                    const {messages: fetched, cursor} = await chatService.fetchMessage(convoId, nextCursor);
+
+                    const processed = fetched.map((m) => ({
+                        ...m,
+                        isOwn: m.senderId === user?._id,
+                    }))
+
+                    set((state) => {
+                        const prevItems = state.messages[convoId]?.items ?? [];
+                        
+                        // Lọc bỏ tin nhắn đã tồn tại để tránh trùng key
+                        const newItems = processed.filter(
+                            (newItem) => !prevItems.some((prevItem) => prevItem._id === newItem._id)
+                        );
+
+                        const merged = [...newItems, ...prevItems];
+
+                        return {
+                            messages: {
+                                ...state.messages,
+                                [convoId]: {
+                                    items: merged,
+                                    hasMore: !!cursor,
+                                    nextCursor: cursor ?? null,
+                                }
+                            }
+                        }
+                    })
+                } catch (error) {
+                    console.error("Error fetching messages:", error);
+                } finally {
+                    set({messageLoading: false});
+                }
+            },
+
+            sendDirectMessage: async (recipientId, content, conversationId, image, file, type) => {
+                const { user } = useAuthStore.getState();
+                const { activeConversationId } = get();
+
+                // Xác định conversationId gửi đi (ưu tiên tham số truyền vào, sau đó đến activeId)
+                // Lưu ý: Nếu activeId là "temp_...", ta gửi conversationId = null lên server
+                let targetConvoId = conversationId || activeConversationId;
+                if (targetConvoId && targetConvoId.toString().startsWith('temp_')) {
+                    targetConvoId = null;
+                }
+
+                try {
+                    // 1. Gọi API
+                    const response = await chatService.sendDirectMessage(recipientId, content, targetConvoId, image, file, type);
+                    const newMessage = response.message;
+
+                    // 2. Xác định ID cuộc trò chuyện thực sự sau khi server trả về
+                    const realConversationId = newMessage.conversationId;
+
+                    // 3. Xử lý tin nhắn mới (Thêm isOwn = true vì mình vừa gửi)
+                    const processedMessage = {
+                        ...newMessage,
+                        isOwn: true,
+                        senderId: user?._id // Đảm bảo có senderId để render avatar nếu cần
+                    };
+
+                    set((state) => {
+                        // A. Cập nhật Messages State
+                        const existingMessages = state.messages[realConversationId]?.items || [];
+                        const updatedMessages = [...existingMessages, processedMessage];
+
+                        // B. Cập nhật Conversations State (Danh sách bên trái)
+                        let updatedConversations = [...state.conversations];
+                        const convoIndex = updatedConversations.findIndex(c => c._id === realConversationId);
+
+                        if (convoIndex !== -1) {
+                            // Trường hợp 1: Cuộc trò chuyện ĐÃ CÓ trong danh sách
+                            // -> Cập nhật lastMessage và đưa lên đầu
+                            const updatedConvo = {
+                                ...updatedConversations[convoIndex],
+                                lastMessage: {
+                                    _id: processedMessage._id,
+                                    content: processedMessage.content,
+                                    createdAt: processedMessage.createdAt,
+                                    senderId: user?._id, // Hoặc object user nếu schema yêu cầu
+                                    messageType: processedMessage.messageType,
+                                    isRecalled: processedMessage.isRecalled || false
+                                },
+                                updatedAt: new Date().toISOString(), // Để sort
+                                lastMessageAt: new Date().toISOString()
+                            };
+
+                            // Xoá vị trí cũ, thêm vào đầu
+                            updatedConversations.splice(convoIndex, 1);
+                            updatedConversations.unshift(updatedConvo);
+
+                            return {
+                                messages: {
+                                    ...state.messages,
+                                    [realConversationId]: {
+                                        ...state.messages[realConversationId],
+                                        items: updatedMessages
+                                    }
+                                },
+                                conversations: updatedConversations
+                            };
+                        } else {
+                            // Trường hợp 2: Cuộc trò chuyện MỚI (chưa có trong list conversations)
+                            // -> Đây chính là lúc gây ra lỗi duplicate nếu không xử lý kỹ.
+                            // -> Cách an toàn nhất: Gọi fetchConversations để lấy full data (avatar, name partner...)
+                            // -> Cập nhật messages trước để hiện tin nhắn ngay
+
+                            // Trigger fetch lại conversation ngầm
+                            get().fetchConversations();
+
+                            // Nếu trước đó đang ở state 'temp_', cần chuyển activeConversationId sang ID thật
+                            if (activeConversationId && activeConversationId.toString().startsWith('temp_')) {
+                                return {
+                                    activeConversationId: realConversationId, // Chuyển sang ID thật
+                                    messages: {
+                                        ...state.messages,
+                                        [realConversationId]: { items: [processedMessage], hasMore: false, nextCursor: null }
+                                    }
+                                };
+                            }
+
+                            return {
+                                messages: {
+                                    ...state.messages,
+                                    [realConversationId]: { items: updatedMessages, hasMore: false, nextCursor: null }
+                                }
+                            };
+                        }
+                    });
+
+                } catch (error) {
+                    console.error("Failed to send message:", error);
+                    // Có thể thêm toast error ở đây
+                    throw error;
+                }
+            },
+            createConversation: async (isGroup, name, memberIds) => {
+                set({ isCreatingGroup: true });
+                try {
+                    // Gọi API từ chatService
+                    const newConversation = await chatService.createConversation(isGroup, name, memberIds);
+
+                    set((state) => ({
+                        // Thêm cuộc trò chuyện mới vào đầu danh sách
+                        conversations: [newConversation, ...state.conversations],
+                        // Tự động chuyển sang cuộc trò chuyện mới vừa tạo (tuỳ chọn)
+                        activeConversationId: newConversation._id,
+                        isCreatingGroup: false
+                    }));
+
+                    return newConversation;
+                } catch (error) {
+                    console.error("Error creating conversation:", error);
+                    set({ isCreatingGroup: false });
+                    throw error; // Ném lỗi để UI (CreateGroupPopup) bắt và hiện Toast
+                }
+            },
+            sendGroupMessage: async (conversationId, content, image, file, type) => {
+                const { user } = useAuthStore.getState();
+
+                try {
+                    // 1. Gọi API gửi tin nhắn nhóm
+                    const response = await chatService.sendGroupMessage(conversationId, content, image, file, type);
+                    const newMessage = response.message;
+
+                    // 2. Tạo object tin nhắn để update UI ngay lập tức
+                    const processedMessage = {
+                        ...newMessage,
+                        isOwn: true, // Đánh dấu là tin nhắn của mình
+                        senderId: user?._id
+                    };
+
+                    set((state) => {
+                        // A. Cập nhật danh sách Messages
+                        const existingMessages = state.messages[conversationId]?.items || [];
+                        const updatedMessages = [...existingMessages, processedMessage];
+
+                        // B. Cập nhật danh sách Conversations (Đưa nhóm lên đầu)
+                        let updatedConversations = [...state.conversations];
+                        const convoIndex = updatedConversations.findIndex(c => c._id === conversationId);
+
+                        if (convoIndex !== -1) {
+                            const updatedConvo = {
+                                ...updatedConversations[convoIndex],
+                                lastMessage: {
+                                    _id: processedMessage._id,
+                                    content: processedMessage.content,
+                                    createdAt: processedMessage.createdAt,
+                                    senderId: user?._id,
+                                    messageType: processedMessage.messageType || type || 'text',
+                                    isRecalled: processedMessage.isRecalled || false
+                                },
+                                updatedAt: new Date().toISOString(),
+                                lastMessageAt: new Date().toISOString()
+                            };
+
+                            // Xoá vị trí cũ, đưa lên đầu mảng
+                            updatedConversations.splice(convoIndex, 1);
+                            updatedConversations.unshift(updatedConvo);
+                        }
+
+                        return {
+                            messages: {
+                                ...state.messages,
+                                [conversationId]: {
+                                    ...state.messages[conversationId],
+                                    items: updatedMessages
+                                }
+                            },
+                            conversations: updatedConversations
+                        };
+                    });
+
+                } catch (error) {
+                    console.error("Failed to send group message:", error);
+                    throw error;
+                }
+            },
+
+            reactToMessageAction: async (messageId, reaction, conversationId) => {
+                const { user } = useAuthStore.getState();
+                const userId = user._id;
+
+                // Optimistic Update
+                set((state) => {
+                    const existingMessages = state.messages[conversationId]?.items || [];
+                    const msgIndex = existingMessages.findIndex(m => m._id === messageId);
+
+                    if (msgIndex !== -1) {
+                        const updatedMessages = [...existingMessages];
+                        const currentMessage = updatedMessages[msgIndex];
+                        const currentReactions = currentMessage.reactions ? [...currentMessage.reactions] : [];
+                        
+                        const existingReactionIndex = currentReactions.findIndex(r => {
+                             const rUserId = typeof r.userId === 'object' ? r.userId._id : r.userId;
+                             return rUserId.toString() === userId.toString();
+                        });
+
+                        if (existingReactionIndex !== -1) {
+                            if (currentReactions[existingReactionIndex].reaction === reaction) {
+                                // Remove
+                                currentReactions.splice(existingReactionIndex, 1);
+                            } else {
+                                // Update
+                                currentReactions[existingReactionIndex] = {
+                                    ...currentReactions[existingReactionIndex],
+                                    reaction
+                                };
+                            }
+                        } else {
+                            // Add
+                            currentReactions.push({
+                                userId: {
+                                    _id: user._id, 
+                                    displayName: user.displayName, 
+                                    username: user.username
+                                }, // Optimistically use full user object with name
+                                reaction
+                            });
+                        }
+
+                        updatedMessages[msgIndex] = {
+                            ...currentMessage,
+                            reactions: currentReactions
+                        };
+
+                        return {
+                            messages: {
+                                ...state.messages,
+                                [conversationId]: {
+                                    ...state.messages[conversationId],
+                                    items: updatedMessages
+                                }
+                            }
+                        };
+                    }
+                    return state;
+                });
+
+                try {
+                    // API Call
+                    const { reactions } = await chatService.reactToMessage(messageId, reaction);
+                    
+                    // Server returns standard data, update again to ensure consistency (e.g. timestamps, etc)
+                     set((state) => {
+                         const existingMessages = state.messages[conversationId]?.items || [];
+                         const msgIndex = existingMessages.findIndex(m => m._id === messageId);
+                         
+                         if (msgIndex !== -1) {
+                             const updatedMessages = [...existingMessages];
+                             updatedMessages[msgIndex] = {
+                                 ...updatedMessages[msgIndex],
+                                 reactions
+                             };
+
+                             return {
+                                 messages: {
+                                     ...state.messages,
+                                     [conversationId]: {
+                                         ...state.messages[conversationId],
+                                         items: updatedMessages
+                                     }
+                                 }
+                             };
+                         }
+                         return state;
+                     });
+
+                } catch (error) {
+                    console.error("Failed to react to message:", error);
+                    // Revert or fetch messages again could be done here
+                }
+            },
+            
+            markAsReadAction: async (conversationId) => {
+                const { user } = useAuthStore.getState();
+                try {
+                    // 1. Optimistic Update
+                    set((state) => {
+                         const convoIndex = state.conversations.findIndex(c => c._id === conversationId);
+                         if (convoIndex !== -1) {
+                             const updatedConversations = [...state.conversations];
+                             
+                             // Reset unread count logic
+                             // Need to handle both Map and plain object structure just in case
+                             // Mongoose Maps often come as objects in JSON unless strictly typed
+                             
+                             // Simple approach: Just assume we receive an object map { userId: count, ... } from backend
+                             // But here we might just want to set the whole unreadCounts object/map for 'me' to 0
+                             
+                             const currentUnread = updatedConversations[convoIndex].unreadCounts || {};
+                             
+                             // If it's a Map in local state (unlikely from JSON), convert or set.
+                             // Safest: clone object and set logic
+                             
+                             // However, since we track simple unread counts mostly effectively by just resetting:
+                             // Let's assume we refresh the conversation or just set it to 0 for current user locally.
+                             
+                             // But wait, the UI uses `unreadCounts` which might be the number itself or the map.
+                             // Let's check how UI renders unread count.
+                             
+                             // Looking at socket logic (line 500):
+                             // unreadCounts: isActive ? ... : unreadCounts + 1
+                             // It implies unreadCounts MIGHT be a number in the socket update logic? 
+                             // Wait, line 498 checks `updatedConversations[conversationIndex].unreadCounts instanceof Map`
+                             
+                             // Let's fix the structure to be consistent. 
+                             // Backend sends unreadCounts as Map-like object { "userId": 5 }.
+                             
+                             // If we want to reset for ME:
+                             let newUnreadCounts = updatedConversations[convoIndex].unreadCounts;
+                             if (newUnreadCounts && typeof newUnreadCounts === 'object') {
+                                 newUnreadCounts = { ...newUnreadCounts, [user._id]: 0 };
+                             } else {
+                                 // Fallback if it was somehow a number? Or init it
+                                 newUnreadCounts = { [user._id]: 0 };
+                             }
+
+                             updatedConversations[convoIndex] = {
+                                 ...updatedConversations[convoIndex],
+                                 unreadCounts: newUnreadCounts
+                             };
+
+                             return { conversations: updatedConversations };
+                         }
+                         return {};
+                    });
+
+                    // 2. Call API
+                    await chatService.markAsRead(conversationId);
+                    
+                } catch (error) {
+                    console.error("Failed to mark as read:", error);
+                }
+            },
+
+            fetchPinnedMessages: async (conversationId) => {
+                const convoId = conversationId ?? get().activeConversationId;
+                if (!convoId || convoId.startsWith('temp_')) return;
+
+                set({ pinnedMessagesLoading: true });
+                try {
+                    const data = await chatService.getPinnedMessages(convoId);
+                    set((state) => ({
+                        pinnedMessages: {
+                            ...state.pinnedMessages,
+                            [convoId]: data.pinnedMessages || []
+                        },
+                        pinnedMessagesLoading: false
+                    }));
+                } catch (error) {
+                    console.error("Failed to fetch pinned messages:", error);
+                    set({ pinnedMessagesLoading: false });
+                }
+            },
+
+            recallMessageAction: async (messageId) => {
+                const convoId = get().activeConversationId;
+                if (!convoId) return;
+
+                // Optimistically update message state locally
+                set((state) => {
+                    const existingMessages = state.messages[convoId]?.items || [];
+                    const msgIndex = existingMessages.findIndex(m => m._id === messageId);
+                    let updatedMessagesMap = { ...state.messages };
+
+                    if (msgIndex !== -1) {
+                        const updatedItems = [...existingMessages];
+                        updatedItems[msgIndex] = {
+                            ...updatedItems[msgIndex],
+                            isRecalled: true,
+                            content: "Tin nhắn đã bị thu hồi",
+                            messageType: "text",
+                            imgUrl: undefined,
+                            fileUrl: undefined,
+                            reactions: []
+                        };
+                        updatedMessagesMap[convoId] = {
+                            ...updatedMessagesMap[convoId],
+                            items: updatedItems
+                        };
+                    }
+
+                    // Also update lastMessage in conversations list
+                    let updatedConversations = [...state.conversations];
+                    const convoIndex = updatedConversations.findIndex(c => c._id === convoId);
+                    if (convoIndex !== -1 && updatedConversations[convoIndex].lastMessage && updatedConversations[convoIndex].lastMessage._id === messageId) {
+                        updatedConversations[convoIndex] = {
+                            ...updatedConversations[convoIndex],
+                            lastMessage: {
+                                ...updatedConversations[convoIndex].lastMessage,
+                                content: "Tin nhắn đã bị thu hồi",
+                                messageType: "text",
+                                isRecalled: true
+                            }
+                        };
+                    }
+
+                    return {
+                        messages: updatedMessagesMap,
+                        conversations: updatedConversations
+                    };
+                });
+
+                try {
+                    await chatService.recallMessage(messageId);
+                } catch (error) {
+                    console.error("Failed to recall message:", error);
+                }
+            },
+
+            deleteMessageForMeAction: async (messageId) => {
+                const convoId = get().activeConversationId;
+                if (!convoId) return;
+
+                // Optimistically remove from state
+                set((state) => {
+                    const existingMessages = state.messages[convoId]?.items || [];
+                    const updatedItems = existingMessages.filter(m => m._id !== messageId);
+                    
+                    return {
+                        messages: {
+                            ...state.messages,
+                            [convoId]: {
+                                ...state.messages[convoId],
+                                items: updatedItems
+                            }
+                        }
+                    };
+                });
+
+                try {
+                    await chatService.deleteMessageForMe(messageId);
+                } catch (error) {
+                    console.error("Failed to delete message for me:", error);
+                }
+            },
+
+            togglePinMessageAction: async (messageId) => {
+                const convoId = get().activeConversationId;
+                if (!convoId) return;
+
+                try {
+                    const { updatedMessage } = await chatService.togglePinMessage(messageId);
+
+                    set((state) => {
+                        const existingMessages = state.messages[convoId]?.items || [];
+                        const msgIndex = existingMessages.findIndex(m => m._id === messageId);
+                        let updatedMessagesMap = { ...state.messages };
+
+                        if (msgIndex !== -1) {
+                            const updatedItems = [...existingMessages];
+                            updatedItems[msgIndex] = {
+                                ...updatedItems[msgIndex],
+                                isPinned: updatedMessage.isPinned,
+                                pinnedBy: updatedMessage.pinnedBy,
+                                pinnedAt: updatedMessage.pinnedAt
+                            };
+                            updatedMessagesMap[convoId] = {
+                                ...updatedMessagesMap[convoId],
+                                items: updatedItems
+                            };
+                        }
+
+                        return { messages: updatedMessagesMap };
+                    });
+
+                    // Refresh pinned messages list
+                    get().fetchPinnedMessages(convoId);
+
+                } catch (error) {
+                    console.error("Failed to toggle pin status:", error);
+                }
+            },
+
+            forwardMessageAction: async (messageId, targetConversationIds) => {
+                try {
+                    await chatService.forwardMessage(messageId, targetConversationIds);
+                    // Refresh conversations list to update sidebar for active / other conversations
+                    get().fetchConversations();
+                } catch (error) {
+                    console.error("Failed to forward message:", error);
+                    throw error;
+                }
+            },
+
+            subscribeToMessages: () => {
+                const { socket } = useAuthStore.getState();
+                if (!socket) return;
+
+                // Prevent duplicate listeners
+                socket.off("newMessage");
+                socket.off("messageReaction");
+                socket.off("messageRecalled");
+                socket.off("messagePinStatus");
+
+                socket.on("newMessage", (newMessage) => {
+                    set((state) => {
+                        const convoId = newMessage.conversationId;
+                        const isActive = state.activeConversationId === convoId;
+
+                        // 1. Update Messages if loaded
+                        let updatedMessagesMap = { ...state.messages };
+                        if (updatedMessagesMap[convoId]) {
+                             const existingItems = updatedMessagesMap[convoId].items || [];
+                             const isDuplicate = existingItems.some(item => item._id === newMessage._id);
+                             
+                             if (!isDuplicate) {
+                                 updatedMessagesMap[convoId] = {
+                                     ...updatedMessagesMap[convoId],
+                                     items: [...existingItems, { ...newMessage, isOwn: false }]
+                                 };
+                             }
+                        }
+
+
+                        // 2. Update Conversations List
+                        const conversationIndex = state.conversations.findIndex(c => c._id === convoId);
+                        let updatedConversations = [...state.conversations];
+
+                        if (conversationIndex !== -1) {
+                            const updatedConvo = {
+                                ...updatedConversations[conversationIndex],
+                                lastMessage: {
+                                    _id: newMessage._id,
+                                    content: newMessage.content,
+                                    createdAt: newMessage.createdAt,
+                                    senderId: newMessage.senderId,
+                                    messageType: newMessage.messageType,
+                                    isRecalled: newMessage.isRecalled || false
+                                },
+                                updatedAt: new Date().toISOString(),
+                                lastMessageAt: new Date().toISOString(),
+                                unreadCounts: isActive 
+                                    ? updatedConversations[conversationIndex].unreadCounts 
+                                    : (() => {
+                                        // Helper to increment unread count safely
+                                        const currentCounts = updatedConversations[conversationIndex].unreadCounts || {};
+                                        const myId = useAuthStore.getState().user?._id;
+                                        const currentVal = currentCounts[myId] || 0;
+                                        return { ...currentCounts, [myId]: currentVal + 1 };
+                                    })()
+                            };
+                            updatedConversations.splice(conversationIndex, 1);
+                            updatedConversations.unshift(updatedConvo);
+                        } else {
+                             setTimeout(() => get().fetchConversations(), 0);
+                        }
+
+                        return {
+                            messages: updatedMessagesMap,
+                            conversations: updatedConversations
+                        };
+                    });
+                });
+
+                socket.on("messageReaction", ({ messageId, reactions, conversationId }) => {
+                    set((state) => {
+                        const existingMessages = state.messages[conversationId]?.items || [];
+                        const msgIndex = existingMessages.findIndex(m => m._id === messageId);
+
+                        if (msgIndex !== -1) {
+                            const updatedMessages = [...existingMessages];
+                            updatedMessages[msgIndex] = {
+                                ...updatedMessages[msgIndex],
+                                reactions
+                            };
+
+                            return {
+                                messages: {
+                                    ...state.messages,
+                                    [conversationId]: {
+                                        ...state.messages[conversationId],
+                                        items: updatedMessages
+                                    }
+                                }
+                            };
+                        }
+                        return state;
+                    });
+                });
+
+                socket.on("messageRecalled", ({ messageId, conversationId }) => {
+                    set((state) => {
+                        const existingMessages = state.messages[conversationId]?.items || [];
+                        const msgIndex = existingMessages.findIndex(m => m._id === messageId);
+                        let updatedMessagesMap = { ...state.messages };
+
+                        if (msgIndex !== -1) {
+                            const updatedItems = [...existingMessages];
+                            updatedItems[msgIndex] = {
+                                ...updatedItems[msgIndex],
+                                isRecalled: true,
+                                content: "Tin nhắn đã bị thu hồi",
+                                messageType: "text",
+                                imgUrl: undefined,
+                                fileUrl: undefined,
+                                reactions: []
+                            };
+                            updatedMessagesMap[conversationId] = {
+                                ...updatedMessagesMap[conversationId],
+                                items: updatedItems
+                            };
+                        }
+
+                        let updatedConversations = [...state.conversations];
+                        const convoIndex = updatedConversations.findIndex(c => c._id === conversationId);
+                        if (convoIndex !== -1 && updatedConversations[convoIndex].lastMessage && updatedConversations[convoIndex].lastMessage._id === messageId) {
+                            updatedConversations[convoIndex] = {
+                                ...updatedConversations[convoIndex],
+                                lastMessage: {
+                                    ...updatedConversations[convoIndex].lastMessage,
+                                    content: "Tin nhắn đã bị thu hồi",
+                                    messageType: "text",
+                                    isRecalled: true
+                                }
+                            };
+                        }
+
+                        return {
+                            messages: updatedMessagesMap,
+                            conversations: updatedConversations
+                        };
+                    });
+                });
+
+                socket.on("messagePinStatus", ({ messageId, conversationId, isPinned, pinnedMessage }) => {
+                    set((state) => {
+                        const existingMessages = state.messages[conversationId]?.items || [];
+                        const msgIndex = existingMessages.findIndex(m => m._id === messageId);
+                        let updatedMessagesMap = { ...state.messages };
+
+                        if (msgIndex !== -1) {
+                            const updatedItems = [...existingMessages];
+                            updatedItems[msgIndex] = {
+                                ...updatedItems[msgIndex],
+                                isPinned,
+                                pinnedBy: pinnedMessage?.pinnedBy,
+                                pinnedAt: pinnedMessage?.pinnedAt
+                            };
+                            updatedMessagesMap[conversationId] = {
+                                ...updatedMessagesMap[conversationId],
+                                items: updatedItems
+                            };
+                        }
+
+                        setTimeout(() => get().fetchPinnedMessages(conversationId), 0);
+
+                        return { messages: updatedMessagesMap };
+                    });
+                });
+            },
+
+            unsubscribeFromMessages: () => {
+                const { socket } = useAuthStore.getState();
+                if (socket) {
+                    socket.off("newMessage");
+                    socket.off("messageReaction");
+                    socket.off("messageRecalled");
+                    socket.off("messagePinStatus");
+                }
+            },
+
+        }),
+
+        {
+            name: "chat-storage",
+            partialize: (state) => ({
+                conversations: state.conversations,
+                friends: state.friends,
+                friendRequests: state.friendRequests,
+                activeConversationId: state.activeConversationId,
+            }),
+        }
+    )
+);

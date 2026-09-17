@@ -1,0 +1,123 @@
+.chat-container-wrapper {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  width: 100%;
+  background-color: var(--primary-backgroundColor); // #1e1e1e
+  overflow: hidden;
+}
+
+.block-left {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 7;
+  background-color: var(--primary-blockBackgroundColor); // #242424
+  border-right: 2px solid var(--primary-borderColor); // #303030
+
+  .header {
+    flex-shrink: 0;
+    border-bottom: 2px solid var(--primary-borderColor);
+  }
+
+  .body {
+    flex-grow: 1;
+    overflow: hidden;
+    display: flex;
+    background-color: var(--primary-blockBackgroundColor);
+  }
+
+  .footer {
+    flex-shrink: 0;
+    border-top: 2px solid var(--primary-borderColor);
+  }
+}
+
+.block-right {
+  flex: 3;
+  background-color: var(--primary-backgroundColor); // Darker sidebar
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-info-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden; // ChatInfo has its own scroll
+}
+
+/* Redesigned Welcome Screen */
+.chat-container.no-chat-selected {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background-color: var(--primary-blockBackgroundColor);
+  color: var(--primary-textColor);
+
+  .welcome-content {
+    text-align: center;
+    max-width: 400px;
+    padding: 4rem;
+
+    .icon-wrapper {
+      display: inline-flex;
+      padding: 2.5rem;
+      background-color: rgba(229, 109, 50, 0.1); // Shrimple Orange tint
+      border: 2px solid var(--primary-color); // Shrimple Orange border
+      border-radius: 2.4rem;
+      margin-bottom: 2.5rem;
+      color: var(--primary-color);
+      
+      /* Dynamic Energy pulse */
+      
+    }
+
+    h2 {
+      font-size: 3rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      color: var(--primary-textColor);
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      color: var(--primary-textColor);
+      opacity: 0.5;
+      font-size: 1.6rem;
+      line-height: 1.6;
+    }
+  }
+}
+
+/* RESPONSIVE */
+@media (max-width: 1024px) {
+  .block-left { flex: 6; }
+  .block-right { flex: 4; }
+}
+
+@media (max-width: 768px) {
+  .chat-container-wrapper {
+    position: relative;
+  }
+
+  .block-left {
+     width: 100%;
+     flex: 1;
+     border-right: none;
+  }
+
+  .block-right {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 50;
+      background-color: var(--primary-blockBackgroundColor);
+  }
+}

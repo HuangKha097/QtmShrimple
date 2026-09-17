@@ -1,0 +1,54 @@
+/* Animation cho loader */
+@keyframes loading-animation {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.loader-wrapper {
+  /* --- Cập nhật ở đây --- */
+  width: 50%;
+  margin-left: auto;
+  margin-right: auto;
+  /* ------------------- */
+
+  height: 6px;
+  background-color: #f0f0f0;
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+
+  .loader-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 40%;
+    background-color: var(--primary-color);
+    border-radius: 3px;
+    animation: loading-animation 2s linear infinite;
+  }
+}
+
+.progress-wrapper {
+  /* --- Cập nhật ở đây --- */
+  width: 50%;
+  margin-left: auto;
+  margin-right: auto;
+  /* ------------------- */
+
+  height: 8px;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+
+  .progress-bar {
+    height: 100%;
+    background-color: var(--primary-color);
+    border-radius: 4px;
+    transition: width 0.3s ease-in-out;
+  }
+}

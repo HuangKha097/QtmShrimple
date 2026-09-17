@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --motion-panel: 280ms;
+    --motion-ease: cubic-bezier(.22, 1, .36, 1);
+    color-scheme: dark;
+    --primary-color: #e56d32;
+    --primary-rgb: 229, 109, 50;
+    --on-primary: #171717;
+    --primary-backgroundColor: #151719;
+    --primary-textColor: #f2f4f6;
+    --primary-borderColor: #34383d;
+    --primary-blockBackgroundColor: #202326;
+    --primary-hoverBackgroundColor: #2d3237;
+    --surface-subtle: #272b30;
+    --text-muted: #abb4bf;
+    --accent-soft: color-mix(in srgb, var(--primary-color) 16%, transparent);
+    --accent-text: color-mix(in srgb, var(--primary-color) 72%, white);
+    --surface-shadow: 0 16px 64px rgb(0 0 0 / 20%);
+}
+:root:not(.dark) {
+    color-scheme: light;
+    --primary-backgroundColor: #f3f5f7;
+    --primary-textColor: #1c2530;
+    --primary-borderColor: #dce1e7;
+    --primary-blockBackgroundColor: #ffffff;
+    --primary-hoverBackgroundColor: #edf0f4;
+    --surface-subtle: #f6f8fa;
+    --text-muted: #596575;
+    --accent-text: color-mix(in srgb, var(--primary-color) 65%, #111827);
+    --surface-shadow: 0 16px 64px rgb(32 43 58 / 8%);
+}
+
+/* Common */
+button {
+    cursor: pointer;
+}
+
+a {
+    text-decoration: none;
+    color: unset;
+}
+
+li {
+    list-style: none;
+}
+
+/*  */
+html {
+    font-size: 62.5%;
+}
+
+body {
+    font-family: "Poppins", sans-serif;
+    font-size: 1.6rem;
+    color: var(--primary-textColor);
+    background: var(--primary-backgroundColor);
+
+}
+
+.container {
+    padding: 8rem;
+}
+/* Mobile Prevent Auto Zoom */
+input, textarea, select {
+  font-size: 16px;
+}
+
+/* Global Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-color);
+}
+
+button, input, textarea, select { font-family: inherit; }
+button:disabled { cursor: not-allowed; }
+button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent-text); outline-offset: 3px;
+}
+::selection { background: var(--accent-soft); color: var(--primary-textColor); }
+input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; transition-delay: 0s !important; animation-delay: 0s !important; scroll-behavior: auto !important; }
+}
+
+/* Keep zoom transitions inside the viewport. */
+html, body { overflow-x: clip; }
