@@ -9,49 +9,21 @@ import {
     User, 
     Settings, 
     LogOut,
-    Sun,
-    Moon,
-    SquarePen
+    SquarePen,
+    Feather,
+    MoreHorizontal
 } from 'lucide-react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/XNavRail.module.scss';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { useThemeStore } from '../../stores/useThemeStore';
+import { motion as Motion } from 'motion/react';
 import defaultAvatar from '../../../public/favicon.png';
 import { ASSET_BASE_URL } from '../../config/env';
 
 const cx = classNames.bind(styles);
 
-function ShrimpleLogo({ size = 28 }) {
-    return (
-        <svg 
-            width={size} 
-            height={size} 
-            viewBox="0 0 32 32" 
-            fill="none" 
-            xmlns="http://www.w3.org/2000/svg"
-        >
-            <path
-                d="M22.5 8C20.5 6 17 5 13.5 6C9.5 7.2 7 11.2 8.5 15.2C10 19.2 22 17.5 23.5 21.5C24.5 24.5 22 27.5 18 28C13.8 28.5 10 26.5 8 24.5"
-                stroke="url(#shrimple-gradient)"
-                strokeWidth="3.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-            />
-            <circle cx="23" cy="7.5" r="2.2" fill="#f97316" />
-            <defs>
-                <linearGradient id="shrimple-gradient" x1="8" y1="5" x2="24" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#f97316" />
-                    <stop offset="1" stopColor="#ea580c" />
-                </linearGradient>
-            </defs>
-        </svg>
-    );
-}
-
-export default function XNavRail({ onCloseSetting, onOpenNewChat }) {
+export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModal }) {
     const { user, signOut } = useAuthStore();
-    const { isLight, toggleTheme } = useThemeStore();
     const navigate = useNavigate();
     const location = useLocation();
     const [showUserMenu, setShowUserMenu] = useState(false);
@@ -77,18 +49,37 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat }) {
         { path: `/feed/profile/${user?._id}`, icon: <User size={24} strokeWidth={2} />, label: 'Hồ sơ' },
     ];
 
+    const handlePostClick = () => {
+        if (onOpenPostModal) {
+            onOpenPostModal();
+        } else {
+            navigate('/feed');
+            setTimeout(() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                const textarea = document.querySelector('textarea[data-composer-input]');
+                if (textarea) textarea.focus();
+            }, 100);
+        }
+    };
+
     return (
         <aside className={cx('nav-rail')} aria-label="X Global Navigation">
-            {/* Top: Shrimple S Logo SVG */}
+            {/* Top: Logo Container (Always full text logo) */}
             <div className={cx('logo-container')}>
                 <button 
                     type="button" 
-                    className={cx('logo-btn')} 
+                    className={cx('logo-btn', 'text-logo-btn')} 
                     onClick={() => navigate('/feed')}
                     title="Trang chủ Shrimple"
                     aria-label="Trang chủ"
                 >
-                    <ShrimpleLogo size={28} />
+                    <div className={cx('text-logo-wrapper')}>
+                        <img 
+                            src="/logo_remove_bg.png" 
+                            alt="Shrimple" 
+                            className={cx('shrimple-text-logo')}
+                        />
+                    </div>
                 </button>
             </div>
 
@@ -97,7 +88,7 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat }) {
                 {navItems.map((item) => {
                     const isActive = item.path === '/chat' 
                         ? location.pathname.startsWith('/chat') 
-                        : location.pathname === item.path;
+                        : (item.path === '/feed' ? location.pathname === '/feed' : location.pathname.startsWith(item.path));
                     return (
                         <NavLink
                             key={item.path}
@@ -108,8 +99,8 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat }) {
                         >
                             <div className={cx('icon-wrapper')}>
                                 {item.icon}
-                                {isActive && <span className={cx('active-indicator')}></span>}
                             </div>
+                            <span className={cx('nav-label')}>{item.label}</span>
                         </NavLink>
                     );
                 })}
@@ -125,34 +116,28 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat }) {
                     <div className={cx('icon-wrapper')}>
                         <Settings size={24} strokeWidth={2} />
                     </div>
+                    <span className={cx('nav-label')}>Cài đặt</span>
                 </button>
 
-                {/* Quick Action Button (X-Style Compose) */}
-                {onOpenNewChat && (
-                    <button
-                        type="button"
-                        className={cx('compose-btn')}
-                        onClick={onOpenNewChat}
-                        title="Viết tin nhắn mới"
-                        aria-label="Tin nhắn mới"
-                    >
-                        <SquarePen size={20} strokeWidth={2.2} />
-                    </button>
-                )}
+                {/* Post Action Button */}
+                <Motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                    type="button"
+                    className={cx('post-action-btn')}
+                    onClick={handlePostClick}
+                    title="Đăng bài viết mới"
+                    aria-label="Đăng bài"
+                >
+                    <div className={cx('btn-shimmer')} aria-hidden="true" />
+                    <span className={cx('post-btn-text')}>Đăng</span>
+                    <Feather size={20} className={cx('post-btn-icon')} />
+                </Motion.button>
             </nav>
 
-            {/* Bottom: Theme Toggle & User Avatar */}
+            {/* Bottom: User Profile Card */}
             <div className={cx('bottom-container')}>
-                <button
-                    type="button"
-                    className={cx('theme-toggle-btn')}
-                    onClick={toggleTheme}
-                    title={isLight ? "Chuyển sang nền tối" : "Chuyển sang nền sáng"}
-                    aria-label="Theme toggle"
-                >
-                    {isLight ? <Moon size={20} /> : <Sun size={20} />}
-                </button>
-
                 <div className={cx('user-menu-wrapper')}>
                     <button
                         type="button"
@@ -167,6 +152,11 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat }) {
                             className={cx('avatar-img')}
                             onError={(e) => { e.target.src = defaultAvatar; }}
                         />
+                        <div className={cx('user-pill-details')}>
+                            <span className={cx('user-pill-name')}>{user?.displayName || 'User'}</span>
+                            <span className={cx('user-pill-handle')}>@{user?.username || 'user'}</span>
+                        </div>
+                        <MoreHorizontal size={18} className={cx('user-pill-more')} />
                     </button>
 
                     {showUserMenu && (

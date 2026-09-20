@@ -103,3 +103,110 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 1
 
 /* Keep zoom transitions inside the viewport. */
 html, body { overflow-x: clip; }
+
+/* ============================================================
+   Twitter/X Monochrome Toast Notifications (Sonner Override)
+   ============================================================ */
+[data-sonner-toaster] {
+  --normal-bg: #000000 !important;
+  --normal-border: rgba(255, 255, 255, 0.18) !important;
+  --normal-text: #ffffff !important;
+  --success-bg: #000000 !important;
+  --success-border: rgba(255, 255, 255, 0.18) !important;
+  --success-text: #ffffff !important;
+  --info-bg: #000000 !important;
+  --info-border: rgba(255, 255, 255, 0.18) !important;
+  --info-text: #ffffff !important;
+  --warning-bg: #000000 !important;
+  --warning-border: rgba(255, 255, 255, 0.18) !important;
+  --warning-text: #ffffff !important;
+  --error-bg: #0d0606 !important;
+  --error-border: rgba(239, 68, 68, 0.4) !important;
+  --error-text: #ffffff !important;
+}
+
+[data-sonner-toast] {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 9999px !important;
+  padding: 10px 20px !important;
+  font-size: 1.4rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
+  font-family: inherit !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  user-select: none !important;
+}
+
+[data-sonner-toast] [data-icon] {
+  color: #ffffff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+[data-sonner-toast] [data-title] {
+  color: #ffffff !important;
+  font-size: 1.4rem !important;
+  font-weight: 600 !important;
+}
+
+[data-sonner-toast] [data-description] {
+  color: #a8b3bc !important;
+  font-size: 1.25rem !important;
+}
+
+/* Eliminate green / colorful backgrounds on all toast types */
+[data-sonner-toast][data-type="success"],
+[data-sonner-toast][data-type="info"],
+[data-sonner-toast][data-type="warning"],
+[data-sonner-toast][data-type="default"] {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+}
+
+[data-sonner-toast][data-type="success"] [data-icon],
+[data-sonner-toast][data-type="info"] [data-icon],
+[data-sonner-toast][data-type="default"] [data-icon] {
+  color: #ffffff !important;
+}
+
+/* Subtle error accent */
+[data-sonner-toast][data-type="error"] {
+  background: #0d0606 !important;
+  background-color: #0d0606 !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  color: #ffffff !important;
+}
+
+[data-sonner-toast][data-type="error"] [data-icon] {
+  color: #ef4444 !important;
+}
+
+/* Light mode adjustments */
+:root:not(.dark) [data-sonner-toaster] {
+  --normal-bg: #ffffff !important;
+  --normal-border: rgba(0, 0, 0, 0.12) !important;
+  --normal-text: #0f1419 !important;
+  --success-bg: #ffffff !important;
+  --success-border: rgba(0, 0, 0, 0.12) !important;
+  --success-text: #0f1419 !important;
+}
+
+:root:not(.dark) [data-sonner-toast] {
+  background-color: #ffffff !important;
+  color: #0f1419 !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+:root:not(.dark) [data-sonner-toast] [data-title],
+:root:not(.dark) [data-sonner-toast] [data-icon] {
+  color: #0f1419 !important;
+}
+

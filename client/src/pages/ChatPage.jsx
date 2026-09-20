@@ -76,40 +76,37 @@ const ChatPage = () => {
                 "sidebar-open": isShowSlideBar,
                 "feed-menu-open": isFeedMenuOpen
             })}>
-                {/* Column 1: X Global Navigation Rail (Only in /chat mode on desktop) */}
-                {!isFeedView && (
-                    <XNavRail 
-                        onCloseSetting={onCloseSetting} 
-                        onOpenNewChat={onCloseAddFriendPopup} 
-                    />
-                )}
+                {/* Column 1: X Global Navigation Rail (Always present on desktop) */}
+                <XNavRail 
+                    onCloseSetting={onCloseSetting} 
+                    onOpenNewChat={onCloseAddFriendPopup} 
+                />
 
-                {/* Column 2: Messages List (or PostsSidebar if in feed view) */}
-                {(isFeedView || isShowSlideBar) && (
+                {/* Column 2: Chat Sidebar (Only in /chat mode on desktop) OR Mobile Drawer for Feed */}
+                {!isFeedView && isShowSlideBar && (
                     <div className={cx("block-left")}>
-                        {isFeedView ? (
-                            <div key="posts-sidebar" style={{ height: '100%', width: '100%' }}>
-                                <PostsSidebar
-                                    onNavigate={closeFeedMenu}
-                                    onClose={closeFeedMenu}
-                                    onCloseSetting={onCloseSetting}
-                                />
-                            </div>
-                        ) : (
-                            <div key="chat-sidebar" style={{ height: '100%', width: '100%' }}>
-                                <SlideBar
-                                    onCloseSetting={onCloseSetting}
-                                    onCloseAddFriendPopup={onCloseAddFriendPopup}
-                                    onCloseCreateGroupPopup={onCloseCreateGroupPopup}
-                                />
-                            </div>
-                        )}
+                        <div key="chat-sidebar" style={{ height: '100%', width: '100%' }}>
+                            <SlideBar
+                                onCloseSetting={onCloseSetting}
+                                onCloseAddFriendPopup={onCloseAddFriendPopup}
+                                onCloseCreateGroupPopup={onCloseCreateGroupPopup}
+                            />
+                        </div>
                     </div>
                 )}
 
-                {/* Mobile feed backdrop */}
+                {/* Mobile Drawer for Feed */}
                 {isFeedView && isFeedMenuOpen && (
-                    <div className={cx("mobile-backdrop")} onClick={closeFeedMenu}></div>
+                    <>
+                        <div className={cx("mobile-backdrop")} onClick={closeFeedMenu}></div>
+                        <div className={cx("mobile-feed-drawer")}>
+                            <PostsSidebar
+                                onNavigate={closeFeedMenu}
+                                onClose={closeFeedMenu}
+                                onCloseSetting={onCloseSetting}
+                            />
+                        </div>
+                    </>
                 )}
 
                 {/* Column 3: Conversation View / Feed Content */}

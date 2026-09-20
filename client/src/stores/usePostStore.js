@@ -62,14 +62,39 @@ export const usePostStore = create((set, get) => ({
     createPost: async (postData) => {
         set({ isLoading: true });
         try {
-
             let dataToSend = postData;
-            // ... (keep existing Logic for FormData vs JSON)
-            if (postData.image instanceof File) {
+            const hasFile = (postData.image instanceof File) || 
+                            (postData.video instanceof File) || 
+                            (postData.media instanceof File) || 
+                            (Array.isArray(postData.images) && postData.images.some(f => f instanceof File));
+
+            if (hasFile) {
                 const formData = new FormData();
-                formData.append("content", postData.content);
-                formData.append("media", postData.image);
+                formData.append("content", postData.content || "");
+                formData.append("privacy", postData.privacy || "public");
+
+                if (Array.isArray(postData.images)) {
+                    postData.images.forEach((img) => {
+                        if (img instanceof File) {
+                            formData.append("media", img);
+                        }
+                    });
+                }
+                if (postData.image instanceof File) {
+                    formData.append("media", postData.image);
+                }
+                if (postData.video instanceof File) {
+                    formData.append("media", postData.video);
+                }
+                if (postData.media instanceof File) {
+                    formData.append("media", postData.media);
+                }
                 dataToSend = formData;
+            } else {
+                dataToSend = {
+                    ...postData,
+                    privacy: postData.privacy || "public",
+                };
             }
 
             const res = await api.post("/api/posts/create", dataToSend); 
@@ -89,12 +114,49 @@ export const usePostStore = create((set, get) => ({
                 
                 return { posts, videoPosts };
             });
-            toast.success("Post created successfully");
+            toast.success("Đã đăng bài viết thành công!");
         } catch (error) {
             console.error(error);
-            toast.error(error.response?.data?.message || "Failed to create post");
+            toast.error(error.response?.data?.message || "Không thể tạo bài viết");
         } finally {
             set({ isLoading: false });
+        }
+    },
+
+    repostPost: async (postId) => {
+        try {
+            const res = await api.put(`/api/posts/${postId}/repost`);
+            const updatedPost = res.data;
+
+            set(state => ({
+                posts: state.posts.map(p => p._id === postId ? updatedPost : p),
+                videoPosts: state.videoPosts.map(p => p._id === postId ? updatedPost : p),
+                userPosts: state.userPosts.map(p => p._id === postId ? updatedPost : p),
+                savedPosts: state.savedPosts.map(p => p._id === postId ? updatedPost : p)
+            }));
+            return updatedPost;
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || "Không thể đăng lại bài viết");
+        }
+    },
+
+    updatePostPrivacy: async (postId, privacy) => {
+        try {
+            const res = await api.put(`/api/posts/${postId}/privacy`, { privacy });
+            const updatedPost = res.data;
+
+            set(state => ({
+                posts: state.posts.map(p => p._id === postId ? updatedPost : p),
+                videoPosts: state.videoPosts.map(p => p._id === postId ? updatedPost : p),
+                userPosts: state.userPosts.map(p => p._id === postId ? updatedPost : p),
+                savedPosts: state.savedPosts.map(p => p._id === postId ? updatedPost : p)
+            }));
+            toast.success("Đã cập nhật quyền riêng tư bài viết!");
+            return updatedPost;
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || "Không thể cập nhật quyền riêng tư");
         }
     },
 

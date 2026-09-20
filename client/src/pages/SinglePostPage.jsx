@@ -127,14 +127,24 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
                 {post.content}
             </div>
             
-            {post.image && (
-                <div style={{ width: '100%', maxHeight: '600px', borderRadius: '1.2rem', overflow: 'hidden', marginTop: '1.5rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                    <img 
-                        src={post.image.startsWith('http') ? post.image : `http://localhost:5001${post.image}`} 
-                        alt="post content" 
-                        className={cx('post-image')} 
-                        style={{ width: '100%', height: 'auto', maxHeight: '600px', objectFit: 'contain' }}
-                    />
+            {/* Multiple Images Post Grid */}
+            {((post.images && post.images.length > 0) || post.image) && (
+                <div className={cx('post-media-grid', `grid-${Math.min((post.images?.length || 1), 4)}`)}>
+                    {(post.images && post.images.length > 0 ? post.images : [post.image]).slice(0, 4).map((imgUrl, idx) => {
+                        const fullSrc = imgUrl.startsWith('http') ? imgUrl : `http://localhost:5001${imgUrl}`;
+                        const allImgs = post.images && post.images.length > 0 ? post.images : [post.image];
+                        const isExtra = idx === 3 && allImgs.length > 4;
+                        return (
+                            <div key={idx} className={cx('grid-image-wrapper')}>
+                                <img src={fullSrc} alt={`post ${idx + 1}`} className={cx('grid-image-item')} />
+                                {isExtra && (
+                                    <div className={cx('extra-images-overlay')}>
+                                        <span>+{allImgs.length - 4}</span>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
             

@@ -1,8 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import classNames from 'classnames/bind';
-import styles from '../../assets/css/PostsContainer.module.scss'; // Reusing styles for now
+import styles from '../../assets/css/PostsContainer.module.scss';
 import { usePostStore } from '../../stores/usePostStore';
-import { Heart, MessageCircle, Trash2, MoreHorizontal, Bookmark, EyeOff, Flag, Link as LinkIcon, Edit } from 'lucide-react';
+import { 
+    Heart, 
+    MessageCircle, 
+    Trash2, 
+    MoreHorizontal, 
+    Bookmark, 
+    EyeOff, 
+    Flag, 
+    Link as LinkIcon, 
+    Repeat, 
+    Share,
+    Send,
+    Smile,
+    Globe,
+    Users,
+    Lock,
+    Check,
+    X
+} from 'lucide-react';
+import { motion as Motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import default_avt from "../../../public/favicon.png";
@@ -11,14 +30,47 @@ import PostCommentItem from './PostCommentItem';
 
 const cx = classNames.bind(styles);
 
+// Format relative time like Twitter/X
+function formatXTime(dateString) {
+    if (!dateString) return '';
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffInSeconds = Math.floor((now - date) / 1000);
+
+    if (diffInSeconds < 60) return 'vừa xong';
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) return `${diffInMinutes}p`;
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}g`;
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}ng`;
+
+    return date.toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' });
+}
+
 const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
-    const { toggleSavePost } = usePostStore();
+    const { toggleSavePost, repostPost, updatePostPrivacy } = usePostStore();
     const [commentText, setCommentText] = useState('');
     const [showComments, setShowComments] = useState(false);
     const [showOptions, setShowOptions] = useState(false);
+    const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+    const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
+    const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+    const [isSubmittingComment, setIsSubmittingComment] = useState(false);
     const optionsRef = useRef(null);
     const navigate = useNavigate();
+
+    // Extract images list (support both multiple images and legacy single image)
+    const postImages = useMemo(() => {
+        if (Array.isArray(post.images) && post.images.length > 0) {
+            return post.images.filter(Boolean);
+        }
+        if (post.image) {
+            return [post.image];
+        }
+        return [];
+    }, [post.images, post.image]);
 
     // Close options menu when clicking outside
     useEffect(() => {
@@ -33,168 +85,451 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
         };
     }, []);
 
-    const isLiked = post.likes.includes(currentUser?._id);
+    const isLiked = Array.isArray(post.likes) && post.likes.includes(currentUser?._id);
+    const isReposted = Array.isArray(post.reposts) && post.reposts.includes(currentUser?._id);
 
     // Check if saved
     const isSaved = currentUser?.savedPosts?.some(
         saved => (typeof saved === 'string' ? saved : saved?._id) === post._id
     );
 
-    const handleComment = async (e) => {
-        if (e.key === 'Enter' && commentText.trim()) {
-            await onComment(post._id, commentText);
+    const privacy = post.privacy || 'public';
+    const privacyDetails = {
+        public: { label: "Công khai", icon: Globe, desc: "Mọi người trên Shrimple đều có thể xem bài viết này" },
+        friends: { label: "Bạn bè", icon: Users, desc: "Chỉ bạn bè của bạn mới có thể xem bài viết này" },
+        private: { label: "Chỉ mình tôi", icon: Lock, desc: "Chỉ bạn mới có thể xem bài viết này" },
+    };
+    const CurrentPrivacyIcon = privacyDetails[privacy]?.icon || Globe;
+
+    const handleCommentSubmit = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        const trimmed = commentText.trim();
+        if (!trimmed || isSubmittingComment) return;
+
+        setIsSubmittingComment(true);
+        try {
+            await onComment(post._id, trimmed);
             setCommentText('');
+            setShowComments(true);
+        } catch (error) {
+            console.error("Error adding comment:", error);
+        } finally {
+            setIsSubmittingComment(false);
         }
     };
 
     const handleDelete = () => {
-        if (window.confirm("Are you sure you want to delete this post?")) {
+        if (window.confirm("Bạn có chắc chắn muốn xóa bài viết này không?")) {
             onDelete(post._id);
         }
         setShowOptions(false);
-    }
+    };
 
-    const handleCopyLink = () => {
+    const handleCopyLink = (e) => {
+        if (e) e.stopPropagation();
         navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
-        toast.success("Link copied to clipboard");
+        toast.success("Đã sao chép liên kết vào bộ nhớ tạm!");
         setShowOptions(false);
     };
 
+    const handleRepost = async (e) => {
+        if (e) e.stopPropagation();
+        try {
+            await repostPost(post._id);
+        } catch (error) {
+            console.error("Error reposting:", error);
+        }
+    };
+
+    const handleUpdatePrivacy = async (newPrivacy) => {
+        if (newPrivacy === privacy || isUpdatingPrivacy) return;
+        setIsUpdatingPrivacy(true);
+        try {
+            await updatePostPrivacy(post._id, newPrivacy);
+            setShowPrivacyModal(false);
+        } catch (error) {
+            console.error("Error updating privacy:", error);
+        } finally {
+            setIsUpdatingPrivacy(false);
+        }
+    };
+
     const handleHidePost = () => {
-        toast.info("Post hidden. We'll show fewer posts like this.");
+        toast.info("Đã ẩn bài viết. Chúng tôi sẽ hiển thị ít bài viết tương tự hơn.");
         setShowOptions(false);
     };
 
     const handleReportPost = () => {
-        toast.info("Thank you for reporting this post.");
+        toast.info("Cảm ơn bạn đã báo cáo. Chúng tôi sẽ xem xét bài viết này.");
         setShowOptions(false);
     };
 
-    const handleSavePost = async () => {
+    const handleSavePost = async (e) => {
+        if (e) e.stopPropagation();
         await toggleSavePost(post._id);
         setShowOptions(false);
     };
 
-    const handleUserClick = (userId) => {
+    const handleUserClick = (e, userId) => {
+        if (e) e.stopPropagation();
         if (userId) {
             navigate(`/feed/profile/${userId}`);
         }
     };
 
+    const authorDisplayName = post.author?.displayName || post.author?.username || 'Người dùng';
+    const authorUsername = post.author?.username ? `@${post.author.username}` : '';
+    const authorAvatar = post.author?.avatarURL ? (post.author.avatarURL.startsWith('http') ? post.author.avatarURL : `http://localhost:5001${post.author.avatarURL}`) : default_avt;
+    const timeAgo = formatXTime(post.createdAt);
+
     return (
-        <div className={cx('post-item')}>
-            <div className={cx('post-header')}>
+        <Motion.article 
+            className={cx('x-post-card')}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+        >
+            {/* Left: Author Avatar */}
+            <div className={cx('post-avatar-col')}>
                 <img
-                    src={post.author?.avatarURL ? (post.author.avatarURL.startsWith('http') ? post.author.avatarURL : `http://localhost:5001${post.author.avatarURL}`) : default_avt}
-                    alt="avatar"
-                    onClick={() => handleUserClick(post.author?._id)}
-                    style={{ cursor: 'pointer' }}
-                    onError={(e) => { e.target.src = default_avt }}
+                    src={authorAvatar}
+                    alt={authorDisplayName}
+                    onClick={(e) => handleUserClick(e, post.author?._id)}
+                    className={cx('author-avatar')}
+                    onError={(e) => { e.currentTarget.src = default_avt; }}
                 />
-                <div className={cx('user-info')} onClick={() => handleUserClick(post.author?._id)} style={{ cursor: 'pointer' }}>
-                    <h4>{post.author?.displayName || post.author?.username}</h4>
-                    <span>{new Date(post.createdAt).toLocaleString()}</span>
+            </div>
+
+            {/* Right: Tweet Content & Actions */}
+            <div className={cx('post-main-col')}>
+                {/* Header Row: Name @handle · time · options */}
+                <div className={cx('post-header-row')}>
+                    <div 
+                        className={cx('author-meta')}
+                        onClick={(e) => handleUserClick(e, post.author?._id)}
+                    >
+                        <span className={cx('author-name')}>{authorDisplayName}</span>
+                        {authorUsername && <span className={cx('author-handle')}>{authorUsername}</span>}
+                        <span className={cx('dot-divider')}>·</span>
+                        <span className={cx('post-time')}>{timeAgo}</span>
+                        <span className={cx('dot-divider')}>·</span>
+                        <span className={cx('privacy-badge')} title={privacyDetails[privacy]?.label || "Công khai"}>
+                            <CurrentPrivacyIcon size={12} />
+                        </span>
+                    </div>
+
+                    <div className={cx('more-options-wrapper')} ref={optionsRef}>
+                        <button 
+                            type="button"
+                            className={cx('more-btn')} 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowOptions(!showOptions);
+                            }}
+                            title="Tùy chọn khác"
+                        >
+                            <MoreHorizontal size={18} />
+                        </button>
+
+                        {showOptions && (
+                            <div className={cx('options-menu')} onClick={(e) => e.stopPropagation()}>
+                                <button type="button" className={cx('menu-option')} onClick={handleSavePost}>
+                                    <Bookmark size={16} fill={isSaved ? "#f97316" : "none"} color={isSaved ? "#f97316" : "currentColor"} />
+                                    <span>{isSaved ? "Bỏ lưu bài viết" : "Lưu bài viết"}</span>
+                                </button>
+
+                                <button type="button" className={cx('menu-option')} onClick={handleCopyLink}>
+                                    <LinkIcon size={16} />
+                                    <span>Sao chép liên kết</span>
+                                </button>
+
+                                <button type="button" className={cx('menu-option')} onClick={handleHidePost}>
+                                    <EyeOff size={16} />
+                                    <span>Không quan tâm</span>
+                                </button>
+
+                                <button type="button" className={cx('menu-option')} onClick={handleReportPost}>
+                                    <Flag size={16} />
+                                    <span>Báo cáo bài viết</span>
+                                </button>
+
+                                {post.author?._id === currentUser?._id && (
+                                    <>
+                                        <button 
+                                            type="button" 
+                                            className={cx('menu-option')} 
+                                            onClick={() => {
+                                                setShowOptions(false);
+                                                setShowPrivacyModal(true);
+                                            }}
+                                        >
+                                            <CurrentPrivacyIcon size={16} />
+                                            <span>Chỉnh sửa quyền riêng tư</span>
+                                        </button>
+                                        <div className={cx('menu-separator')}></div>
+                                        <button type="button" className={cx('menu-option', 'delete-option')} onClick={handleDelete}>
+                                            <Trash2 size={16} />
+                                            <span>Xóa bài viết</span>
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                <div className={cx('more-options-wrapper')} ref={optionsRef}>
-                    <button className={cx('more-btn')} onClick={() => setShowOptions(!showOptions)}>
-                        <MoreHorizontal size={20} />
-                    </button>
+                {/* Text Body */}
+                {post.content && (
+                    <div className={cx('post-content-body')}>
+                        {post.content}
+                    </div>
+                )}
 
-                    {showOptions && (
-                        <div className={cx('options-menu')}>
-                            <button className={cx('menu-option')} onClick={handleSavePost}>
-                                <Bookmark size={16} fill={isSaved ? "currentColor" : "none"} />
-                                <span>{isSaved ? "Unsave Post" : "Save Post"}</span>
-                            </button>
+                {/* Media Attachment: Multiple Images Grid */}
+                {postImages.length > 0 && (
+                    <div className={cx('post-media-grid', `grid-${Math.min(postImages.length, 4)}`)}>
+                        {postImages.slice(0, 4).map((imgUrl, idx) => {
+                            const fullSrc = imgUrl.startsWith('http') ? imgUrl : `http://localhost:5001${imgUrl}`;
+                            const isExtraFourth = idx === 3 && postImages.length > 4;
+                            const extraCount = postImages.length - 4;
 
-                            <button className={cx('menu-option')} onClick={handleCopyLink}>
-                                <LinkIcon size={16} />
-                                <span>Copy Link</span>
-                            </button>
+                            return (
+                                <div 
+                                    key={idx} 
+                                    className={cx('grid-image-wrapper')}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedImageIndex(idx);
+                                        setIsDetailOpen(true);
+                                    }}
+                                >
+                                    <img
+                                        src={fullSrc}
+                                        alt={`Post media ${idx + 1}`}
+                                        className={cx('grid-image-item')}
+                                        loading="lazy"
+                                    />
+                                    {isExtraFourth && (
+                                        <div className={cx('extra-images-overlay')}>
+                                            <span>+{extraCount}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
-                            <button className={cx('menu-option')} onClick={handleHidePost}>
-                                <EyeOff size={16} />
-                                <span>Not interested</span>
-                            </button>
-
-                            <button className={cx('menu-option')} onClick={handleReportPost}>
-                                <Flag size={16} />
-                                <span>Report Post</span>
-                            </button>
-
-                            {post.author?._id === currentUser?._id && (
-                                <>
-                                    <div className={cx('menu-separator')}></div>
-                                    <button className={cx('menu-option')} onClick={() => { toast.info('Edit feature coming soon'); setShowOptions(false); }}>
-                                        <Edit size={16} />
-                                        <span>Edit Post</span>
-                                    </button>
-                                    <button className={cx('menu-option', 'delete-option')} onClick={handleDelete}>
-                                        <Trash2 size={16} />
-                                        <span>Move to trash</span>
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className={cx('post-content')}>
-                {post.content}
-            </div>
-
-            {post.image && (
-                <img
-                    src={post.image.startsWith('http') ? post.image : `http://localhost:5001${post.image}`}
-                    alt="post content"
-                    className={cx('post-image')}
-                    onClick={() => setIsDetailOpen(true)}
-                    style={{ cursor: 'pointer' }}
-                />
-            )}
-
-            {post.video && (
-                <video
-                    controls
-                    src={post.video.startsWith('http') ? post.video : `http://localhost:5001${post.video}`}
-                    className={cx('post-image')}
-                />
-            )}
-
-            <div className={cx('post-actions')}>
-                <button className={cx({ liked: isLiked })} onClick={() => onLike(post._id)}>
-                    <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
-                    <span>{post.likes.length} Likes</span>
-                </button>
-                <button onClick={() => setShowComments(!showComments)}>
-                    <MessageCircle size={20} />
-                    <span>{post.comments.length} Comments</span>
-                </button>
-            </div>
-
-            {showComments && (
-                <div className={cx('comments-section')}>
-                    <div className={cx('comment-input')}>
-                        <input
-                            type="text"
-                            placeholder="Write a comment..."
-                            value={commentText}
-                            onChange={(e) => setCommentText(e.target.value)}
-                            onKeyDown={handleComment}
+                {/* Video Attachment */}
+                {post.video && (
+                    <div className={cx('post-media-container')}>
+                        <video
+                            controls
+                            src={post.video.startsWith('http') ? post.video : `http://localhost:5001${post.video}`}
+                            className={cx('post-media-video')}
                         />
                     </div>
-                    <div className={cx('comment-list')}>
-                        {post.comments.map((comment, index) => (
-                            <PostCommentItem key={index} comment={comment} postId={post._id} />
-                        ))}
-                    </div>
-                </div>
-            )}
+                )}
 
-            <PostDetailModal open={isDetailOpen} post={post} onClose={() => setIsDetailOpen(false)} />
-        </div>
+                {/* X-Style Engagement Bar (4 Signature Actions) */}
+                <div className={cx('post-engagement-bar')}>
+                    {/* Reply / Comment */}
+                    <button 
+                        type="button"
+                        className={cx('engagement-btn', 'reply-btn', { active: showComments })}
+                        onClick={() => setShowComments(!showComments)}
+                        title="Bình luận"
+                    >
+                        <div className={cx('icon-glow')}>
+                            <MessageCircle size={18} />
+                        </div>
+                        <span className={cx('metric-count')}>
+                            {post.comments?.length || 0}
+                        </span>
+                    </button>
+
+                    {/* Repost */}
+                    <button 
+                        type="button"
+                        className={cx('engagement-btn', 'repost-btn', { reposted: isReposted })}
+                        onClick={handleRepost}
+                        title={isReposted ? "Hủy chia sẻ lại" : "Chia sẻ lại"}
+                    >
+                        <div className={cx('icon-glow')}>
+                            <Repeat size={18} />
+                        </div>
+                        <span className={cx('metric-count')}>
+                            {post.reposts?.length || 0}
+                        </span>
+                    </button>
+
+                    {/* Like with Heart Pop Animation */}
+                    <Motion.button 
+                        whileTap={{ scale: 1.35 }}
+                        type="button"
+                        className={cx('engagement-btn', 'like-btn', { liked: isLiked })}
+                        onClick={() => onLike(post._id)}
+                        title={isLiked ? "Bỏ thích" : "Thích"}
+                    >
+                        <div className={cx('icon-glow')}>
+                            <Heart 
+                                size={18} 
+                                fill={isLiked ? "#f91880" : "none"} 
+                                stroke={isLiked ? "#f91880" : "currentColor"} 
+                            />
+                        </div>
+                        <span className={cx('metric-count')}>
+                            {post.likes?.length || 0}
+                        </span>
+                    </Motion.button>
+
+                    {/* Bookmark */}
+                    <button 
+                        type="button"
+                        className={cx('engagement-btn', 'bookmark-btn', { saved: isSaved })}
+                        onClick={handleSavePost}
+                        title={isSaved ? "Bỏ lưu" : "Lưu"}
+                    >
+                        <div className={cx('icon-glow')}>
+                            <Bookmark 
+                                size={18} 
+                                fill={isSaved ? "#f97316" : "none"} 
+                                stroke={isSaved ? "#f97316" : "currentColor"} 
+                            />
+                        </div>
+                    </button>
+
+                    {/* Copy Link / Share */}
+                    <button 
+                        type="button"
+                        className={cx('engagement-btn', 'share-btn')}
+                        onClick={handleCopyLink}
+                        title="Chia sẻ liên kết"
+                    >
+                        <div className={cx('icon-glow')}>
+                            <Share size={18} />
+                        </div>
+                    </button>
+                </div>
+
+                {/* Inline Threaded Comments Section */}
+                <AnimatePresence>
+                    {showComments && (
+                        <Motion.div 
+                            className={cx('inline-comments-section')}
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            {/* Reply Input Capsule */}
+                            <form onSubmit={handleCommentSubmit} className={cx('comment-compose-row')}>
+                                <img 
+                                    src={currentUser?.avatarURL ? (currentUser.avatarURL.startsWith('http') ? currentUser.avatarURL : `http://localhost:5001${currentUser.avatarURL}`) : default_avt} 
+                                    alt="avatar" 
+                                    className={cx('compose-avatar')}
+                                    onError={(e) => { e.currentTarget.src = default_avt; }}
+                                />
+                                <div className={cx('comment-input-box')}>
+                                    <input
+                                        type="text"
+                                        placeholder="Đăng câu trả lời của bạn..."
+                                        value={commentText}
+                                        onChange={(e) => setCommentText(e.target.value)}
+                                        className={cx('comment-input-field')}
+                                    />
+                                    <button 
+                                        type="submit" 
+                                        className={cx('comment-send-btn', { active: commentText.trim() })}
+                                        disabled={!commentText.trim() || isSubmittingComment}
+                                        title="Gửi câu trả lời"
+                                    >
+                                        <Send size={15} />
+                                    </button>
+                                </div>
+                            </form>
+
+                            {/* Comments List */}
+                            <div className={cx('comment-list')}>
+                                {post.comments?.map((comment, index) => (
+                                    <PostCommentItem key={comment._id || index} comment={comment} postId={post._id} />
+                                ))}
+                            </div>
+                        </Motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            {/* Image/Video Fullscreen Modal */}
+            <PostDetailModal 
+                open={isDetailOpen} 
+                post={post} 
+                initialIndex={selectedImageIndex}
+                onClose={() => setIsDetailOpen(false)} 
+            />
+
+            {/* Privacy Edit Modal */}
+            <AnimatePresence>
+                {showPrivacyModal && (
+                    <div 
+                        className={cx('privacy-modal-overlay')} 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setShowPrivacyModal(false);
+                        }}
+                    >
+                        <Motion.div 
+                            className={cx('privacy-modal-card')}
+                            onClick={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0, scale: 0.94 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.94 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            <div className={cx('modal-header-row')}>
+                                <h3 className={cx('modal-title')}>Chỉnh sửa quyền riêng tư</h3>
+                                <button 
+                                    type="button"
+                                    className={cx('modal-close-btn')}
+                                    onClick={() => setShowPrivacyModal(false)}
+                                    title="Đóng"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                            <p className={cx('modal-subtitle')}>
+                                Chọn ai có thể nhìn thấy bài viết này trên trang cá nhân và bảng tin Shrimple.
+                            </p>
+
+                            <div className={cx('privacy-options-list')}>
+                                {Object.entries(privacyDetails).map(([key, item]) => {
+                                    const OptionIcon = item.icon;
+                                    const isSelected = privacy === key;
+                                    return (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            className={cx('privacy-choice-btn', { selected: isSelected })}
+                                            onClick={() => handleUpdatePrivacy(key)}
+                                            disabled={isUpdatingPrivacy}
+                                        >
+                                            <div className={cx('choice-icon-circle')}>
+                                                <OptionIcon size={18} />
+                                            </div>
+                                            <div className={cx('choice-info')}>
+                                                <div className={cx('choice-label')}>{item.label}</div>
+                                                <div className={cx('choice-desc')}>{item.desc}</div>
+                                            </div>
+                                            {isSelected && <Check size={18} className={cx('choice-check')} />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </Motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </Motion.article>
     );
 };
 

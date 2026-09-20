@@ -57,7 +57,7 @@ const checkFakeNews = (text) => {
 
 export const createPost = async (req, res) => {
     try {
-        const { content } = req.body;
+        const { content, privacy } = req.body;
         const userId = req.user._id;
 
         // Check for duplicate post within last 60 seconds
@@ -75,35 +75,60 @@ export const createPost = async (req, res) => {
              return res.status(200).json(duplicate);
         }
 
-        let imageUrl = "";
+        let imagesArray = [];
         let videoUrl = "";
 
-        if (req.file) {
-            // Upload to Cloudinary
-            const localPath = req.file.path;
-            const cloudResponse = await uploadToCloudinary(localPath);
+        // Support both req.files (array from upload.any) and req.file (single)
+        const uploadedFiles = req.files && req.files.length > 0 ? req.files : (req.file ? [req.file] : []);
 
-            if (cloudResponse) {
-                if (cloudResponse.resource_type === 'video') {
-                    // Check duration (<= 60s)
-                    if (cloudResponse.duration > 60.5) { // Add small buffer
-                        await deleteFromCloudinary(cloudResponse.public_id, 'video');
-                        return res.status(400).json({ message: "Video must be 60 seconds or less." });
+        if (uploadedFiles.length > 0) {
+            // Upload files concurrently
+            const uploadPromises = uploadedFiles.map(async (file) => {
+                const localPath = file.path;
+                const cloudResponse = await uploadToCloudinary(localPath);
+                return { file, cloudResponse };
+            });
+
+            const results = await Promise.all(uploadPromises);
+
+            for (const { cloudResponse } of results) {
+                if (cloudResponse) {
+                    if (cloudResponse.resource_type === 'video') {
+                        if (cloudResponse.duration > 60.5) {
+                            await deleteFromCloudinary(cloudResponse.public_id, 'video');
+                            return res.status(400).json({ message: "Video must be 60 seconds or less." });
+                        }
+                        videoUrl = cloudResponse.secure_url;
+                    } else {
+                        imagesArray.push(cloudResponse.secure_url);
                     }
-                    videoUrl = cloudResponse.secure_url;
-                } else {
-                    imageUrl = cloudResponse.secure_url;
                 }
-            } else {
-                return res.status(500).json({ message: "Failed to upload media to cloud." });
+            }
+        }
+
+        // Support raw URLs in body (single or array)
+        if (req.body.images) {
+            try {
+                const parsed = typeof req.body.images === 'string' ? JSON.parse(req.body.images) : req.body.images;
+                if (Array.isArray(parsed)) {
+                    imagesArray.push(...parsed.filter(Boolean));
+                } else if (typeof parsed === 'string' && parsed) {
+                    imagesArray.push(parsed);
+                }
+            } catch {
+                if (typeof req.body.images === 'string' && req.body.images) {
+                    imagesArray.push(req.body.images);
+                }
             }
         } else if (req.body.image) {
-             imageUrl = req.body.image;
-        } else if (req.body.video) {
-             videoUrl = req.body.video;
+            imagesArray.push(req.body.image);
+        }
+
+        if (req.body.video) {
+            videoUrl = req.body.video;
         }
         
-        if (!content && !imageUrl && !videoUrl) {
+        if (!content && imagesArray.length === 0 && !videoUrl) {
             return res.status(400).json({ message: "Post content or media is required" });
         }
 
@@ -126,11 +151,15 @@ export const createPost = async (req, res) => {
         }
         // ---------------------------
 
+        const validPrivacy = (privacy && ["public", "friends", "private"].includes(privacy)) ? privacy : "public";
+
         const newPost = new Post({
             author: req.user._id,
             content,
-            image: imageUrl,
+            image: imagesArray[0] || "",
+            images: imagesArray,
             video: videoUrl,
+            privacy: validPrivacy,
         });
 
         await newPost.save();
@@ -158,19 +187,22 @@ export const getAllPosts = async (req, res) => {
             f.userA.toString() === userId.toString() ? f.userB : f.userA
         );
 
-        // 2. Add current user to list (to see own posts)
-        const allowedAuthors = [...friendIds, userId];
-
         const limit = parseInt(req.query.limit) || 10;
         const cursor = req.query.cursor; // Cursor is the ISO date string of the last post
 
-        const query = { author: { $in: allowedAuthors } };
+        const query = {
+            $or: [
+                { author: userId },
+                { author: { $in: friendIds }, privacy: { $in: ["public", "friends", null, undefined] } },
+                { privacy: "public" }
+            ]
+        };
         
         if (cursor) {
             query.createdAt = { $lt: new Date(cursor) };
         }
 
-        // 3. Find posts only from friends and self
+        // Find posts matching privacy criteria
         const posts = await Post.find(query)
             .sort({ createdAt: -1 })
             .limit(limit + 1) // Fetch 1 extra to check if there are more
@@ -197,14 +229,15 @@ export const getVideoFeed = async (req, res) => {
         const cursor = req.query.cursor;
 
         const query = { 
-            video: { $exists: true, $ne: "" } 
+            video: { $exists: true, $ne: "" },
+            privacy: { $in: ["public", null, undefined] }
         };
 
         if (cursor) {
             query.createdAt = { $lt: new Date(cursor) };
         }
 
-        // Global Video Feed: Find any posts with videos
+        // Global Video Feed: Find public posts with videos
         const posts = await Post.find(query)
             .sort({ createdAt: -1 })
             .limit(limit + 1)
@@ -227,8 +260,33 @@ export const getVideoFeed = async (req, res) => {
 
 export const getUserPosts = async (req, res) => {
     try {
-        const { userId } = req.params;
-        const posts = await Post.find({ author: userId })
+        const { userId: targetUserId } = req.params;
+        const currentUserId = req.user?._id;
+
+        let query = { author: targetUserId };
+
+        if (currentUserId && currentUserId.toString() === targetUserId.toString()) {
+            // Viewing own profile: can see all posts
+        } else {
+            let isFriend = false;
+            if (currentUserId) {
+                const friendship = await Friend.findOne({
+                    $or: [
+                        { userA: currentUserId, userB: targetUserId },
+                        { userA: targetUserId, userB: currentUserId }
+                    ]
+                });
+                if (friendship) isFriend = true;
+            }
+
+            if (isFriend) {
+                query.privacy = { $in: ["public", "friends", null, undefined] };
+            } else {
+                query.privacy = { $in: ["public", null, undefined] };
+            }
+        }
+
+        const posts = await Post.find(query)
             .sort({ createdAt: -1 })
             .populate("author", "username displayName avatarURL")
             .populate("comments.postedBy", "username displayName avatarURL")
@@ -238,6 +296,78 @@ export const getUserPosts = async (req, res) => {
     } catch (error) {
         console.error("Error in getUserPosts controller: ", error.message);
         res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+export const updatePostPrivacy = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { privacy } = req.body;
+        const userId = req.user._id;
+
+        if (!["public", "friends", "private"].includes(privacy)) {
+            return res.status(400).json({ message: "Quyền riêng tư không hợp lệ" });
+        }
+
+        const post = await Post.findById(id);
+        if (!post) {
+            return res.status(404).json({ message: "Không tìm thấy bài viết" });
+        }
+
+        if (post.author.toString() !== userId.toString()) {
+            return res.status(403).json({ message: "Bạn không có quyền chỉnh sửa quyền riêng tư bài viết này" });
+        }
+
+        post.privacy = privacy;
+        await post.save();
+
+        const updatedPost = await Post.findById(id)
+            .populate("author", "username displayName avatarURL")
+            .populate("comments.postedBy", "username displayName avatarURL")
+            .populate("comments.replies.postedBy", "username displayName avatarURL");
+
+        res.status(200).json(updatedPost);
+    } catch (error) {
+        console.error("Error in updatePostPrivacy:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export const repostPost = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user._id;
+
+        const post = await Post.findById(id);
+        if (!post) {
+            return res.status(404).json({ message: "Không tìm thấy bài viết" });
+        }
+
+        if (!Array.isArray(post.reposts)) {
+            post.reposts = [];
+        }
+
+        const isReposted = post.reposts.some((uid) => uid.toString() === userId.toString());
+
+        if (isReposted) {
+            // Un-repost
+            post.reposts = post.reposts.filter((uid) => uid.toString() !== userId.toString());
+        } else {
+            // Repost
+            post.reposts.push(userId);
+        }
+
+        await post.save();
+
+        const updatedPost = await Post.findById(id)
+            .populate("author", "username displayName avatarURL")
+            .populate("comments.postedBy", "username displayName avatarURL")
+            .populate("comments.replies.postedBy", "username displayName avatarURL");
+
+        res.status(200).json(updatedPost);
+    } catch (error) {
+        console.error("Error in repostPost:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
 };
 

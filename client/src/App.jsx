@@ -65,7 +65,13 @@ const App = () => {
 
     return (
         <AntiPeepProvider>
-            <Toaster richColors theme={isLight ? "light" : "dark"} />
+            <Toaster 
+                theme={isLight ? "light" : "dark"} 
+                position="bottom-center"
+                toastOptions={{
+                    duration: 2600,
+                }}
+            />
 
             <CallModal />
 
