@@ -29,6 +29,15 @@ export const useAuthStore = create(
                 try {
                     set({loading: true});
                     const res = await authService.signUp(profileData);
+                    if (res.requiresOtp) {
+                        toast.success(res.message || "Verification code sent.");
+                        return {
+                            success: true,
+                            requiresOtp: true,
+                            pendingToken: res.pendingToken,
+                            email: res.email
+                        };
+                    }
                     clearStorageKeepingTheme();
                     localStorage.setItem("accessToken", res.accessToken);
                     set({ accessToken: res.accessToken, user: res.user });
@@ -41,6 +50,34 @@ export const useAuthStore = create(
                     return { success: false };
                 } finally {
                     set({loading: false});
+                }
+            },
+
+            verifyEmailSignupOtp: async (pendingToken, otp) => {
+                try {
+                    set({ loading: true });
+                    const res = await authService.verifyEmailSignupOtp(pendingToken, otp);
+                    clearStorageKeepingTheme();
+                    localStorage.setItem("accessToken", res.accessToken);
+                    set({ accessToken: res.accessToken, user: res.user });
+                    toast.success(res.message || "Email verified.");
+                    return { success: true, user: res.user };
+                } catch (err) {
+                    toast.error(err.response?.data?.message || "Verification failed.");
+                    return { success: false };
+                } finally {
+                    set({ loading: false });
+                }
+            },
+
+            resendEmailSignupOtp: async (pendingToken) => {
+                try {
+                    const res = await authService.resendEmailSignupOtp(pendingToken);
+                    toast.success(res.message || "A new code was sent.");
+                    return { success: true };
+                } catch (err) {
+                    toast.error(err.response?.data?.message || "Could not resend the code.");
+                    return { success: false };
                 }
             },
 

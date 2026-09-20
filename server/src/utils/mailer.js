@@ -8,17 +8,18 @@ import nodemailer from "nodemailer";
  * @param {string} otp - 6-digit OTP code
  */
 export const sendOtpEmail = async (email, otp, purpose = "password-reset") => {
+    const isSignup = purpose === "google-signup" || purpose === "email-signup";
     const isGoogleSignup = purpose === "google-signup";
-    const title = isGoogleSignup ? "Verify Your New Account" : "Reset Your Password";
+    const title = isSignup ? "Verify Your New Account" : "Reset Your Password";
     const description = isGoogleSignup
-        ? "A new Shrimple account is being created with Google. Enter the verification code below to confirm this email address."
+        ? `A new Shrimple account is being created${isGoogleSignup ? " with Google" : ""}. Enter the verification code below to confirm this email address.`
         : "We received a request to reset the password for your Shrimple account. Use the verification code below to proceed.";
     const subject = isGoogleSignup
         ? "[Shrimple] Verify your new account"
         : "[Shrimple] Reset Your Password OTP";
     // 1. Always log the OTP to the terminal for extremely easy local development and debugging
     console.log("\n========================================");
-    console.log(`🔑 ${isGoogleSignup ? "GOOGLE SIGNUP" : "PASSWORD RESET"} OTP`);
+    console.log(`🔑 ${isSignup ? "SIGNUP" : "PASSWORD RESET"} OTP`);
     console.log(`✉️  EMAIL: ${email}`);
     console.log(`🔢 CODE:  ${otp}`);
     console.log(`⏱️  EXPIRES IN: 5 minutes`);

@@ -1,10 +1,12 @@
 import express from "express";
-import {refreshToken, signIn, signOut, signUp, changePassword, googleLogin, verifyGoogleSignupOtp, resendGoogleSignupOtp, forgotPassword, verifyOtp, resetPassword} from "../controllers/authController.js";
+import {refreshToken, signIn, signOut, signUp, verifyEmailSignupOtp, resendEmailSignupOtp, changePassword, googleLogin, verifyGoogleSignupOtp, resendGoogleSignupOtp, forgotPassword, verifyOtp, resetPassword} from "../controllers/authController.js";
 import { protectedRoute } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
 router.post("/signup", signUp);
+router.post("/signup/verify-otp", verifyEmailSignupOtp);
+router.post("/signup/resend-otp", resendEmailSignupOtp);
 
 router.post("/signin", signIn)
 

@@ -6,6 +6,7 @@ import { GoogleLogin } from '@react-oauth/google';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import GoogleOtpDialog from '../components/auth/GoogleOtpDialog';
+import SignupOtpDialog from '../components/auth/SignupOtpDialog';
 
 const SignUpPage = () => {
     const navigate = useNavigate();
@@ -18,6 +19,7 @@ const SignUpPage = () => {
     });
     const [showPassword, setShowPassword] = useState(false);
     const [googleVerification, setGoogleVerification] = useState(null);
+    const [emailVerification, setEmailVerification] = useState(null);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -44,6 +46,10 @@ const SignUpPage = () => {
                 password: formData.password
             });
             if (result.success) {
+                if (result.requiresOtp) {
+                    setEmailVerification({ pendingToken: result.pendingToken, email: result.email });
+                    return;
+                }
                 toast.success('Account created!');
                 navigate('/complete-profile');
             }
@@ -74,6 +80,16 @@ const SignUpPage = () => {
 
     return (
         <div className={styles['page-wrapper']}>
+            <SignupOtpDialog
+                open={Boolean(emailVerification)}
+                email={emailVerification?.email || ''}
+                pendingToken={emailVerification?.pendingToken || ''}
+                onCancel={() => setEmailVerification(null)}
+                onVerified={() => {
+                    setEmailVerification(null);
+                    navigate('/complete-profile');
+                }}
+            />
             <GoogleOtpDialog
                 open={Boolean(googleVerification)}
                 email={googleVerification?.email || ''}

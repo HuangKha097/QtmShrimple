@@ -9,6 +9,14 @@ export const authService = {
         }, {withCredentials: true, globalLoading: true})
         return res.data;
     },
+    verifyEmailSignupOtp: async (pendingToken, otp) => {
+        const res = await api.post("/api/auth/signup/verify-otp", { pendingToken, otp }, { withCredentials: true, globalLoading: true });
+        return res.data;
+    },
+    resendEmailSignupOtp: async (pendingToken) => {
+        const res = await api.post("/api/auth/signup/resend-otp", { pendingToken }, { withCredentials: true });
+        return res.data;
+    },
 
     signIn: async (email, password) => {
         const res = await api.post("/api/auth/signin", {

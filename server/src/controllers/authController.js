@@ -14,6 +14,7 @@ const REFRESH_TOKEN_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days
 const OTP_TTL = 5 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 const GOOGLE_PENDING_TTL = "10m";
+const EMAIL_SIGNUP_PENDING_TTL = "10m";
 
 const normalizeEmail = (email = "") => email.toLowerCase().trim();
 const hashOtp = (email, purpose, otp) => crypto
@@ -245,21 +246,30 @@ export const signUp = async (req, res) => {
             });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const otp = await createOtp(normalizedEmail, "email-signup");
+        const mailResult = await sendOtpEmail(normalizedEmail, otp, "email-signup");
+        if (!mailResult.success) {
+            await Otp.deleteMany({ email: normalizedEmail, purpose: "email-signup" });
+            return res.status(502).json({
+                success: false,
+                message: "We could not send the verification email. Please try again."
+            });
+        }
 
-        const user = await User.create({
-            password: hashedPassword,
+        const pendingToken = jwt.sign({
+            purpose: "email-signup",
             email: normalizedEmail,
             displayName: fullName.trim(),
-            gender: "other",
-            isProfileComplete: false,
-        });
-        const session = await issueSession(res, user);
+            password: await bcrypt.hash(password, 10)
+        }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: EMAIL_SIGNUP_PENDING_TTL });
 
-        return res.status(201).json({
+        return res.status(202).json({
             success: true,
-            message: "User created! Please complete your profile.",
-            ...session
+            requiresOtp: true,
+            pendingToken,
+            email: normalizedEmail,
+            message: "We sent a verification code to your email.",
+            loggedToConsole: !!mailResult.loggedToConsole
         });
     } catch (error) {
         console.error("Error during signUp:", error);
@@ -267,6 +277,77 @@ export const signUp = async (req, res) => {
             success: false,
             message: "Internal server error.",
         });
+    }
+};
+
+const parseEmailSignupPendingToken = (pendingToken) => {
+    const payload = jwt.verify(pendingToken, process.env.ACCESS_TOKEN_SECRET);
+    if (payload.purpose !== "email-signup") throw new Error("Invalid pending token");
+    return payload;
+};
+
+export const verifyEmailSignupOtp = async (req, res) => {
+    try {
+        const { pendingToken, otp } = req.body;
+        if (!pendingToken || !/^\d{6}$/.test(String(otp || ""))) {
+            return res.status(400).json({ success: false, message: "A valid 6-digit code is required." });
+        }
+
+        const pending = parseEmailSignupPendingToken(pendingToken);
+        const otpRecord = await readValidOtp(pending.email, "email-signup", otp);
+        if (!otpRecord) {
+            return res.status(400).json({ success: false, message: "Invalid, expired, or overused verification code." });
+        }
+        if (await User.exists({ email: pending.email })) {
+            await Otp.deleteMany({ email: pending.email, purpose: "email-signup" });
+            return res.status(409).json({ success: false, message: "Email already exists. Please sign in." });
+        }
+
+        const user = await User.create({
+            password: pending.password,
+            email: pending.email,
+            displayName: pending.displayName,
+            gender: "other",
+            isProfileComplete: false,
+        });
+        await Otp.deleteMany({ email: pending.email, purpose: "email-signup" });
+        const session = await issueSession(res, user);
+        return res.status(201).json({
+            success: true,
+            message: "Email verified. Please complete your profile.",
+            ...session
+        });
+    } catch (error) {
+        if (error.name === "TokenExpiredError" || error.name === "JsonWebTokenError") {
+            return res.status(400).json({ success: false, message: "The verification session expired. Please sign up again." });
+        }
+        console.error("Error verifying email signup OTP:", error);
+        return res.status(500).json({ success: false, message: "Internal server error." });
+    }
+};
+
+export const resendEmailSignupOtp = async (req, res) => {
+    try {
+        const { pendingToken } = req.body;
+        if (!pendingToken) return res.status(400).json({ success: false, message: "Verification session is required." });
+        const pending = parseEmailSignupPendingToken(pendingToken);
+        const recent = await Otp.findOne({ email: pending.email, purpose: "email-signup" });
+        if (recent && Date.now() - recent.createdAt.getTime() < 45_000) {
+            return res.status(429).json({ success: false, message: "Please wait before requesting another code." });
+        }
+        const otp = await createOtp(pending.email, "email-signup");
+        const mailResult = await sendOtpEmail(pending.email, otp, "email-signup");
+        if (!mailResult.success) {
+            await Otp.deleteMany({ email: pending.email, purpose: "email-signup" });
+            return res.status(502).json({ success: false, message: "We could not send the verification email. Please try again." });
+        }
+        return res.status(200).json({ success: true, message: "A new verification code was sent." });
+    } catch (error) {
+        if (error.name === "TokenExpiredError" || error.name === "JsonWebTokenError") {
+            return res.status(400).json({ success: false, message: "The verification session expired. Please sign up again." });
+        }
+        console.error("Error resending email signup OTP:", error);
+        return res.status(500).json({ success: false, message: "Internal server error." });
     }
 };
 
@@ -512,4 +593,3 @@ export const resetPassword = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal server error." });
     }
 };
-
