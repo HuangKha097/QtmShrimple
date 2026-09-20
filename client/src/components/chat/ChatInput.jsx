@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import classNames from 'classnames/bind';
+import { motion as Motion } from 'motion/react';
 import styles from '../../assets/css/ChatInput.module.scss';
-import { Paperclip, Send, Smile, Mic, MapPin, X, Image as ImageIcon, Plus, Camera, File } from 'lucide-react';
+import { Image as ImageIcon, Smile, Mic, Plus, Send, X, File, MapPin } from 'lucide-react';
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import EmojiPicker from 'emoji-picker-react';
@@ -22,7 +23,6 @@ const ChatInput = () => {
     const fileInputRef = useRef(null);
     const fileAttachmentInputRef = useRef(null);
 
-    // Audio recording state
     const [isRecording, setIsRecording] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
     const [mediaRecorder, setMediaRecorder] = useState(null);
@@ -40,10 +40,10 @@ const ChatInput = () => {
     const { sendDirectMessage, sendGroupMessage, activeConversationId, conversations, friends } = useChatStore();
     const { user: currentUser } = useAuthStore();
 
-    // Check chat permission logic
     const chatStatus = useMemo(() => {
-        const currentConvo = conversations.find(c => c._id === activeConversationId);
-        if (!activeConversationId) return { allowed: false, reason: "No selection" };
+        const safeConvos = Array.isArray(conversations) ? conversations : [];
+        const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
+        if (!activeConversationId) return { allowed: false, reason: "Chưa chọn cuộc trò chuyện" };
 
         const isTemp = activeConversationId.toString().startsWith('temp_');
         const isGroup = currentConvo?.isGroup && !isTemp;
@@ -53,36 +53,31 @@ const ChatInput = () => {
         let partnerId = null;
         if (isTemp) {
             partnerId = activeConversationId.split('temp_')[1];
-        } else if (currentConvo) {
-            const partner = currentConvo.participants.find(p => p._id !== currentUser._id);
+        } else if (currentConvo?.participants) {
+            const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
             partnerId = partner ? partner._id : null;
         }
 
-        if (!partnerId) return { allowed: false, reason: "User not found" };
+        if (!partnerId) return { allowed: false, reason: "Không tìm thấy người dùng" };
 
-        // Check if I blocked them
-        if (currentUser.blockedUsers && currentUser.blockedUsers.includes(partnerId)) {
-            return { allowed: false, reason: "You have blocked this user" };
+        if (currentUser?.blockedUsers && currentUser.blockedUsers.includes(partnerId)) {
+            return { allowed: false, reason: "Bạn đã chặn người dùng này" };
         }
 
-        // Check friendship
-        const isFriend = friends.some(f => f._id.toString() === partnerId.toString());
+        const isFriend = Array.isArray(friends) && friends.some(f => f && f._id && f._id.toString() === partnerId.toString());
         if (!isFriend) {
-            return { allowed: false, reason: "You are not friends with this user" };
+            return { allowed: false, reason: "Bạn chưa kết bạn với người này" };
         }
 
         return { allowed: true, reason: "" };
-
     }, [activeConversationId, conversations, friends, currentUser]);
-
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         if (!file.type.startsWith('image/')) {
-            // Toast error here ideally
-            console.error("Please select an image file");
+            toast.error("Vui lòng chọn tệp hình ảnh");
             return;
         }
 
@@ -106,20 +101,19 @@ const ChatInput = () => {
         const file = e.target.files[0];
         if (!file) return;
 
-        const toastId = toast.loading("Uploading attachment...");
+        const toastId = toast.loading("Đang tải tệp lên...");
         const formData = new FormData();
         formData.append("file", file);
 
         try {
             const response = await api.post("/api/messages/upload", formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
+                headers: { 'Content-Type': 'multipart/form-data' }
             });
             const cloudUrl = response.data.url;
             const originalName = response.data.originalName || file.name;
 
-            const currentConvo = conversations.find(c => c._id === activeConversationId);
+            const safeConvos = Array.isArray(conversations) ? conversations : [];
+            const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
             const isGroup = currentConvo?.isGroup && !activeConversationId.toString().startsWith('temp_');
 
             if (isGroup) {
@@ -128,8 +122,8 @@ const ChatInput = () => {
                 let recipientId = null;
                 if (activeConversationId.toString().startsWith('temp_')) {
                     recipientId = activeConversationId.split('temp_')[1];
-                } else if (currentConvo) {
-                    const partner = currentConvo.participants.find(p => p._id !== currentUser._id);
+                } else if (currentConvo?.participants) {
+                    const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
                     recipientId = partner ? partner._id : null;
                 }
 
@@ -138,10 +132,10 @@ const ChatInput = () => {
                     await sendDirectMessage(recipientId, originalName, convoIdToSend, null, cloudUrl, 'file');
                 }
             }
-            toast.success("Attachment sent successfully!", { id: toastId });
+            toast.success("Đã gửi tệp thành công!", { id: toastId });
         } catch (error) {
             console.error("Failed to upload/send file:", error);
-            toast.error(error.response?.data?.message || "Failed to upload file", { id: toastId });
+            toast.error(error.response?.data?.message || "Không thể tải tệp lên", { id: toastId });
         } finally {
             if (fileAttachmentInputRef.current) {
                 fileAttachmentInputRef.current.value = "";
@@ -152,11 +146,11 @@ const ChatInput = () => {
 
     const handleShareLocation = () => {
         if (!navigator.geolocation) {
-            toast.error("Geolocation is not supported by your browser");
+            toast.error("Trình duyệt không hỗ trợ chia sẻ vị trí");
             return;
         }
 
-        const toastId = toast.loading("Fetching location...");
+        const toastId = toast.loading("Đang lấy tọa độ vị trí...");
 
         navigator.geolocation.getCurrentPosition(
             async (position) => {
@@ -164,11 +158,12 @@ const ChatInput = () => {
                 const coords = JSON.stringify({
                     lat: latitude,
                     lng: longitude,
-                    address: "Shared Location"
+                    address: "Vị trí đã chia sẻ"
                 });
 
                 try {
-                    const currentConvo = conversations.find(c => c._id === activeConversationId);
+                    const safeConvos = Array.isArray(conversations) ? conversations : [];
+                    const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
                     const isGroup = currentConvo?.isGroup && !activeConversationId.toString().startsWith('temp_');
 
                     if (isGroup) {
@@ -177,8 +172,8 @@ const ChatInput = () => {
                         let recipientId = null;
                         if (activeConversationId.toString().startsWith('temp_')) {
                             recipientId = activeConversationId.split('temp_')[1];
-                        } else if (currentConvo) {
-                            const partner = currentConvo.participants.find(p => p._id !== currentUser._id);
+                        } else if (currentConvo?.participants) {
+                            const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
                             recipientId = partner ? partner._id : null;
                         }
 
@@ -187,25 +182,17 @@ const ChatInput = () => {
                             await sendDirectMessage(recipientId, coords, convoIdToSend, null, null, 'location');
                         }
                     }
-                    toast.success("Location shared successfully!", { id: toastId });
+                    toast.success("Đã chia sẻ vị trí thành công!", { id: toastId });
                 } catch (err) {
                     console.error("Failed to share location:", err);
-                    toast.error("Failed to share location", { id: toastId });
+                    toast.error("Không thể chia sẻ vị trí", { id: toastId });
                 } finally {
                     setShowActionsMenu(false);
                 }
             },
             (error) => {
                 console.error("Error getting geolocation:", error);
-                let errorMsg = "Unable to retrieve your location";
-                if (error.code === error.PERMISSION_DENIED) {
-                    errorMsg = "Location access denied. Please check permissions.";
-                } else if (error.code === error.POSITION_UNAVAILABLE) {
-                    errorMsg = "Location information is unavailable.";
-                } else if (error.code === error.TIMEOUT) {
-                    errorMsg = "Location request timed out.";
-                }
-                toast.error(errorMsg, { id: toastId });
+                toast.error("Không thể lấy vị trí hiện tại của bạn", { id: toastId });
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
@@ -236,9 +223,7 @@ const ChatInput = () => {
             };
 
             recorder.onstop = async () => {
-                if (audioChunksRef.current.length === 0) {
-                    return;
-                }
+                if (audioChunksRef.current.length === 0) return;
 
                 const mimeType = recorder.mimeType || 'audio/webm';
                 const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
@@ -247,7 +232,7 @@ const ChatInput = () => {
                 stream.getTracks().forEach(track => track.stop());
 
                 if (audioBlob.size < 500) {
-                    toast.error("Recording is too short.");
+                    toast.error("Bản ghi âm quá ngắn.");
                     return;
                 }
 
@@ -255,44 +240,41 @@ const ChatInput = () => {
                 if (mimeType.includes('mp4')) ext = 'mp4';
                 else if (mimeType.includes('ogg')) ext = 'ogg';
                 else if (mimeType.includes('wav')) ext = 'wav';
-                else if (mimeType.includes('aac')) ext = 'aac';
 
-                const toastId = toast.loading("Sending voice message...");
-
+                const toastId = toast.loading("Đang gửi tin nhắn thoại...");
                 const formData = new FormData();
                 formData.append("file", audioBlob, `voice-note-${Date.now()}.${ext}`);
 
                 try {
                     const response = await api.post("/api/messages/upload", formData, {
-                        headers: {
-                            'Content-Type': 'multipart/form-data'
-                        }
+                        headers: { 'Content-Type': 'multipart/form-data' }
                     });
                     const cloudUrl = response.data.url;
 
-                    const currentConvo = conversations.find(c => c._id === activeConversationId);
+                    const safeConvos = Array.isArray(conversations) ? conversations : [];
+                    const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
                     const isGroup = currentConvo?.isGroup && !activeConversationId.toString().startsWith('temp_');
 
                     if (isGroup) {
-                        await sendGroupMessage(activeConversationId, "Voice Message", null, cloudUrl, 'audio');
+                        await sendGroupMessage(activeConversationId, "Tin nhắn thoại", null, cloudUrl, 'audio');
                     } else {
                         let recipientId = null;
                         if (activeConversationId.toString().startsWith('temp_')) {
                             recipientId = activeConversationId.split('temp_')[1];
-                        } else if (currentConvo) {
-                            const partner = currentConvo.participants.find(p => p._id !== currentUser._id);
+                        } else if (currentConvo?.participants) {
+                            const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
                             recipientId = partner ? partner._id : null;
                         }
 
                         if (recipientId) {
                             const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;
-                            await sendDirectMessage(recipientId, "Voice Message", convoIdToSend, null, cloudUrl, 'audio');
+                            await sendDirectMessage(recipientId, "Tin nhắn thoại", convoIdToSend, null, cloudUrl, 'audio');
                         }
                     }
-                    toast.success("Voice message sent!", { id: toastId });
+                    toast.success("Đã gửi tin nhắn thoại!", { id: toastId });
                 } catch (err) {
                     console.error("Failed to send voice message:", err);
-                    toast.error(err.response?.data?.message || "Failed to send voice message", { id: toastId });
+                    toast.error("Không thể gửi tin nhắn thoại", { id: toastId });
                 }
             };
 
@@ -307,7 +289,7 @@ const ChatInput = () => {
 
         } catch (err) {
             console.error("Error accessing microphone:", err);
-            toast.error("Microphone access denied or not available");
+            toast.error("Không thể truy cập micro");
         }
     };
 
@@ -325,7 +307,7 @@ const ChatInput = () => {
             mediaRecorder.stream.getTracks().forEach(track => track.stop());
         }
         cleanupRecordingState();
-        toast.info("Recording cancelled");
+        toast.info("Đã hủy bản ghi âm");
     };
 
     const cleanupRecordingState = () => {
@@ -354,21 +336,20 @@ const ChatInput = () => {
         if ((!text.trim() && !image) || !chatStatus.allowed || isSending) return;
 
         setIsSending(true);
-        const currentConvo = conversations.find(c => c._id === activeConversationId);
+        const safeConvos = Array.isArray(conversations) ? conversations : [];
+        const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
         const isGroup = currentConvo?.isGroup && !activeConversationId.toString().startsWith('temp_');
-
-        // Use previewUrl as base64 image data for simple handling
         const imageToSend = previewUrl;
 
         try {
             if (isGroup) {
-                await sendGroupMessage(activeConversationId, text, imageToSend, null, 'text'); // Type infer inside store if needed? Or pass 'image' if only image?
+                await sendGroupMessage(activeConversationId, text, imageToSend, null, 'text');
             } else {
                 let recipientId = null;
                 if (activeConversationId.toString().startsWith('temp_')) {
                     recipientId = activeConversationId.split('temp_')[1];
-                } else if (currentConvo) {
-                    const partner = currentConvo.participants.find(p => p._id !== currentUser._id);
+                } else if (currentConvo?.participants) {
+                    const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
                     recipientId = partner ? partner._id : null;
                 }
 
@@ -377,13 +358,12 @@ const ChatInput = () => {
                     await sendDirectMessage(recipientId, text, convoIdToSend, imageToSend, null, 'text');
                 }
             }
-            // Reset state
             setText("");
             removeImage();
             setShowEmojiPicker(false);
         } catch (error) {
             console.error("Failed to send message:", error);
-            toast.error(error.response?.data?.message || "Failed to send message");
+            toast.error(error.response?.data?.message || "Không thể gửi tin nhắn");
         } finally {
             setIsSending(false);
         }
@@ -399,20 +379,25 @@ const ChatInput = () => {
     if (!chatStatus.allowed) {
         return (
             <div className={cx('container')}>
-                <div className={cx('input-wrapper', 'disabled-banner')}>
-                    <span className={cx('disabled-text')}>
-                        {chatStatus.reason}
-                    </span>
+                <div className={cx('disabled-banner')}>
+                    <span className={cx('disabled-text')}>{chatStatus.reason}</span>
                 </div>
             </div>
         );
     }
 
+    const hasContent = text.trim().length > 0 || Boolean(image);
+
     return (
         <div className={cx('container')}>
             {showEmojiPicker && (
                 <div className={cx('emoji-picker-container')}>
-                    <EmojiPicker onEmojiClick={onEmojiClick} theme={isLight ? "light" : "dark"} width={300} height={400} />
+                    <EmojiPicker 
+                        onEmojiClick={onEmojiClick} 
+                        theme={isLight ? "light" : "dark"} 
+                        width={320} 
+                        height={400} 
+                    />
                 </div>
             )}
 
@@ -427,116 +412,124 @@ const ChatInput = () => {
                 </div>
             )}
 
-            <div className={cx('input-wrapper')}>
-                <div className={cx('left-actions')}>
-                    <button
-                        className={cx('btn', 'more-btn', { active: showActionsMenu })}
-                        onClick={() => setShowActionsMenu(!showActionsMenu)}
-                        disabled={isRecording}
-                    >
-                        <Plus size={22} style={{ transform: showActionsMenu ? 'rotate(45deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
-                    </button>
-
-                    <div className={cx('actions-menu', { show: showActionsMenu })}>
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            style={{ display: 'none' }}
-                            accept="image/*"
-                            onChange={handleFileChange}
-                        />
-                        <input
-                            type="file"
-                            ref={fileAttachmentInputRef}
-                            style={{ display: 'none' }}
-                            accept="*"
-                            onChange={handleFileAttachmentChange}
-                        />
-                        <button
-                            className={cx('btn', 'action-item')}
-                            onClick={() => { fileInputRef.current?.click(); setShowActionsMenu(false); }}
-                            title="Photo/Video"
-                        >
-                            <ImageIcon size={20} />
-                        </button>
-                        <button className={cx('btn', 'action-item')} title="Camera" onClick={()=> alert("Camera is coming soon")}>
-                            <Camera size={20} />
-                        </button>
-                        <button 
-                            className={cx('btn', 'action-item')} 
-                            title="File" 
-                            onClick={() => { fileAttachmentInputRef.current?.click(); setShowActionsMenu(false); }}
-                        >
-                            <File size={20} />
-                        </button>
-                        <button 
-                            className={cx('btn', 'action-item')} 
-                            title="Location" 
-                            onClick={handleShareLocation}
-                        >
-                            <MapPin size={20} />
-                        </button>
-                    </div>
-                </div>
-
+            {/* X-Style Unified Capsule Dock */}
+            <div className={cx('capsule-dock')}>
                 {isRecording ? (
                     <div className={cx('recording-hud')}>
                         <div className={cx('recording-indicator')}>
                             <span className={cx('pulse-dot')}></span>
-                            <span className={cx('recording-text')}>Recording Audio... {formatTime(recordingTime)}</span>
-                        </div>
-                        <div className={cx('recording-wave')}>
-                            <div className={cx('wave-bar', 'bar-1')}></div>
-                            <div className={cx('wave-bar', 'bar-2')}></div>
-                            <div className={cx('wave-bar', 'bar-3')}></div>
-                            <div className={cx('wave-bar', 'bar-4')}></div>
-                            <div className={cx('wave-bar', 'bar-5')}></div>
+                            <span className={cx('recording-text')}>Đang ghi âm... {formatTime(recordingTime)}</span>
                         </div>
                         <div className={cx('recording-actions')}>
-                            <button className={cx('btn', 'cancel-rec-btn')} onClick={cancelRecording} title="Cancel Recording">
-                                <X size={20} />
+                            <button className={cx('rec-btn', 'cancel-btn')} onClick={cancelRecording} title="Hủy">
+                                <X size={16} />
                             </button>
-                            <button className={cx('btn', 'send-rec-btn')} onClick={stopAndSendRecording} title="Send Recording">
-                                <Send size={20} />
+                            <button className={cx('rec-btn', 'confirm-btn')} onClick={stopAndSendRecording} title="Gửi">
+                                <Send size={15} />
                             </button>
                         </div>
                     </div>
                 ) : (
                     <>
-                        <div className={cx('input-field-container')}>
+                        {/* Tools on Left of Capsule */}
+                        <div className={cx('left-tools')}>
                             <input
-                                type="text"
-                                placeholder="Type a message..."
-                                className={cx('text-input')}
-                                value={text}
-                                onChange={(e) => setText(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                onFocus={() => { setShowEmojiPicker(false); setShowActionsMenu(false); }}
+                                type="file"
+                                ref={fileInputRef}
+                                style={{ display: 'none' }}
+                                accept="image/*"
+                                onChange={handleFileChange}
                             />
+                            <input
+                                type="file"
+                                ref={fileAttachmentInputRef}
+                                style={{ display: 'none' }}
+                                accept="*"
+                                onChange={handleFileAttachmentChange}
+                            />
+
                             <button
-                                className={cx('btn', 'emoji-btn')}
-                                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                type="button"
+                                className={cx('tool-btn')}
+                                onClick={() => fileInputRef.current?.click()}
+                                title="Đính kèm ảnh"
                             >
-                                <Smile size={20} />
+                                <ImageIcon size={19} />
                             </button>
+
+                            <button
+                                type="button"
+                                className={cx('tool-btn')}
+                                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                title="Biểu tượng cảm xúc"
+                            >
+                                <Smile size={19} />
+                            </button>
+
+                            <button
+                                type="button"
+                                className={cx('tool-btn')}
+                                onClick={startRecording}
+                                title="Ghi âm giọng nói"
+                            >
+                                <Mic size={19} />
+                            </button>
+
+                            <button
+                                type="button"
+                                className={cx('tool-btn')}
+                                onClick={() => setShowActionsMenu(!showActionsMenu)}
+                                title="Thêm công cụ"
+                            >
+                                <Plus size={19} style={{ transform: showActionsMenu ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s' }} />
+                            </button>
+
+                            {/* Actions Popup Menu */}
+                            {showActionsMenu && (
+                                <div className={cx('actions-menu')}>
+                                    <button
+                                        type="button"
+                                        className={cx('action-menu-btn')}
+                                        onClick={() => { fileAttachmentInputRef.current?.click(); setShowActionsMenu(false); }}
+                                        title="Gửi tệp đính kèm"
+                                    >
+                                        <File size={18} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={cx('action-menu-btn')}
+                                        onClick={handleShareLocation}
+                                        title="Chia sẻ vị trí"
+                                    >
+                                        <MapPin size={18} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
-                        <div className={cx("btn-group")}>
-                            <button
-                                className={cx('btn', 'mic-btn')}
-                                onClick={startRecording}
-                                title="Record Voice Message"
-                            >
-                                <Mic size={20} />
-                            </button>
-                            <button
-                                className={cx('btn', 'send-btn')}
-                                onClick={handleSendMessage}
-                                disabled={(!text.trim() && !image) || isSending}
-                            >
-                                <Send size={20} />
-                            </button>
-                        </div>
+                        {/* Borderless Input Field */}
+                        <input
+                            type="text"
+                            placeholder="Bắt đầu tin nhắn mới..."
+                            className={cx('input-field')}
+                            value={text}
+                            onChange={(e) => setText(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            onFocus={() => { setShowEmojiPicker(false); setShowActionsMenu(false); }}
+                        />
+
+                        {/* Send Button on Right of Capsule */}
+                        <Motion.button
+                            whileTap={hasContent ? { scale: 0.9 } : undefined}
+                            whileHover={hasContent ? { scale: 1.06 } : undefined}
+                            type="button"
+                            className={cx('send-btn', { active: hasContent })}
+                            onClick={handleSendMessage}
+                            disabled={!hasContent || isSending}
+                            title="Gửi"
+                        >
+                            <Send size={16} />
+                        </Motion.button>
                     </>
                 )}
             </div>

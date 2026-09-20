@@ -23,20 +23,20 @@
     width: 3.4rem;
     height: 3.4rem;
     border-radius: 50%;
-    background: var(--primary-color, #a855f7);
+    background: #f97316;
     border: none;
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.4);
     transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     flex-shrink: 0;
 
     &:hover {
       transform: scale(1.1);
-      box-shadow: 0 0 18px rgba(168, 85, 247, 0.6);
+      box-shadow: 0 0 18px rgba(249, 115, 22, 0.6);
     }
 
     &:active {
@@ -68,7 +68,7 @@
       transition: height 0.15s ease;
 
       &.active {
-        background: var(--primary-color, #a855f7);
+        background: #f97316;
         animation: bounce 0.8s ease-in-out infinite alternate;
       }
     }

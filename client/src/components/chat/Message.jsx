@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import classNames from 'classnames/bind';
+import { motion as Motion } from 'motion/react';
 import styles from '../../assets/css/Message.module.scss';
 import profilePic_test from "../../../public/favicon.png";
-import { X, MapPin, ExternalLink, File, Download, Pin, CornerUpRight, RotateCcw, Trash2, MoreHorizontal, PinOff } from 'lucide-react';
+import { X, MapPin, ExternalLink, File, Download, Pin, CornerUpRight, RotateCcw, Trash2, MoreHorizontal, PinOff, Check, CheckCheck } from 'lucide-react';
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import CustomAudioPlayer from './CustomAudioPlayer.jsx';
@@ -14,23 +15,23 @@ const cx = classNames.bind(styles);
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
 const Message = ({
-                     text,
-                     time,
-                     senderName,
-                     avatar = profilePic_test,
-                     isMe = false,
-                     image = null,
-                     messageType = 'text',
-                     fileUrl = null,
-                     isGroup = false,
-                     reactions = [],
-                     onReact,
-                     isRecalled = false,
-                     isPinned = false,
-                     isForwarded = false,
-                     messageId,
-                     createdAt
-                 }) => {
+    text,
+    time,
+    senderName,
+    avatar = profilePic_test,
+    isMe = false,
+    image = null,
+    messageType = 'text',
+    fileUrl = null,
+    isGroup = false,
+    reactions = [],
+    onReact,
+    isRecalled = false,
+    isPinned = false,
+    isForwarded = false,
+    messageId,
+    createdAt
+}) => {
     const [showPicker, setShowPicker] = useState(false);
     const [pickerStyle, setPickerStyle] = useState({});
     const [showDropdown, setShowDropdown] = useState(false);
@@ -50,7 +51,6 @@ const Message = ({
         }
     }
 
-    // Group reactions by emoji
     const reactionsByEmoji = reactions.reduce((acc, curr) => {
         if (!acc[curr.reaction]) {
             acc[curr.reaction] = [];
@@ -62,7 +62,7 @@ const Message = ({
     const hasReactions = Object.keys(reactionsByEmoji).length > 0;
 
     const handleMouseEnter = () => {
-        if (isRecalled) return; // Disable picker for recalled messages
+        if (isRecalled) return;
 
         if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
@@ -71,8 +71,7 @@ const Message = ({
 
         if (containerRef.current) {
             const rect = containerRef.current.getBoundingClientRect();
-            // Calculate fixed position for picker to be above the message
-            const top = rect.top - 55; 
+            const top = rect.top - 50; 
             
             const style = {
                 position: 'fixed',
@@ -96,10 +95,9 @@ const Message = ({
         timeoutRef.current = setTimeout(() => {
             setShowPicker(false);
             setShowDropdown(false);
-        }, 300); // 300ms delay to allow moving to picker
+        }, 300);
     };
 
-    // 3-hour limit check
     const isRecallable = isMe && createdAt && (Date.now() - new Date(createdAt).getTime() < 3 * 60 * 60 * 1000);
 
     const handleTogglePin = async (e) => {
@@ -142,11 +140,24 @@ const Message = ({
     };
 
     return (
-        <div id={messageId ? `msg-${messageId}` : undefined} className={cx('message-wrapper', { me: isMe })}>
-            {!isMe && <img src={avatar} alt="avatar" className={cx('avatar')} onError={(e) => {e.target.src = profilePic_test}}/>}
+        <Motion.div
+            id={messageId ? `msg-${messageId}` : undefined}
+            className={cx('message-wrapper', { me: isMe })}
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 450, damping: 30 }}
+        >
+            {!isMe && (
+                <img 
+                    src={avatar} 
+                    alt="avatar" 
+                    className={cx('avatar')} 
+                    onError={(e) => { e.target.src = profilePic_test; }}
+                />
+            )}
 
             <div className={cx('message-content')}>
-                {(!isMe && isGroup && senderName) && (
+                {!isMe && isGroup && senderName && (
                     <p className={cx('sender-name')}>{senderName}</p>
                 )}
 
@@ -163,14 +174,14 @@ const Message = ({
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={handleMouseLeave}
                 >
-                    {/* Reaction Picker - Fixed Position */}
+                    {/* Reaction Picker */}
                     {showPicker && !isRecalled && (
-                         <div 
-                            className={cx('reaction-picker', { 'picker-me': isMe })} 
+                        <div 
+                            className={cx('reaction-picker')} 
                             style={pickerStyle}
                             onMouseEnter={handleMouseEnter}
                             onMouseLeave={handleMouseLeave}
-                         >
+                        >
                             {EMOJIS.map(emoji => (
                                 <span 
                                     key={emoji} 
@@ -184,7 +195,6 @@ const Message = ({
                                 </span>
                             ))}
                             
-                            {/* Triple-dot actions trigger */}
                             <span 
                                 className={cx('emoji-btn', 'more-actions-btn', { active: showDropdown })}
                                 onClick={(e) => {
@@ -195,7 +205,6 @@ const Message = ({
                                 <MoreHorizontal size={18} />
                             </span>
 
-                            {/* Dropdown menu */}
                             {showDropdown && (
                                 <div 
                                     className={cx('actions-dropdown', { 'dropdown-me': isMe })} 
@@ -226,6 +235,7 @@ const Message = ({
                         </div>
                     )}
 
+                    {/* Bubble Content */}
                     {isRecalled ? (
                         <div className={cx('message-bubble', 'recalled-bubble')}>
                             Tin nhắn đã bị thu hồi
@@ -238,7 +248,7 @@ const Message = ({
                                     alt="chat-content" 
                                     className={cx('message-image')}
                                     onClick={() => setIsImageModalOpen(true)}
-                                    style={{ cursor: 'pointer', marginBottom: '0.6rem' }}
+                                    style={{ cursor: 'pointer', marginBottom: '4px' }}
                                 />
                             )}
                             
@@ -246,14 +256,14 @@ const Message = ({
                                 <div className={cx('location-bubble')}>
                                     <div className={cx('location-card')}>
                                         <div className={cx('location-header')}>
-                                            <MapPin size={18} className={cx('pin-icon')} />
-                                            <span>{locationData.address || "Shared Location"}</span>
+                                            <MapPin size={16} className={cx('pin-icon')} />
+                                            <span>{locationData.address || "Vị trí đã chia sẻ"}</span>
                                         </div>
                                         <div className={cx('map-preview')}>
                                             <iframe
                                                 title="Location Preview"
                                                 width="100%"
-                                                height="160"
+                                                height="150"
                                                 frameBorder="0"
                                                 src={`https://maps.google.com/maps?q=${locationData.lat},${locationData.lng}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
                                                 allowFullScreen
@@ -265,26 +275,23 @@ const Message = ({
                                             rel="noopener noreferrer"
                                             className={cx('maps-btn')}
                                         >
-                                            <span>Open in Google Maps</span>
+                                            <span>Mở trên Google Maps</span>
                                             <ExternalLink size={12} />
                                         </a>
                                     </div>
-                                    <p className={cx('message-time')} style={{ marginTop: '0.4rem' }}>{time}</p>
                                 </div>
                             ) : messageType === 'file' ? (
                                 <div className={cx('file-bubble')}>
                                     <div className={cx('file-card')}>
                                         <div className={cx('file-info')}>
                                             <div className={cx('file-icon-wrapper')}>
-                                                <File size={22} className={cx('file-icon')} />
+                                                <File size={20} />
                                             </div>
                                             <div className={cx('file-details')}>
                                                 <div className={cx('file-name')} title={text}>
-                                                    {text || "Attachment File"}
+                                                    {text || "Tệp đính kèm"}
                                                 </div>
-                                                <div className={cx('file-meta')}>
-                                                    Document
-                                                </div>
+                                                <div className={cx('file-meta')}>Tài liệu</div>
                                             </div>
                                         </div>
                                         <a 
@@ -293,39 +300,45 @@ const Message = ({
                                             rel="noopener noreferrer"
                                             download={text || "download"}
                                             className={cx('file-download-btn')}
-                                            title="Download"
+                                            title="Tải về"
                                         >
-                                            <Download size={16} />
+                                            <Download size={15} />
                                         </a>
                                     </div>
-                                    <p className={cx('message-time')} style={{ marginTop: '0.4rem' }}>{time}</p>
                                 </div>
                             ) : messageType === 'audio' ? (
                                 <div className={cx('audio-bubble')}>
                                     <CustomAudioPlayer src={fileUrl} />
-                                    <p className={cx('message-time')} style={{ marginTop: '0.4rem' }}>{time}</p>
                                 </div>
                             ) : (
-                                // Standard text bubble
                                 (!image || text) && (
                                     <div className={cx('message-bubble', { 'pinned-message': isPinned })}>
-                                        {text && <p className={cx('message-text')}>{text}</p>}
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                                            <p className={cx('message-time')}>{time}</p>
-                                            {isPinned && <Pin size={10} className={cx('pinned-indicator-icon')} style={{ opacity: 0.6, color: '#facc15' }} />}
-                                        </div>
+                                        <p className={cx('message-text')}>{text}</p>
                                     </div>
                                 )
                             )}
                         </>
                     )}
 
-                    {/* Reactions Display (Only if not recalled) */}
+                    {/* Reactions Display */}
                     {hasReactions && !isRecalled && (
                         <div className={cx('reactions-display', { 'reactions-me': isMe })}>
                             {Object.entries(reactionsByEmoji).map(([emoji, users]) => (
                                 <ReactionItem key={emoji} emoji={emoji} users={users} />
                             ))}
+                        </div>
+                    )}
+
+                    {/* X-Style Timestamp and Status BELOW Bubble */}
+                    {!isRecalled && (
+                        <div className={cx('message-time-meta')}>
+                            {isPinned && <Pin size={11} className={cx('meta-pin')} />}
+                            <span className={cx('meta-time')}>{time}</span>
+                            {isMe && (
+                                <span className={cx('meta-status')}>
+                                    <CheckCheck size={13} style={{ color: '#f97316' }} />
+                                </span>
+                            )}
                         </div>
                     )}
                 </div>
@@ -340,7 +353,7 @@ const Message = ({
                         left: 0,
                         width: '100vw',
                         height: '100vh',
-                        backgroundColor: 'rgba(0,0,0,1)',
+                        backgroundColor: 'rgba(0,0,0,0.95)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -378,7 +391,7 @@ const Message = ({
             {isForwardOpen && (
                 <ForwardModal messageId={messageId} onClose={() => setIsForwardOpen(false)} />
             )}
-        </div>
+        </Motion.div>
     );
 };
 
@@ -389,24 +402,24 @@ const ReactionItem = ({ emoji, users }) => {
 
     const userNames = users.map(u => {
         if (typeof u === 'object' && (u.displayName || u.username)) {
-             if (u._id === currentUser?._id) return "You";
+             if (u._id === currentUser?._id) return "Bạn";
              return u.displayName || u.username;
         }
 
         const userIdStr = typeof u === 'object' ? u._id : u;
-        if (userIdStr === currentUser?._id) return "You";
+        if (userIdStr === currentUser?._id) return "Bạn";
 
-        const friend = friends.find(f => f._id === userIdStr);
+        const friend = Array.isArray(friends) ? friends.find(f => f && f._id && f._id.toString() === userIdStr?.toString()) : null;
         if (friend) return friend.displayName || friend.username;
 
-        return "Unknown";
+        return "Người dùng";
     });
 
     const displayNames = userNames.slice(0, 5);
     const remaining = userNames.length - 5;
 
     let tooltipText = displayNames.join(', ');
-    if (remaining > 0) tooltipText += ` and ${remaining} others`;
+    if (remaining > 0) tooltipText += ` và ${remaining} người khác`;
 
     return (
         <div 

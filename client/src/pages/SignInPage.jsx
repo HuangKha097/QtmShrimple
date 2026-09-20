@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import styles from '../assets/css/SignInPage.module.scss';
-import { useAuthStore } from '../stores/useAuthStore';
 import { useNavigate, Link } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { motion as Motion } from 'motion/react';
+import styles from '../assets/css/SignInPage.module.scss';
+import { useAuthStore } from '../stores/useAuthStore';
 import GoogleOtpDialog from '../components/auth/GoogleOtpDialog';
+import SideRays from '../components/ui/animate/SideRays';
+import XInput from '../components/ui/animate/XInput';
+import XButton from '../components/ui/animate/XButton';
 
 const SignInPage = () => {
     const navigate = useNavigate();
     const { signIn, googleLogin, loading } = useAuthStore();
     const [formData, setFormData] = useState({ email: '', password: '' });
-    const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
     const [googleVerification, setGoogleVerification] = useState(null);
 
@@ -52,7 +54,7 @@ const SignInPage = () => {
                 }
             }
         } catch {
-            toast.error('Google login failed');
+            toast.error('Đăng nhập Google thất bại');
         }
     };
 
@@ -68,104 +70,162 @@ const SignInPage = () => {
                     navigate('/complete-profile');
                 }}
             />
-            {/* Left Section: Static Brand Image */}
-            <div className={styles['hero-section']}>
-                <img 
-                    src="/shrimple_brand_hero_image.png" 
-                    alt="Shrimple Life" 
-                    className={styles['hero-image']}
-                />
-                <div className={styles.branding}>
-                    <h1 className={styles['logo-text']}>Shrimple</h1>
-                    <p className={styles.tagline}>Socializing made simple.</p>
+
+            {/* React Bits Animated Background: SideRays */}
+            <SideRays
+                origin="top-left"
+                speed={1.6}
+                rayColor1="#f97316"
+                rayColor2="#fb923c"
+                intensity={1.8}
+                spread={2.2}
+                opacity={0.65}
+                falloff={1.5}
+            />
+
+            <div className={styles['main-content']}>
+                {/* Left Section: Iconic Brand Stage */}
+                <div className={styles['brand-column']}>
+                    <Motion.div 
+                        className={styles['brand-content']}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                        <Motion.img 
+                            src="/logo_remove_bg.png" 
+                            alt="Logo" 
+                            className={styles['brand-logo']}
+                            animate={{ y: [0, -8, 0] }}
+                            transition={{ 
+                                duration: 4, 
+                                repeat: Infinity, 
+                                ease: 'easeInOut' 
+                            }}
+                        />
+                    </Motion.div>
                 </div>
-            </div>
 
-            {/* Right Section: Auth Form */}
-            <div className={styles['auth-section']}>
-                <div className={styles['form-container']}>
-                    <h2 className={styles.title}>Sign In</h2>
-                    <p className={styles.subtitle}>Welcome back to the community.</p>
-
-                    <form onSubmit={handleSubmit}>
-                        <div className={styles['form-group']}>
-                            <label htmlFor="signin-email">Email Address</label>
-                            <div className={styles['input-wrapper']}>
-                                <input
-                                    type="email"
-                                    id="signin-email"
-                                    name="email"
-                                    autoComplete="email"
-                                    placeholder="name@example.com"
-                                    value={formData.email}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className={styles['form-group']}>
-                            <label htmlFor="signin-password">Password</label>
-                            <div className={styles['input-wrapper']}>
-                                <input
-                                    type={showPassword ? "text" : "password"}
-                                    id="signin-password"
-                                    name="password"
-                                    autoComplete="current-password"
-                                    placeholder="••••••••"
-                                    value={formData.password}
-                                    onChange={handleChange}
-                                    required
-                                />
-                                <button 
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className={styles['eye-btn']}
-                                    aria-label={showPassword ? "Hide password" : "Show password"}
-                                >
-                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className={styles.actions}>
-                            <label className={styles['checkbox-container']}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={rememberMe}
-                                    onChange={() => setRememberMe(!rememberMe)}
-                                />
-                                <div className={`${styles['custom-checkbox']} ${rememberMe ? styles.checked : ''}`}></div>
-                                Remember me
-                            </label>
-                            <Link to="/forgot-password" className={styles['forgot-password']}>Forgot password?</Link>
-                        </div>
-
-                        <button type="submit" className={styles['submit-btn']} disabled={loading}>
-                            {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Sign In'}
-                        </button>
-                    </form>
-
-                    <div className={styles.divider}>
-                        <span>or continue with</span>
-                    </div>
-
-                    <div className={styles['social-actions']}>
-                        <GoogleLogin
-                            onSuccess={handleGoogleSuccess}
-                            onError={() => toast.error('Google Login Failed')}
-                            theme="filled_black"
-                            shape="pill"
-                            width="350"
+                {/* Right Section: X-Style Auth Form */}
+                <div className={styles['auth-column']}>
+                    {/* Mobile Brand Logo */}
+                    <div className={styles['mobile-logo-wrapper']}>
+                        <img 
+                            src="/logo_remove_bg.png" 
+                            alt="Logo" 
+                            className={styles['mobile-logo']} 
                         />
                     </div>
 
-                    <p className={styles['footer-text']}>
-                        Don't have an account? 
-                        <Link to="/signup">Sign Up</Link>
-                    </p>
+                    <Motion.div 
+                        className={styles['auth-card']}
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                        <h1 className={styles['hero-heading']}>Đăng nhập vào Shrimple</h1>
+
+                        {/* Social Login */}
+                        <div className={styles['social-wrapper']}>
+                            <div className={styles['google-btn-container']}>
+                                <GoogleLogin
+                                    onSuccess={handleGoogleSuccess}
+                                    onError={() => toast.error('Google Login Failed')}
+                                    theme="filled_black"
+                                    shape="pill"
+                                    text="signin_with"
+                                    width="100%"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className={styles.divider}>
+                            <span className={styles['divider-line']} />
+                            <span className={styles['divider-text']}>hoặc</span>
+                            <span className={styles['divider-line']} />
+                        </div>
+
+                        {/* Credentials Form */}
+                        <form onSubmit={handleSubmit} className={styles['auth-form']}>
+                            <XInput
+                                id="signin-email"
+                                name="email"
+                                type="email"
+                                label="Email hoặc tên người dùng"
+                                autoComplete="email"
+                                value={formData.email}
+                                onChange={handleChange}
+                                required
+                            />
+
+                            <XInput
+                                id="signin-password"
+                                name="password"
+                                type="password"
+                                label="Mật khẩu"
+                                autoComplete="current-password"
+                                value={formData.password}
+                                onChange={handleChange}
+                                required
+                            />
+
+                            <div className={styles['form-row']}>
+                                <label className={styles['checkbox-label']}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={rememberMe}
+                                        onChange={() => setRememberMe(!rememberMe)}
+                                    />
+                                    <span className={`${styles['custom-check']} ${rememberMe ? styles.checked : ''}`} />
+                                    <span>Ghi nhớ đăng nhập</span>
+                                </label>
+
+                                <Link to="/forgot-password" className={styles['forgot-link']}>
+                                    Quên mật khẩu?
+                                </Link>
+                            </div>
+
+                            <XButton 
+                                type="submit" 
+                                variant="primary" 
+                                size="lg"
+                                loading={loading}
+                            >
+                                Đăng nhập
+                            </XButton>
+                        </form>
+
+                        {/* Switch to Sign Up */}
+                        <div className={styles['switch-section']}>
+                            <p className={styles['switch-prompt']}>Chưa có tài khoản?</p>
+                            <XButton
+                                type="button"
+                                variant="outline"
+                                size="md"
+                                onClick={() => navigate('/signup')}
+                            >
+                                Đăng ký tài khoản
+                            </XButton>
+                        </div>
+                    </Motion.div>
                 </div>
             </div>
+
+            {/* X-Style Footer */}
+            <footer className={styles['x-footer']}>
+                <nav className={styles['footer-nav']}>
+                    <a href="#about" onClick={(e) => e.preventDefault()}>Giới thiệu</a>
+                    <a href="#download" onClick={(e) => e.preventDefault()}>Tải ứng dụng</a>
+                    <a href="#help" onClick={(e) => e.preventDefault()}>Trung tâm trợ giúp</a>
+                    <a href="#terms" onClick={(e) => e.preventDefault()}>Điều khoản dịch vụ</a>
+                    <a href="#privacy" onClick={(e) => e.preventDefault()}>Chính sách quyền riêng tư</a>
+                    <a href="#cookies" onClick={(e) => e.preventDefault()}>Chính sách Cookie</a>
+                    <a href="#accessibility" onClick={(e) => e.preventDefault()}>Khả năng truy cập</a>
+                    <a href="#advertising" onClick={(e) => e.preventDefault()}>Thông tin quảng cáo</a>
+                    <span>© 2026 Shrimple Corp.</span>
+                </nav>
+            </footer>
         </div>
     );
 };

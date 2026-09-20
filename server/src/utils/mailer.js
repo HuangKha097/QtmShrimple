@@ -25,8 +25,8 @@ export const sendOtpEmail = async (email, otp, purpose = "password-reset") => {
     console.log(`⏱️  EXPIRES IN: 5 minutes`);
     console.log("========================================\n");
 
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
+    const emailUser = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : "";
+    const emailPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, "") : "";
 
     if (!emailUser || !emailPass) {
         console.warn("⚠️ SMTP credentials (EMAIL_USER & EMAIL_PASS) are not set in .env.");
@@ -95,9 +95,6 @@ export const sendOtpEmail = async (email, otp, purpose = "password-reset") => {
         return { success: true, sent: true };
     } catch (error) {
         console.error("❌ Failed to send email via nodemailer:", error);
-        // Fallback is already done by logging the OTP to the console, so we don't crash
         return { success: false, error: error.message };
     }
 };
-
-export const sendResetPasswordEmail = (email, otp) => sendOtpEmail(email, otp, "password-reset");

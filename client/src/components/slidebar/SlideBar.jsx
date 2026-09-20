@@ -1,58 +1,71 @@
 import React from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/SlideBar.module.scss';
-import default_avt from "../../../public/favicon.png";
 import SlidebarBody from './SlidebarBody.jsx';
-import { ChevronLeft, UserPlus, Users, Settings } from 'lucide-react';
-import { useAuthStore } from "../../stores/useAuthStore.js";
+import { Settings, SquarePen, Users, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import AppNavigation, { ThemeToggle } from '../common/AppNavigation';
 
 const cx = classNames.bind(styles);
-const SlideBar = ({ onCloseSetting, onCloseSlideBar, onCloseAddFriendPopup, onCloseCreateGroupPopup }) => {
-    const { user } = useAuthStore();
+
+const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPopup }) => {
     const navigate = useNavigate();
 
-    return (<div className={cx('slide-bar-wrapper')}>
-        <div className={cx("header")}>
+    return (
+        <div className={cx('messages-column-wrapper')}>
+            {/* X-Style Top Header: 53px, back button + title on left, settings & compose on right */}
+            <div className={cx('messages-header')}>
+                <div className={cx('header-title-row')}>
+                    <div className={cx('header-title-group')}>
+                        <button 
+                            type="button" 
+                            className={cx('header-back-btn')} 
+                            onClick={() => navigate('/feed')}
+                            title="Quay lại Bảng tin (Home)"
+                            aria-label="Quay lại Bảng tin"
+                        >
+                            <ArrowLeft size={20} />
+                        </button>
+                        <h1 className={cx('header-title')}>Tin nhắn</h1>
+                    </div>
 
-            <div className={cx('logo')}>
-                <button className={cx('logo-text')} onClick={() => navigate('/feed')}>Shrimple</button>
-                <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                    <button className={cx("more-btn", "collapse-sidebar-btn")} onClick={onCloseSlideBar} aria-label="Collapse chat sidebar" title="Collapse sidebar"><ChevronLeft size={18} /></button>
-                </div>
-            </div>
-            <div className={cx('profile')}>
-                <div className={cx('profile-identity')}>
-                    <img
-                        src={user?.avatarURL ? (user.avatarURL.startsWith('http') ? user.avatarURL : `http://localhost:5001${user.avatarURL}`) : default_avt}
-                        alt="profile-pic"
-                        className={cx('profile-pic')}
-                        onError={(e) => { e.target.src = default_avt }}
-                    />
-                    <div className={cx("info-wrapper")}>
-                        <p className={cx('full-name')}>{user?.displayName}</p>
-                        <p className={cx("username")}>{`@${user?.username}`}</p>
+                    <div className={cx('header-actions')}>
+                        <button 
+                            type="button" 
+                            className={cx('header-action-btn')} 
+                            onClick={onCloseSetting}
+                            title="Cài đặt tin nhắn"
+                            aria-label="Cài đặt"
+                        >
+                            <Settings size={20} />
+                        </button>
+                        <button 
+                            type="button" 
+                            className={cx('header-action-btn')} 
+                            onClick={onCloseAddFriendPopup}
+                            title="Tin nhắn mới / Thêm bạn"
+                            aria-label="Tin nhắn mới"
+                        >
+                            <SquarePen size={20} />
+                        </button>
+                        <button 
+                            type="button" 
+                            className={cx('header-action-btn')} 
+                            onClick={onCloseCreateGroupPopup}
+                            title="Tạo nhóm trò chuyện"
+                            aria-label="Tạo nhóm"
+                        >
+                            <Users size={20} />
+                        </button>
                     </div>
                 </div>
-                <button className={cx("add-friend-btn")} onClick={onCloseAddFriendPopup} aria-label="Add friend" title="Add friend"><UserPlus size={18} /></button>
-                <button className={cx("add-friend-btn")} onClick={onCloseCreateGroupPopup} aria-label="Create group" title="Create group"><Users size={18} /></button>
+            </div>
+
+            {/* Messages Body (Search + Tabs + Conversations) */}
+            <div className={cx('messages-body')}>
+                <SlidebarBody onOpenNewChat={onCloseAddFriendPopup} />
             </div>
         </div>
-
-
-        <AppNavigation />
-
-        <div className={cx("body")}>
-            <SlidebarBody />
-        </div>
-
-        <div className={cx("footer")}>
-            <button className={cx("settings-btn")} onClick={onCloseSetting}><Settings size={18} /> Settings</button>
-            <ThemeToggle />
-
-        </div>
-    </div>);
+    );
 };
 
 export default SlideBar;

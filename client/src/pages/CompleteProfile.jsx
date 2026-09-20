@@ -1,41 +1,64 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import classNames from "classnames/bind";
+import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router";
-import { gsap } from "gsap";
+import { motion as Motion, AnimatePresence } from "motion/react";
 import {
-    ArrowLeft, ArrowRight, Camera, Check, Compass, Loader2,
-    LocateFixed, MapPin, Sparkles, UserRound, UsersRound
+    ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, Compass,
+    LocateFixed, UserRound, UsersRound, MapPin,
+    GraduationCap, Briefcase
 } from "lucide-react";
 import { toast } from "sonner";
 import styles from "../assets/css/CompleteProfile.module.scss";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useChatStore } from "../stores/useChatStore";
 import { ASSET_BASE_URL } from "../config/env";
+import XBackground from "../components/ui/animate/XBackground";
+import XButton from "../components/ui/animate/XButton";
+import XSearchSelect from "../components/ui/animate/XSearchSelect";
+import { getProvincesV2, getWardsV2, searchUniversities, searchMajors } from "../services/vnProvincesService";
 
-const cx = classNames.bind(styles);
 const steps = [
-    { title: "About you", caption: "The essentials", icon: UserRound, optional: false },
-    { title: "Your photo", caption: "Make it yours", icon: Camera, optional: true },
-    { title: "Your area", caption: "Find people nearby", icon: MapPin, optional: true },
-    { title: "Find friends", caption: "Start your circle", icon: UsersRound, optional: true },
+    {
+        title: "Thông tin cá nhân",
+        desc: "Tên hiển thị, ngày sinh và @username",
+        icon: UserRound,
+        optional: false
+    },
+    {
+        title: "Ảnh đại diện",
+        desc: "Tải lên ảnh nhận diện của bạn",
+        icon: Camera,
+        optional: true
+    },
+    {
+        title: "Địa chỉ & Học vấn",
+        desc: "Tỉnh thành, trường học, chuyên ngành",
+        icon: MapPin,
+        optional: true
+    },
+    {
+        title: "Gợi ý bạn bè",
+        desc: "Khám phá và kết nối bạn bè mới",
+        icon: UsersRound,
+        optional: true
+    },
 ];
 
 const profileSchema = z.object({
-    displayName: z.string().trim().min(2, "Enter at least 2 characters").max(100),
+    displayName: z.string().trim().min(2, "Vui lòng nhập ít nhất 2 ký tự").max(100),
     birthday: z.string()
-        .min(1, "Choose your birthday")
+        .min(1, "Vui lòng chọn ngày sinh")
         .refine((value) => {
             const date = new Date(value);
             return !Number.isNaN(date.getTime()) && date <= new Date();
-        }, "Choose a valid birthday"),
+        }, "Ngày sinh không hợp lệ"),
     username: z.string()
         .trim()
-        .min(3, "Use at least 3 characters")
-        .max(20, "Use at most 20 characters")
-        .regex(/^[a-zA-Z0-9_]+$/, "Use only letters, numbers and underscores"),
+        .min(3, "Tên người dùng ít nhất 3 ký tự")
+        .max(20, "Tên người dùng tối đa 20 ký tự")
+        .regex(/^[a-zA-Z0-9_]+$/, "Chỉ chứa chữ cái, số và dấu gạch dưới"),
     gender: z.enum(["male", "female", "other"]),
 });
 
@@ -57,15 +80,23 @@ const CompleteProfile = () => {
     const [avatarFile, setAvatarFile] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(avatarSource(user?.avatarURL));
     const [location, setLocation] = useState({
-        city: user?.location?.city || "",
-        country: user?.location?.country || "",
+        province: user?.location?.province || user?.location?.city || "",
+        provinceCode: null,
+        city: user?.location?.city || user?.location?.province || "",
+        ward: user?.location?.ward || "",
+        country: user?.location?.country || "Việt Nam",
         latitude: user?.location?.latitude,
         longitude: user?.location?.longitude,
+    });
+    const [extraInfo, setExtraInfo] = useState({
+        school: user?.school || "",
+        major: user?.major || "",
+        workplace: user?.workplace || "",
+        bio: user?.bio || "",
     });
     const [locating, setLocating] = useState(false);
     const [sentRequests, setSentRequests] = useState(() => new Set());
     const [isSuccess, setIsSuccess] = useState(false);
-    const sceneRef = useRef(null);
 
     const {
         register,
@@ -80,17 +111,6 @@ const CompleteProfile = () => {
             gender: user?.gender || "other",
         },
     });
-
-    useLayoutEffect(() => {
-        const media = gsap.matchMedia();
-        media.add({ reduce: "(prefers-reduced-motion: reduce)", move: "(prefers-reduced-motion: no-preference)" }, (context) => {
-            if (context.conditions.reduce || !sceneRef.current) return;
-            gsap.fromTo(sceneRef.current, { opacity: 0, x: 28, scale: .985 }, {
-                opacity: 1, x: 0, scale: 1, duration: .38, ease: "power3.out", clearProps: "transform,opacity"
-            });
-        });
-        return () => media.revert();
-    }, [step]);
 
     useEffect(() => {
         if (step === 3) fetchSuggestedFriends();
@@ -115,11 +135,11 @@ const CompleteProfile = () => {
         const file = event.target.files?.[0];
         if (!file) return;
         if (!file.type.startsWith("image/")) {
-            toast.error("Choose an image file.");
+            toast.error("Vui lòng chọn tệp hình ảnh.");
             return;
         }
         if (file.size > 8 * 1024 * 1024) {
-            toast.error("Choose an image smaller than 8 MB.");
+            toast.error("Vui lòng chọn ảnh nhỏ hơn 8 MB.");
             return;
         }
         if (avatarPreview?.startsWith("blob:")) URL.revokeObjectURL(avatarPreview);
@@ -139,7 +159,7 @@ const CompleteProfile = () => {
 
     const useCurrentLocation = () => {
         if (!navigator.geolocation) {
-            toast.error("Location is not supported by this browser.");
+            toast.error("Trình duyệt không hỗ trợ định vị.");
             return;
         }
         setLocating(true);
@@ -151,22 +171,69 @@ const CompleteProfile = () => {
                     longitude: Number(coords.longitude.toFixed(6)),
                 }));
                 setLocating(false);
-                toast.success("Current location added.");
+                toast.success("Đã thêm vị trí hiện tại.");
             },
             () => {
                 setLocating(false);
-                toast.error("We could not access your location. You can enter a city or skip.");
+                toast.error("Không thể lấy vị trí.");
             },
             { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
         );
     };
 
-    const saveLocation = async () => {
-        const hasLocation = location.city.trim() || location.country.trim()
-            || location.latitude !== undefined || location.longitude !== undefined;
-        if (hasLocation) {
+    const handleProvinceChange = (val, opt) => {
+        setLocation((prev) => ({
+            ...prev,
+            province: val,
+            provinceCode: opt?.code || null,
+            city: val,
+            // Reset ward if province changes
+            ward: prev.province !== val ? "" : prev.ward
+        }));
+    };
+
+    const fetchWardsForCurrentProvince = async (query = "") => {
+        let code = location.provinceCode;
+        if (!code && location.province) {
+            const allProvinces = await getProvincesV2("");
+            const matched = allProvinces.find(
+                (p) => p.name.toLowerCase() === location.province.toLowerCase()
+            );
+            if (matched) {
+                code = matched.code;
+            }
+        }
+        if (!code) return [];
+        return await getWardsV2(code, query);
+    };
+
+    const saveLocationAndExtra = async () => {
+        const hasLocation = Boolean(
+            location.province?.trim() || location.city?.trim() || location.ward?.trim()
+            || location.latitude !== undefined || location.longitude !== undefined
+        );
+        const hasExtra = Boolean(
+            extraInfo.school?.trim() || extraInfo.major?.trim()
+            || extraInfo.workplace?.trim() || extraInfo.bio?.trim()
+        );
+
+        if (hasLocation || hasExtra) {
             const data = new FormData();
-            data.append("location", JSON.stringify(location));
+            if (hasLocation) {
+                data.append("location", JSON.stringify({
+                    province: location.province?.trim() || "",
+                    city: location.city?.trim() || location.province?.trim() || "",
+                    ward: location.ward?.trim() || "",
+                    country: location.country?.trim() || "Việt Nam",
+                    ...(location.latitude !== undefined ? { latitude: location.latitude } : {}),
+                    ...(location.longitude !== undefined ? { longitude: location.longitude } : {}),
+                }));
+            }
+            if (extraInfo.school?.trim()) data.append("school", extraInfo.school.trim());
+            if (extraInfo.major?.trim()) data.append("major", extraInfo.major.trim());
+            if (extraInfo.workplace?.trim()) data.append("workplace", extraInfo.workplace.trim());
+            if (extraInfo.bio?.trim()) data.append("bio", extraInfo.bio.trim());
+
             const result = await updateProfile(data);
             if (!result.success) return;
         }
@@ -177,177 +244,473 @@ const CompleteProfile = () => {
         try {
             await sendRequestAction(friendId);
             setSentRequests((current) => new Set([...current, friendId]));
-            toast.success("Friend request sent.");
+            toast.success("Đã gửi lời mời.");
         } catch (error) {
-            toast.error(error.response?.data?.message || "Could not send friend request.");
+            toast.error(error.response?.data?.message || "Không thể gửi lời mời.");
         }
     };
 
     const finishOnboarding = () => {
         setIsSuccess(true);
-        window.setTimeout(() => navigate("/feed"), 900);
+        window.setTimeout(() => navigate("/feed"), 2200);
     };
 
-    const StepIcon = steps[step].icon;
-
     return (
-        <main className={cx("page-wrapper")}>
-            {isSuccess && (
-                <div className={cx("success-overlay")} role="status">
-                    <div className={cx("success-icon")}><Check size={36} /></div>
-                    <h2>You're ready</h2>
-                    <p>Opening your Shrimple feed…</p>
-                </div>
-            )}
+        <main className={styles["page-wrapper"]}>
+            <AnimatePresence>
+                {isSuccess && (
+                    <Motion.div
+                        className={styles["success-overlay"]}
+                        role="status"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <Motion.div
+                            className={styles["success-icon"]}
+                            initial={{ scale: 0.7, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: "spring", damping: 18, stiffness: 280, delay: 0.1 }}
+                        >
+                            <Check size={40} />
+                        </Motion.div>
+                        <h2 className={styles["success-title"]}>Thiết lập thành công!</h2>
+                        <p className={styles["success-desc"]}>Đang chuyển bạn đến bảng tin…</p>
+                        <div className={styles["success-progress-track"]}>
+                            <div className={styles["success-progress-fill"]} />
+                        </div>
+                    </Motion.div>
+                )}
+            </AnimatePresence>
 
-            <aside className={cx("journey-panel")}>
-                <div>
-                    <p className={cx("brand")}>Shrimple</p>
-                    <h1>Make this space feel like yours.</h1>
-                    <p className={cx("journey-copy")}>A few small choices help us shape a friendlier first experience.</p>
+            {/* Left Journey Panel */}
+            <aside className={styles["journey-panel"]}>
+                <XBackground />
+
+                <div className={styles["brand-wrapper"]}>
+                    <img src="/logo_remove_bg.png" alt="Logo" className={styles["brand-logo"]} />
                 </div>
-                <ol className={cx("step-list")}>
+
+                <div className={styles["journey-header"]}>
+                    <h1 className={styles["journey-headline"]}>Hoàn tất hồ sơ</h1>
+                    <p className={styles["journey-subheadline"]}>
+                        Chỉ vài bước để hoàn thiện thông tin cá nhân và bắt đầu kết nối cùng cộng đồng.
+                    </p>
+                </div>
+
+                <ol className={styles["step-list"]}>
                     {steps.map((item, index) => {
                         const Icon = item.icon;
+                        const isActive = step === index;
+                        const isDone = step > index;
                         return (
-                            <li key={item.title} className={cx({ active: step === index, done: step > index })}>
-                                <span className={cx("step-icon")}>{step > index ? <Check size={18} /> : <Icon size={18} />}</span>
-                                <span><strong>{item.title}</strong><small>{item.caption}</small></span>
+                            <li
+                                key={item.title}
+                                className={`${styles["step-item"]} ${isActive ? styles.active : ""} ${isDone ? styles.done : ""}`}
+                            >
+                                <span className={styles["step-icon"]}>
+                                    {isDone ? <Check size={18} /> : <Icon size={18} />}
+                                </span>
+                                <div className={styles["step-details"]}>
+                                    <strong>{item.title}</strong>
+                                    <span>{item.desc}</span>
+                                </div>
                             </li>
                         );
                     })}
                 </ol>
-                <p className={cx("privacy-note")}>You control what you share. Optional details can be skipped and changed later.</p>
             </aside>
 
-            <section className={cx("content-panel")}>
-                <div className={cx("mobile-progress")}>
-                    <span>Step {step + 1} of {steps.length}</span>
-                    <div><i style={{ width: `${((step + 1) / steps.length) * 100}%` }} /></div>
-                </div>
-
-                <div ref={sceneRef} className={cx("step-card")}>
-                    <div className={cx("step-heading")}>
-                        <span className={cx("heading-icon")}><StepIcon size={24} /></span>
-                        <div>
-                            <p>{steps[step].optional ? "Optional step" : "Required details"}</p>
-                            <h2>{steps[step].title}</h2>
-                        </div>
+            {/* Right Content Panel */}
+            <section className={styles["content-panel"]}>
+                <div className={styles["mobile-progress"]}>
+                    <div className={styles["mobile-progress-header"]}>
+                        <span>Bước {step + 1} / {steps.length}</span>
+                        <span>{steps[step].title}</span>
                     </div>
-
-                    {step === 0 && (
-                        <form className={cx("form")} onSubmit={handleSubmit(saveBasics)}>
-                            <p className={cx("intro")}>Choose how people will recognize you. Your birthday stays private unless you change that later.</p>
-                            <label htmlFor="profile-display-name">
-                                <span>Name</span>
-                                <input id="profile-display-name" {...register("displayName")} placeholder="How should we call you?" autoComplete="name" />
-                                {errors.displayName && <small className={cx("error")}>{errors.displayName.message}</small>}
-                            </label>
-                            <div className={cx("two-columns")}>
-                                <label htmlFor="profile-birthday">
-                                    <span>Birthday</span>
-                                    <input id="profile-birthday" {...register("birthday")} type="date" />
-                                    {errors.birthday && <small className={cx("error")}>{errors.birthday.message}</small>}
-                                </label>
-                                <label htmlFor="profile-username">
-                                    <span>Username</span>
-                                    <div className={cx("username-input")}><b aria-hidden="true">@</b><input id="profile-username" {...register("username")} aria-label="Username" placeholder="your_handle" autoCapitalize="none" /></div>
-                                    {errors.username && <small className={cx("error")}>{errors.username.message}</small>}
-                                </label>
-                            </div>
-                            <label htmlFor="profile-gender">
-                                <span>Gender <em>optional</em></span>
-                                <select id="profile-gender" {...register("gender")}>
-                                    <option value="other">Prefer not to say</option>
-                                    <option value="female">Female</option>
-                                    <option value="male">Male</option>
-                                </select>
-                            </label>
-                            <div className={cx("actions", "end")}>
-                                <button className={cx("primary-button")} type="submit" disabled={isSubmitting || loading}>
-                                    {isSubmitting || loading ? <Loader2 className={cx("spinner")} size={18} /> : <>Continue <ArrowRight size={18} /></>}
-                                </button>
-                            </div>
-                        </form>
-                    )}
-
-                    {step === 1 && (
-                        <div className={cx("optional-content")}>
-                            <p className={cx("intro")}>A clear photo makes it easier for friends to find you.</p>
-                            <div className={cx("avatar-picker")}>
-                                <div className={cx("avatar-preview")}>
-                                    {avatarPreview ? <img src={avatarPreview} alt="Avatar preview" /> : <UserRound size={46} />}
-                                </div>
-                                <div>
-                                    <label className={cx("upload-button")}>
-                                        <Camera size={18} /> Choose a photo
-                                        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseAvatar} />
-                                    </label>
-                                    <small>JPG, PNG, WebP or GIF · up to 8 MB</small>
-                                </div>
-                            </div>
-                            <div className={cx("actions")}>
-                                <button className={cx("back-button")} type="button" onClick={() => goToStep(0)}><ArrowLeft size={18} /> Back</button>
-                                <div>
-                                    <button className={cx("skip-button")} type="button" onClick={() => goToStep(2)}>Skip</button>
-                                    <button className={cx("primary-button")} type="button" onClick={saveAvatar} disabled={loading}>
-                                        {loading ? <Loader2 className={cx("spinner")} size={18} /> : <>Continue <ArrowRight size={18} /></>}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {step === 2 && (
-                        <div className={cx("optional-content")}>
-                            <p className={cx("intro")}>Add as much as you're comfortable sharing. Coordinates are used only when you choose “Use current location”.</p>
-                            <button className={cx("location-button")} type="button" onClick={useCurrentLocation} disabled={locating}>
-                                {locating ? <Loader2 className={cx("spinner")} size={20} /> : <LocateFixed size={20} />}
-                                {locating ? "Finding your location…" : "Use current location"}
-                            </button>
-                            {location.latitude !== undefined && (
-                                <p className={cx("coordinates")}><Compass size={16} /> Location added · {location.latitude}, {location.longitude}</p>
-                            )}
-                            <div className={cx("divider")}><span>or enter an area</span></div>
-                            <div className={cx("two-columns")}>
-                                <label htmlFor="profile-city"><span>City</span><input id="profile-city" value={location.city} onChange={(event) => setLocation({ ...location, city: event.target.value })} placeholder="Ho Chi Minh City" /></label>
-                                <label htmlFor="profile-country"><span>Country</span><input id="profile-country" value={location.country} onChange={(event) => setLocation({ ...location, country: event.target.value })} placeholder="Vietnam" /></label>
-                            </div>
-                            <div className={cx("actions")}>
-                                <button className={cx("back-button")} type="button" onClick={() => goToStep(1)}><ArrowLeft size={18} /> Back</button>
-                                <div>
-                                    <button className={cx("skip-button")} type="button" onClick={() => goToStep(3)}>Skip</button>
-                                    <button className={cx("primary-button")} type="button" onClick={saveLocation} disabled={loading}>Continue <ArrowRight size={18} /></button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {step === 3 && (
-                        <div className={cx("optional-content")}>
-                            <p className={cx("intro")}>Start with a few familiar faces. You can always find more people from the Friends page.</p>
-                            <div className={cx("suggestions")}>
-                                {suggestedFriends.length === 0 ? (
-                                    <div className={cx("empty-state")}><UsersRound size={30} /><p>No suggestions yet. You can continue to the feed.</p></div>
-                                ) : suggestedFriends.slice(0, 6).map((friend) => (
-                                    <article key={friend._id}>
-                                        <div className={cx("friend-avatar")}>
-                                            {friend.avatarURL ? <img src={avatarSource(friend.avatarURL)} alt="" /> : <UserRound size={20} />}
-                                        </div>
-                                        <span><strong>{friend.displayName}</strong><small>@{friend.username || "new_member"}</small></span>
-                                        <button type="button" disabled={sentRequests.has(friend._id)} onClick={() => sendFriendRequest(friend._id)}>
-                                            {sentRequests.has(friend._id) ? <><Check size={16} /> Sent</> : "Add"}
-                                        </button>
-                                    </article>
-                                ))}
-                            </div>
-                            <div className={cx("actions")}>
-                                <button className={cx("back-button")} type="button" onClick={() => goToStep(2)}><ArrowLeft size={18} /> Back</button>
-                                <button className={cx("primary-button")} type="button" onClick={finishOnboarding}><Sparkles size={18} /> Open Shrimple</button>
-                            </div>
-                        </div>
-                    )}
+                    <div className={styles["mobile-progress-track"]}>
+                        <div
+                            className={styles["mobile-progress-bar"]}
+                            style={{ width: `${((step + 1) / steps.length) * 100}%` }}
+                        />
+                    </div>
                 </div>
+
+                <AnimatePresence mode="wait">
+                    <Motion.div
+                        key={step}
+                        className={styles["step-card"]}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ type: "spring", damping: 28, stiffness: 350 }}
+                    >
+                        <div className={styles["step-heading"]}>
+                            <h2 className={styles["step-title"]}>{steps[step].title}</h2>
+                        </div>
+
+                        {step === 0 && (
+                            <form className={styles.form} onSubmit={handleSubmit(saveBasics)}>
+                                <div className={styles["field-group"]}>
+                                    <label htmlFor="profile-display-name">
+                                        <span>Tên hiển thị</span>
+                                    </label>
+                                    <input
+                                        id="profile-display-name"
+                                        {...register("displayName")}
+                                        placeholder="Tên của bạn"
+                                        autoComplete="name"
+                                    />
+                                    {errors.displayName && (
+                                        <small className={styles["field-error"]}>{errors.displayName.message}</small>
+                                    )}
+                                </div>
+
+                                <div className={styles["two-columns"]}>
+                                    <div className={styles["field-group"]}>
+                                        <label htmlFor="profile-birthday">
+                                            <span>Ngày sinh</span>
+                                        </label>
+                                        <input
+                                            id="profile-birthday"
+                                            {...register("birthday")}
+                                            type="date"
+                                        />
+                                        {errors.birthday && (
+                                            <small className={styles["field-error"]}>{errors.birthday.message}</small>
+                                        )}
+                                    </div>
+
+                                    <div className={styles["field-group"]}>
+                                        <label htmlFor="profile-username">
+                                            <span>Tên người dùng</span>
+                                        </label>
+                                        <div className={styles["username-input-wrapper"]}>
+                                            <span className={styles["at-symbol"]}>@</span>
+                                            <input
+                                                id="profile-username"
+                                                {...register("username")}
+                                                placeholder="username"
+                                                autoCapitalize="none"
+                                            />
+                                        </div>
+                                        {errors.username && (
+                                            <small className={styles["field-error"]}>{errors.username.message}</small>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className={styles["field-group"]}>
+                                    <label htmlFor="profile-gender">
+                                        <span>Giới tính</span>
+                                    </label>
+                                    <select id="profile-gender" {...register("gender")}>
+                                        <option value="other">Tùy chọn</option>
+                                        <option value="male">Nam</option>
+                                        <option value="female">Nữ</option>
+                                    </select>
+                                </div>
+
+                                <div className={`${styles["actions-row"]} ${styles.end}`}>
+                                    <XButton
+                                        type="submit"
+                                        variant="primary"
+                                        size="lg"
+                                        loading={isSubmitting || loading}
+                                        className={styles["btn-pill"]}
+                                    >
+                                        Tiếp tục <ArrowRight size={18} />
+                                    </XButton>
+                                </div>
+                            </form>
+                        )}
+
+                        {step === 1 && (
+                            <div className={styles["optional-content"]}>
+                                <div className={styles["avatar-picker"]}>
+                                    <div className={styles["avatar-preview"]}>
+                                        {avatarPreview ? (
+                                            <img src={avatarPreview} alt="Avatar" />
+                                        ) : (
+                                            <UserRound size={42} />
+                                        )}
+                                    </div>
+                                    <div className={styles["upload-button-wrapper"]}>
+                                        <label className={styles["upload-btn"]}>
+                                            <Camera size={18} /> Chọn ảnh
+                                            <input
+                                                type="file"
+                                                accept="image/png,image/jpeg,image/webp,image/gif"
+                                                onChange={chooseAvatar}
+                                            />
+                                        </label>
+                                        <small className={styles["upload-hint"]}>
+                                            Tối đa 8 MB
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div className={styles["actions-row"]}>
+                                    <XButton
+                                        variant="outline"
+                                        size="md"
+                                        onClick={() => goToStep(0)}
+                                        className={styles["btn-pill"]}
+                                    >
+                                        <ArrowLeft size={18} /> Quay lại
+                                    </XButton>
+                                    <div className={styles["action-buttons-group"]}>
+                                        <XButton
+                                            variant="ghost"
+                                            size="md"
+                                            onClick={() => goToStep(2)}
+                                            className={styles["btn-pill"]}
+                                        >
+                                            Bỏ qua
+                                        </XButton>
+                                        <XButton
+                                            variant="primary"
+                                            size="md"
+                                            onClick={saveAvatar}
+                                            loading={loading}
+                                            className={styles["btn-pill"]}
+                                        >
+                                            Tiếp tục <ArrowRight size={18} />
+                                        </XButton>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 2 && (
+                            <div className={styles["optional-content"]}>
+                                <button
+                                    className={styles["location-btn"]}
+                                    type="button"
+                                    onClick={useCurrentLocation}
+                                    disabled={locating}
+                                >
+                                    <LocateFixed size={18} className={locating ? "animate-spin" : ""} />
+                                    {locating ? "Đang định vị…" : "Sử dụng vị trí hiện tại"}
+                                </button>
+
+                                {location.latitude !== undefined && (
+                                    <div className={styles["coordinates-badge"]}>
+                                        <Compass size={16} />
+                                        <span>Đã lưu tọa độ: {location.latitude}, {location.longitude}</span>
+                                    </div>
+                                )}
+
+                                <div className={styles.divider}>
+                                    <span>hoặc chọn theo danh sách</span>
+                                </div>
+
+                                {/* Section 1: Khu vực sinh sống */}
+                                <div className={styles["section-label"]}>
+                                    <MapPin size={16} />
+                                    <span>Khu vực sinh sống</span>
+                                    <span className={styles["optional-badge"]}>(Tùy chọn)</span>
+                                </div>
+
+                                <div className={styles["two-columns"]}>
+                                    <div className={styles["field-group"]}>
+                                        <label>
+                                            <span>Tỉnh / Thành phố</span>
+                                            <span className={styles["optional-badge"]}>(34 tỉnh sau sáp nhập)</span>
+                                        </label>
+                                        <XSearchSelect
+                                            value={location.province}
+                                            onChange={handleProvinceChange}
+                                            fetchOptions={getProvincesV2}
+                                            placeholder="Tìm hoặc chọn tỉnh / thành phố..."
+                                        />
+                                    </div>
+
+                                    <div className={styles["field-group"]}>
+                                        <label>
+                                            <span>Quận / Huyện / Phường</span>
+                                            <span className={styles["optional-badge"]}>(Tùy chọn)</span>
+                                        </label>
+                                        <XSearchSelect
+                                            key={`ward-${location.province || 'none'}`}
+                                            value={location.ward}
+                                            onChange={(val) => setLocation((prev) => ({ ...prev, ward: val }))}
+                                            fetchOptions={fetchWardsForCurrentProvince}
+                                            placeholder={location.province ? "Tìm hoặc chọn quận / huyện / phường..." : "Vui lòng chọn tỉnh / thành trước"}
+                                            disabled={!location.province}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Section 2: Học vấn & Chuyên môn */}
+                                <div className={styles["section-label"]}>
+                                    <GraduationCap size={16} />
+                                    <span>Học vấn & Chuyên môn</span>
+                                    <span className={styles["optional-badge"]}>(Tùy chọn)</span>
+                                </div>
+
+                                <div className={styles["two-columns"]}>
+                                    <div className={styles["field-group"]}>
+                                        <label>
+                                            <span>Trường học / Đại học</span>
+                                            <span className={styles["optional-badge"]}>(Tùy chọn)</span>
+                                        </label>
+                                        <XSearchSelect
+                                            value={extraInfo.school}
+                                            onChange={(val) => setExtraInfo((prev) => ({ ...prev, school: val }))}
+                                            fetchOptions={searchUniversities}
+                                            placeholder="Tìm hoặc gõ tên trường học..."
+                                        />
+                                    </div>
+
+                                    <div className={styles["field-group"]}>
+                                        <label>
+                                            <span>Chuyên ngành</span>
+                                            <span className={styles["optional-badge"]}>(Tùy chọn)</span>
+                                        </label>
+                                        <XSearchSelect
+                                            value={extraInfo.major}
+                                            onChange={(val) => setExtraInfo((prev) => ({ ...prev, major: val }))}
+                                            fetchOptions={searchMajors}
+                                            placeholder="Tìm hoặc gõ chuyên ngành..."
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Section 3: Việc làm & Giới thiệu */}
+                                <div className={styles["section-label"]}>
+                                    <Briefcase size={16} />
+                                    <span>Công việc & Giới thiệu</span>
+                                    <span className={styles["optional-badge"]}>(Tùy chọn)</span>
+                                </div>
+
+                                <div className={styles["field-group"]}>
+                                    <label htmlFor="profile-workplace">
+                                        <span>Nơi làm việc</span>
+                                        <span className={styles["optional-badge"]}>(Tùy chọn)</span>
+                                    </label>
+                                    <input
+                                        id="profile-workplace"
+                                        value={extraInfo.workplace}
+                                        onChange={(e) => setExtraInfo((prev) => ({ ...prev, workplace: e.target.value }))}
+                                        placeholder="Công ty, tổ chức hoặc nghề nghiệp..."
+                                    />
+                                </div>
+
+                                <div className={styles["field-group"]}>
+                                    <label htmlFor="profile-bio">
+                                        <span>Tiểu sử</span>
+                                        <span className={styles["optional-badge"]}>(Tùy chọn)</span>
+                                    </label>
+                                    <textarea
+                                        id="profile-bio"
+                                        className={styles["bio-textarea"]}
+                                        value={extraInfo.bio}
+                                        maxLength={160}
+                                        onChange={(e) => setExtraInfo((prev) => ({ ...prev, bio: e.target.value }))}
+                                        placeholder="Mô tả ngắn về bản thân bạn..."
+                                        rows={3}
+                                    />
+                                    <span className={styles["char-counter"]}>
+                                        {extraInfo.bio.length} / 160
+                                    </span>
+                                </div>
+
+                                <div className={styles["actions-row"]}>
+                                    <XButton
+                                        variant="outline"
+                                        size="md"
+                                        onClick={() => goToStep(1)}
+                                        className={styles["btn-pill"]}
+                                    >
+                                        <ArrowLeft size={18} /> Quay lại
+                                    </XButton>
+                                    <div className={styles["action-buttons-group"]}>
+                                        <XButton
+                                            variant="ghost"
+                                            size="md"
+                                            onClick={() => goToStep(3)}
+                                            className={styles["btn-pill"]}
+                                        >
+                                            Bỏ qua
+                                        </XButton>
+                                        <XButton
+                                            variant="primary"
+                                            size="md"
+                                            onClick={saveLocationAndExtra}
+                                            loading={loading}
+                                            className={styles["btn-pill"]}
+                                        >
+                                            Tiếp tục <ArrowRight size={18} />
+                                        </XButton>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 3 && (
+                            <div className={styles["optional-content"]}>
+                                <div className={styles["suggestions-grid"]}>
+                                    {suggestedFriends.length === 0 ? (
+                                        <div className={styles["empty-suggestions"]}>
+                                            <UsersRound size={28} />
+                                            <p>Chưa có gợi ý nào</p>
+                                        </div>
+                                    ) : (
+                                        suggestedFriends.slice(0, 6).map((friend) => (
+                                            <article key={friend._id} className={styles["friend-card"]}>
+                                                <div className={styles["friend-avatar"]}>
+                                                    {friend.avatarURL ? (
+                                                        <img src={avatarSource(friend.avatarURL)} alt="" />
+                                                    ) : (
+                                                        <UserRound size={18} />
+                                                    )}
+                                                </div>
+                                                <div className={styles["friend-info"]}>
+                                                    <strong>{friend.displayName}</strong>
+                                                    <small>@{friend.username || "user"}</small>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    disabled={sentRequests.has(friend._id)}
+                                                    onClick={() => sendFriendRequest(friend._id)}
+                                                    className={`${styles["add-friend-btn"]} ${sentRequests.has(friend._id) ? styles.sent : ""}`}
+                                                >
+                                                    {sentRequests.has(friend._id) ? (
+                                                        <>
+                                                            <Check size={14} /> Đã gửi
+                                                        </>
+                                                    ) : (
+                                                        "Theo dõi"
+                                                    )}
+                                                </button>
+                                            </article>
+                                        ))
+                                    )}
+                                </div>
+
+                                <div className={styles["actions-row"]}>
+                                    <XButton
+                                        variant="outline"
+                                        size="md"
+                                        onClick={() => goToStep(2)}
+                                        className={styles["btn-pill"]}
+                                    >
+                                        <ArrowLeft size={18} /> Quay lại
+                                    </XButton>
+                                    <XButton
+                                        variant="primary"
+                                        size="lg"
+                                        onClick={finishOnboarding}
+                                        className={styles["btn-pill"]}
+                                    >
+                                        <CheckCircle2 size={18} /> Hoàn tất
+                                    </XButton>
+                                </div>
+                            </div>
+                        )}
+                    </Motion.div>
+                </AnimatePresence>
             </section>
         </main>
     );

@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {useAuthStore} from "../stores/useAuthStore.js";
 import {Navigate, Outlet} from "react-router";
 
-import {IndeterminateLoader} from "../components/common/loading/Loading.jsx"
+import LoadingSpin from "../components/common/loading/LoadingSpin.jsx";
 
 const ProtectedRoute = () => {
     const {accessToken, user, loading, refresh, fetchMe, connectSocket} = useAuthStore()
@@ -24,23 +24,30 @@ const ProtectedRoute = () => {
     useEffect(() => {
         init()
     }, [])
-    if (starting || loading) {
-        return <div style={{
-            width: '100vw',
-            height: '100vh',
-            background: 'var(--primary-backgroundColor)',
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: "center",
-            alignItems: "center",
-            gap: '30px'
-        }}>
-            <h3 style={{color: 'var(--primary-color)', fontSize: '2rem', fontWeight: '600'}}>
-                Loading
-            </h3>
-            <IndeterminateLoader/>
-        </div>
+    if (starting) {
+        return (
+            <div style={{
+                width: '100vw',
+                height: '100vh',
+                backgroundColor: 'var(--primary-backgroundColor, #000000)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: "center",
+                alignItems: "center",
+                gap: '24px'
+            }}>
+                <img
+                    src="/logo_remove_bg.png"
+                    alt="Logo"
+                    style={{
+                        width: '64px',
+                        height: '64px',
+                        objectFit: 'contain'
+                    }}
+                />
+                <LoadingSpin size={26} strokeWidth={2.5} />
+            </div>
+        );
     }
     if (!accessToken) {
         return <Navigate to="/signin" replace={true}/>

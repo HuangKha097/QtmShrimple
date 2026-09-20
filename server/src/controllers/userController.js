@@ -116,12 +116,15 @@ export const getUserById = async (req, res) => {
 export const updateProfile = async (req, res) => {
     try {
         const userId = req.user._id;
-        const { displayName, bio, username, location } = req.body;
+        const { displayName, bio, username, location, school, major, workplace } = req.body;
         
         const updateData = {};
         if (displayName) updateData.displayName = displayName;
-        if (bio) updateData.bio = bio;
+        if (bio !== undefined) updateData.bio = String(bio || "").trim().slice(0, 500);
         if (username) updateData.username = username;
+        if (school !== undefined) updateData.school = String(school || "").trim().slice(0, 150);
+        if (major !== undefined) updateData.major = String(major || "").trim().slice(0, 150);
+        if (workplace !== undefined) updateData.workplace = String(workplace || "").trim().slice(0, 150);
         if (location !== undefined) {
             let parsedLocation = location;
             if (typeof location === "string") {
@@ -140,7 +143,9 @@ export const updateProfile = async (req, res) => {
                 return res.status(400).json({ message: "Longitude is invalid" });
             }
             updateData.location = {
+                province: String(parsedLocation?.province || "").trim().slice(0, 100),
                 city: String(parsedLocation?.city || "").trim().slice(0, 100),
+                ward: String(parsedLocation?.ward || "").trim().slice(0, 100),
                 country: String(parsedLocation?.country || "").trim().slice(0, 100),
                 ...(latitude !== undefined ? { latitude: Number(latitude) } : {}),
                 ...(longitude !== undefined ? { longitude: Number(longitude) } : {})
@@ -282,7 +287,7 @@ export const updateAntiPeepSettings = async (req, res) => {
 export const completeProfile = async (req, res) => {
     try {
         const userId = req.user._id;
-        const { displayName, birthday, gender, username } = req.body;
+        const { displayName, birthday, gender, username, bio, school, major, workplace } = req.body;
 
         const cleanDisplayName = String(displayName || "").trim();
         const cleanUsername = String(username || "").trim().toLowerCase();
@@ -313,6 +318,10 @@ export const completeProfile = async (req, res) => {
                 birthday: birthDate,
                 gender: gender || "other",
                 username: cleanUsername,
+                ...(bio ? { bio: String(bio).trim().slice(0, 500) } : {}),
+                ...(school ? { school: String(school).trim().slice(0, 150) } : {}),
+                ...(major ? { major: String(major).trim().slice(0, 150) } : {}),
+                ...(workplace ? { workplace: String(workplace).trim().slice(0, 150) } : {}),
                 isProfileComplete: true
             },
             { new: true }

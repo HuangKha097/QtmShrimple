@@ -1,5 +1,6 @@
 import MotionPresence from '../common/MotionPresence';
 import React from 'react';
+import { motion as Motion } from 'motion/react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/ChatContainer.module.scss';
 import ChatHeader from "./ChatHeader.jsx";
@@ -7,8 +8,7 @@ import ChatBody from "./ChatBody.jsx";
 import ChatInput from "./ChatInput.jsx";
 import ChatInfo from "./ChatInfo.jsx";
 import { useChatStore } from "../../stores/useChatStore.js";
-import { MessageSquare } from "lucide-react";
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useOutletContext } from 'react-router-dom';
 
 const cx = classNames.bind(styles);
 
@@ -20,23 +20,21 @@ const ChatContainer = ({ onCloseChatInfo, isShowChatInfo }) => {
     React.useEffect(() => {
         const idFromUrl = searchParams.get('id');
         if (idFromUrl) {
-            // Chỉ update nếu thực sự khác để tránh loop
             if (idFromUrl !== activeConversationId) {
                 setActiveConversationId(idFromUrl);
             }
         } else if (activeConversationId) {
-            // Nếu URL trống mà Store vẫn còn ID -> Xóa ID trong Store (trường hợp nhấn Back)
             setActiveConversationId(null);
         }
-    }, [searchParams]); // Quan trọng: Chỉ phụ thuộc vào searchParams
+    }, [searchParams]);
 
-    // Logic tìm conversation
-    let selectedConvo = conversations.find(conversation => conversation._id === activeConversationId);
+    // Logic tìm conversation (null-safe)
+    let selectedConvo = (conversations || []).find(conversation => conversation && conversation._id === activeConversationId);
 
     // Nếu là ID tạm, tạo object conversation giả
     if (!selectedConvo && activeConversationId?.startsWith('temp_')) {
         const friendId = activeConversationId.replace('temp_', '');
-        const friend = friends.find(f => f._id === friendId);
+        const friend = (friends || []).find(f => f && f._id === friendId);
 
         if (friend) {
             selectedConvo = {
@@ -49,18 +47,15 @@ const ChatContainer = ({ onCloseChatInfo, isShowChatInfo }) => {
         }
     }
 
+    // X-Style Empty State: "Select a message"
     if (!selectedConvo) {
         return (
-            <div className={cx('chat-container', 'no-chat-selected')}>
-                <div 
-                    className={cx('welcome-content')}
-
-                >
-                    <div className={cx('icon-wrapper')}>
-                        <MessageSquare size={48} strokeWidth={2.5} />
-                    </div>
-                    <h2>Welcome to Shrimple Chat!</h2>
-                    <p>Select a friend from the sidebar or search to start a new, energetic conversation.</p>
+            <div className={cx('x-empty-state-container')}>
+                <div className={cx('empty-content-box')}>
+                    <h2 className={cx('empty-title')}>Chọn một tin nhắn</h2>
+                    <p className={cx('empty-subtitle')}>
+                        Chọn từ các cuộc trò chuyện hiện có của bạn, bắt đầu một cuộc trò chuyện mới hoặc tiếp tục kết nối.
+                    </p>
                 </div>
             </div>
         );
@@ -68,10 +63,7 @@ const ChatContainer = ({ onCloseChatInfo, isShowChatInfo }) => {
 
     return (
         <div className={cx('chat-container-wrapper')}>
-            <div 
-                className={cx("block-left")}
-
-            >
+            <div className={cx("block-left")}>
                 <div className={cx("header")}>
                     <ChatHeader onCloseChatInfo={onCloseChatInfo} chat={selectedConvo} />
                 </div>
@@ -85,15 +77,11 @@ const ChatContainer = ({ onCloseChatInfo, isShowChatInfo }) => {
                 </div>
             </div>
 
-                <MotionPresence open={isShowChatInfo} 
-                        className={cx("block-right")}
-
-                    >
-                        <div className={cx("chat-info-wrapper")}>
-                            <ChatInfo chat={selectedConvo} onClose={onCloseChatInfo} />
-                        </div>
-                    </MotionPresence>
-
+            <MotionPresence open={isShowChatInfo} className={cx("block-right")}>
+                <div className={cx("chat-info-wrapper")}>
+                    <ChatInfo chat={selectedConvo} onClose={onCloseChatInfo} />
+                </div>
+            </MotionPresence>
         </div>
     );
 };

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import styles from '../assets/css/ForgotPasswordPage.module.scss';
 import { Loader2, ArrowLeft, Key, Mail, Lock, Eye, EyeOff, Check, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
+import OTPInput from "@/components/lightswind-pro/otp-input";
 
 const ForgotPasswordPage = () => {
     const navigate = useNavigate();
@@ -12,7 +13,7 @@ const ForgotPasswordPage = () => {
     // Flow State: 1 = Email, 2 = OTP, 3 = New Password
     const [step, setStep] = useState(1);
     const [email, setEmail] = useState('');
-    const [otp, setOtp] = useState(Array(6).fill(''));
+    const [otp, setOtp] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -21,8 +22,6 @@ const ForgotPasswordPage = () => {
     // Resend OTP timer state
     const [resendTimer, setResendTimer] = useState(60);
     const [isResendDisabled, setIsResendDisabled] = useState(true);
-
-    const otpInputRefs = useRef([]);
 
     // Live password checklist validation
     const passwordRequirements = {
@@ -68,53 +67,6 @@ const ForgotPasswordPage = () => {
         };
     }, [step, isResendDisabled]);
 
-    // Handle single OTP inputs
-    const handleOtpChange = (value, index) => {
-        // Only allow numbers
-        if (isNaN(value)) return;
-
-        const newOtp = [...otp];
-        // Take only the last character entered
-        newOtp[index] = value.substring(value.length - 1);
-        setOtp(newOtp);
-
-        // Auto focus next input
-        if (value && index < 5) {
-            otpInputRefs.current[index + 1]?.focus();
-        }
-    };
-
-    // Handle backspaces in OTP
-    const handleOtpKeyDown = (e, index) => {
-        if (e.key === 'Backspace') {
-            if (!otp[index] && index > 0) {
-                // Focus previous box and clear it
-                const newOtp = [...otp];
-                newOtp[index - 1] = '';
-                setOtp(newOtp);
-                otpInputRefs.current[index - 1]?.focus();
-            } else {
-                const newOtp = [...otp];
-                newOtp[index] = '';
-                setOtp(newOtp);
-            }
-        }
-    };
-
-    // Handle pasting in OTP fields
-    const handleOtpPaste = (e) => {
-        e.preventDefault();
-        const pastedData = e.clipboardData.getData('text').trim();
-        if (/^\d{6}$/.test(pastedData)) {
-            const digits = pastedData.split('');
-            setOtp(digits);
-            // Focus on the last input field
-            otpInputRefs.current[5]?.focus();
-        } else {
-            toast.error('Please paste a valid 6-digit OTP.');
-        }
-    };
-
     // Submit Action for Phase 1: Send OTP
     const handleSendOtp = async (e) => {
         e.preventDefault();
@@ -137,21 +89,19 @@ const ForgotPasswordPage = () => {
         if (res?.success) {
             setResendTimer(60);
             setIsResendDisabled(true);
-            setOtp(Array(6).fill(''));
-            otpInputRefs.current[0]?.focus();
+            setOtp('');
         }
     };
 
     // Submit Action for Phase 2: Verify OTP
     const handleVerifyOtp = async (e) => {
-        e.preventDefault();
-        const otpCode = otp.join('');
-        if (otpCode.length < 6) {
+        if (e) e.preventDefault();
+        if (otp.length < 6) {
             toast.error('Please enter the complete 6-digit OTP code.');
             return;
         }
 
-        const res = await verifyOtp(email, otpCode);
+        const res = await verifyOtp(email, otp);
         if (res?.success) {
             setStep(3);
         }
@@ -170,8 +120,7 @@ const ForgotPasswordPage = () => {
             return;
         }
 
-        const otpCode = otp.join('');
-        const res = await resetPassword(email, otpCode, newPassword);
+        const res = await resetPassword(email, otp, newPassword);
         if (res?.success) {
             navigate('/signin');
         }
@@ -253,21 +202,14 @@ const ForgotPasswordPage = () => {
                         <form onSubmit={handleVerifyOtp}>
                             <div className={styles['form-group']}>
                                 <label>6-Digit Code</label>
-                                <div className={styles['otp-box-container']}>
-                                    {otp.map((digit, idx) => (
-                                        <input
-                                            key={idx}
-                                            type="text"
-                                            ref={(el) => (otpInputRefs.current[idx] = el)}
-                                            value={digit}
-                                            onChange={(e) => handleOtpChange(e.target.value, idx)}
-                                            onKeyDown={(e) => handleOtpKeyDown(e, idx)}
-                                            onPaste={handleOtpPaste}
-                                            className={styles['otp-input']}
-                                            maxLength={1}
-                                            required
-                                        />
-                                    ))}
+                                <div style={{ margin: '1.6rem 0 1.2rem' }}>
+                                    <OTPInput
+                                        length={6}
+                                        value={otp}
+                                        onChange={setOtp}
+                                        disabled={loading}
+                                        autoFocus={step === 2}
+                                    />
                                 </div>
                             </div>
 

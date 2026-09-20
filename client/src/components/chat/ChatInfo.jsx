@@ -44,10 +44,10 @@ const ChatInfo = ({ chat, onClose }) => {
 
     if (!chat) return null;
 
-    let partner = !isGroup ? (participants.find(p => p._id !== currentUser?._id) || participants[0]) : null;
+    let partner = !isGroup ? (participants.find(p => p && p._id && currentUser && p._id !== currentUser?._id) || participants[0]) : null;
 
-    if (partner && friends.length > 0) {
-        const friend = friends.find(f => f._id === partner._id || f._id === partner._id?.toString());
+    if (partner && partner._id && Array.isArray(friends) && friends.length > 0) {
+        const friend = friends.find(f => f && f._id && (f._id === partner._id || f._id === partner._id?.toString()));
         if (friend) {
             partner = { ...partner, ...friend };
         }

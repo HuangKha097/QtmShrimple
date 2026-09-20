@@ -257,8 +257,6 @@ export const useAuthStore = create(
                     set({loading: true});
                     const {user, fetchMe, setAccessToken} = get();
                     const accessToken = await authService.refresh();
-                    console.log(accessToken)
-
                     setAccessToken(accessToken);
 
                     if (!user) {

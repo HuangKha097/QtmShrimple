@@ -1,123 +1,100 @@
 .chat-container-wrapper {
-  display: flex;
-  flex-direction: row;
   height: 100%;
   width: 100%;
-  background-color: var(--primary-backgroundColor); // #1e1e1e
+  display: flex;
+  background-color: #000000;
   overflow: hidden;
-}
-
-.block-left {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  flex: 7;
-  background-color: var(--primary-blockBackgroundColor); // #242424
-  border-right: 2px solid var(--primary-borderColor); // #303030
-
-  .header {
-    flex-shrink: 0;
-    border-bottom: 2px solid var(--primary-borderColor);
-  }
-
-  .body {
-    flex-grow: 1;
-    overflow: hidden;
-    display: flex;
-    background-color: var(--primary-blockBackgroundColor);
-  }
-
-  .footer {
-    flex-shrink: 0;
-    border-top: 2px solid var(--primary-borderColor);
-  }
-}
-
-.block-right {
-  flex: 3;
-  background-color: var(--primary-backgroundColor); // Darker sidebar
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-info-wrapper {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow-y: hidden; // ChatInfo has its own scroll
-}
-
-/* Redesigned Welcome Screen */
-.chat-container.no-chat-selected {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  width: 100%;
-  background-color: var(--primary-blockBackgroundColor);
-  color: var(--primary-textColor);
-
-  .welcome-content {
-    text-align: center;
-    max-width: 400px;
-    padding: 4rem;
-
-    .icon-wrapper {
-      display: inline-flex;
-      padding: 2.5rem;
-      background-color: rgba(229, 109, 50, 0.1); // Shrimple Orange tint
-      border: 2px solid var(--primary-color); // Shrimple Orange border
-      border-radius: 2.4rem;
-      margin-bottom: 2.5rem;
-      color: var(--primary-color);
-      
-      /* Dynamic Energy pulse */
-      
-    }
-
-    h2 {
-      font-size: 3rem;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
-      color: var(--primary-textColor);
-      letter-spacing: -0.02em;
-    }
-
-    p {
-      color: var(--primary-textColor);
-      opacity: 0.5;
-      font-size: 1.6rem;
-      line-height: 1.6;
-    }
-  }
-}
-
-/* RESPONSIVE */
-@media (max-width: 1024px) {
-  .block-left { flex: 6; }
-  .block-right { flex: 4; }
-}
-
-@media (max-width: 768px) {
-  .chat-container-wrapper {
-    position: relative;
-  }
+  position: relative;
 
   .block-left {
-     width: 100%;
-     flex: 1;
-     border-right: none;
+    height: 100%;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: #000000;
+    position: relative;
+
+    .header {
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .body {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .footer {
+      flex-shrink: 0;
+      z-index: 10;
+    }
   }
 
   .block-right {
+    width: 320px;
+    height: 100%;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    background-color: #000000;
+    flex-shrink: 0;
+    z-index: 15;
+
+    @media (max-width: 900px) {
       position: absolute;
       top: 0;
-      left: 0;
+      right: 0;
       width: 100%;
+      max-width: 340px;
+      box-shadow: -8px 0 24px rgba(0, 0, 0, 0.8);
+    }
+
+    .chat-info-wrapper {
       height: 100%;
-      z-index: 50;
-      background-color: var(--primary-blockBackgroundColor);
+      width: 100%;
+      overflow-y: auto;
+    }
+  }
+}
+
+// X-Style Empty State: 100% fidelity to x.com/messages empty view
+.x-empty-state-container {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000000;
+  padding: 32px;
+  user-select: none;
+
+  .empty-content-box {
+    max-width: 380px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+
+    .empty-title {
+      font-size: 3.1rem;
+      font-weight: 800;
+      line-height: 1.15;
+      color: #e7e9ea;
+      margin: 0 0 10px 0;
+      letter-spacing: -0.02em;
+      font-family: inherit;
+    }
+
+    .empty-subtitle {
+      font-size: 1.5rem;
+      line-height: 1.45;
+      color: #71767b;
+      margin: 0;
+      font-weight: 400;
+    }
   }
 }

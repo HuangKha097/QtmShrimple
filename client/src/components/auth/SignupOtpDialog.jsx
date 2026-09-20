@@ -1,23 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-import { Loader2, MailCheck, X } from "lucide-react";
-import MotionPresence from "../common/MotionPresence";
+import React, { useEffect, useState } from "react";
+import { MailCheck, X } from "lucide-react";
+import { motion as Motion, AnimatePresence } from "motion/react";
 import { useAuthStore } from "../../stores/useAuthStore";
+import XButton from "../ui/animate/XButton";
+import OTPInput from "@/components/lightswind-pro/otp-input";
 import styles from "../../assets/css/GoogleOtpDialog.module.scss";
+
+const CODE_LENGTH = 6;
 
 const SignupOtpDialog = ({ open, email, pendingToken, onVerified, onCancel }) => {
     const verifyEmailSignupOtp = useAuthStore((state) => state.verifyEmailSignupOtp);
     const resendEmailSignupOtp = useAuthStore((state) => state.resendEmailSignupOtp);
     const loading = useAuthStore((state) => state.loading);
-    const [digits, setDigits] = useState(Array(6).fill(""));
+    const [code, setCode] = useState("");
     const [resendIn, setResendIn] = useState(45);
-    const inputRefs = useRef([]);
 
     useEffect(() => {
         if (!open) return;
-        setDigits(Array(6).fill(""));
+        setCode("");
         setResendIn(45);
-        const timer = window.setTimeout(() => inputRefs.current[0]?.focus(), 250);
-        return () => window.clearTimeout(timer);
     }, [open, pendingToken]);
 
     useEffect(() => {
@@ -26,21 +27,10 @@ const SignupOtpDialog = ({ open, email, pendingToken, onVerified, onCancel }) =>
         return () => window.clearTimeout(timer);
     }, [open, resendIn]);
 
-    const fillCode = (value, start = 0) => {
-        const numbers = value.replace(/\D/g, "").slice(0, 6);
-        setDigits((current) => {
-            const next = [...current];
-            [...numbers].forEach((number, offset) => {
-                if (start + offset < 6) next[start + offset] = number;
-            });
-            return next;
-        });
-        inputRefs.current[Math.min(start + numbers.length, 5)]?.focus();
-    };
-
     const submit = async (event) => {
-        event.preventDefault();
-        const result = await verifyEmailSignupOtp(pendingToken, digits.join(""));
+        if (event) event.preventDefault();
+        if (code.length !== CODE_LENGTH) return;
+        const result = await verifyEmailSignupOtp(pendingToken, code);
         if (result.success) onVerified(result.user);
     };
 
@@ -48,52 +38,89 @@ const SignupOtpDialog = ({ open, email, pendingToken, onVerified, onCancel }) =>
         if (resendIn > 0) return;
         const result = await resendEmailSignupOtp(pendingToken);
         if (result.success) {
-            setDigits(Array(6).fill(""));
+            setCode("");
             setResendIn(45);
-            inputRefs.current[0]?.focus();
         }
     };
 
     return (
-        <MotionPresence open={open} className={styles.overlay}>
-            <section className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="signup-otp-title">
-                <button className={styles.closeButton} type="button" onClick={onCancel} aria-label="Cancel verification"><X size={20} /></button>
-                <div className={styles.icon} aria-hidden="true"><MailCheck size={28} /></div>
-                <p className={styles.eyebrow}>One quick check</p>
-                <h2 id="signup-otp-title">Verify your email</h2>
-                <p className={styles.description}>We sent a six-digit code to <strong>{email}</strong>. Enter it before creating your account.</p>
-                <form onSubmit={submit}>
-                    <div className={styles.codeRow} onPaste={(event) => { event.preventDefault(); fillCode(event.clipboardData.getData("text")); }}>
-                        {digits.map((digit, index) => (
-                            <input
-                                key={index}
-                                ref={(node) => { inputRefs.current[index] = node; }}
-                                value={digit}
-                                onChange={(event) => {
-                                    if (event.target.value.length > 1) return fillCode(event.target.value, index);
-                                    if (event.target.value && !/^\d$/.test(event.target.value)) return;
-                                    setDigits((current) => current.map((item, position) => position === index ? event.target.value : item));
-                                    if (event.target.value && index < 5) inputRefs.current[index + 1]?.focus();
-                                }}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Backspace" && !digits[index] && index > 0) inputRefs.current[index - 1]?.focus();
-                                }}
-                                inputMode="numeric"
-                                autoComplete={index === 0 ? "one-time-code" : "off"}
-                                maxLength={1}
-                                aria-label={`Verification digit ${index + 1}`}
-                            />
-                        ))}
-                    </div>
-                    <button className={styles.verifyButton} type="submit" disabled={loading || digits.some((digit) => !digit)}>
-                        {loading ? <Loader2 className={styles.spinner} size={19} /> : "Verify and continue"}
-                    </button>
-                </form>
-                <button type="button" className={styles.resendButton} onClick={resend} disabled={resendIn > 0}>
-                    {resendIn > 0 ? `Send another code in ${resendIn}s` : "Send another code"}
-                </button>
-            </section>
-        </MotionPresence>
+        <AnimatePresence>
+            {open && (
+                <Motion.div
+                    className={styles.overlay}
+                    role="presentation"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                >
+                    <Motion.section
+                        className={styles.dialog}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="signup-otp-title"
+                        initial={{ opacity: 0, scale: 0.94, y: 15 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                        transition={{ type: "spring", damping: 28, stiffness: 350 }}
+                    >
+                        <button
+                            className={styles.closeButton}
+                            type="button"
+                            onClick={onCancel}
+                            aria-label="Hủy xác thực"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <div className={styles.icon} aria-hidden="true">
+                            <MailCheck size={24} />
+                        </div>
+
+                        <h2 id="signup-otp-title">Nhập mã xác nhận</h2>
+                        <p className={styles.description}>
+                            Mã 6 chữ số đã được gửi đến <strong>{email}</strong>
+                        </p>
+
+                        <form onSubmit={submit}>
+                            <div className={styles.codeRow}>
+                                <OTPInput
+                                    length={CODE_LENGTH}
+                                    value={code}
+                                    onChange={setCode}
+                                    onComplete={(fullCode) => {
+                                        // Optional immediate submit on complete
+                                    }}
+                                    disabled={loading}
+                                    autoFocus={open}
+                                />
+                            </div>
+
+                            <XButton
+                                type="submit"
+                                variant="primary"
+                                size="lg"
+                                loading={loading}
+                                disabled={loading || code.length !== CODE_LENGTH}
+                            >
+                                Xác nhận
+                            </XButton>
+                        </form>
+
+                        <div className={styles.resendContainer}>
+                            <button
+                                type="button"
+                                className={styles.resendButton}
+                                onClick={resend}
+                                disabled={resendIn > 0}
+                            >
+                                {resendIn > 0 ? `Gửi lại mã sau ${resendIn}s` : "Gửi lại mã"}
+                            </button>
+                        </div>
+                    </Motion.section>
+                </Motion.div>
+            )}
+        </AnimatePresence>
     );
 };
 

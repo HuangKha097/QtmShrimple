@@ -51,6 +51,24 @@ const userSchema = new mongoose.Schema(
             maxlength: 500,
             default: "",
         },
+        school: {
+            type: String,
+            trim: true,
+            maxlength: 150,
+            default: "",
+        },
+        major: {
+            type: String,
+            trim: true,
+            maxlength: 150,
+            default: "",
+        },
+        workplace: {
+            type: String,
+            trim: true,
+            maxlength: 150,
+            default: "",
+        },
         phone: {
             type: String,
             sparse: true,
@@ -65,7 +83,9 @@ const userSchema = new mongoose.Schema(
             type: Date,
         },
         location: {
+            province: { type: String, trim: true, maxlength: 100, default: "" },
             city: { type: String, trim: true, maxlength: 100, default: "" },
+            ward: { type: String, trim: true, maxlength: 100, default: "" },
             country: { type: String, trim: true, maxlength: 100, default: "" },
             latitude: { type: Number, min: -90, max: 90 },
             longitude: { type: Number, min: -180, max: 180 },

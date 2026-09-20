@@ -10,29 +10,30 @@ import { ASSET_BASE_URL } from "../../config/env.js";
 const cx = classNames.bind(styles);
 
 const GroupChatCard = ({ props }) => {
-    // Lấy các hàm và state cần thiết từ Store
-    const { setActiveConversationId, activeConversationId, messages, fetchMessages, friends } = useChatStore();
+    const { setActiveConversationId, activeConversationId, fetchMessages, friends } = useChatStore();
     const { user: currentUser } = useAuthStore();
     const navigate = useNavigate();
 
-    // 1. Phân tách dữ liệu
     const groupInfo = props?.group;
     const participants = props?.participants || [];
     const lastMessage = props?.lastMessage;
 
-    // 2. Hàm format thời gian
     const formatTime = (dateString) => {
         if (!dateString) return '';
         const date = new Date(dateString);
         const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
 
-        if (date.toDateString() === now.toDateString()) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (diffMins < 1) return 'vừa xong';
+        if (diffMins < 60) return `${diffMins}p`;
+        if (diffHours < 24 && date.toDateString() === now.toDateString()) {
+            return `${diffHours}h`;
         }
-        return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+        return date.toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric' });
     };
 
-    // 3. Logic hiển thị Avatar Group
     const renderAvatar = () => {
         const getAvatarSrc = (url) => {
             if (!url) return default_avt;
@@ -46,16 +47,14 @@ const GroupChatCard = ({ props }) => {
                     src={getAvatarSrc(groupInfo.avatarURL)}
                     alt="Group Avatar"
                     className={cx('avatar', 'single-avatar')}
-                    onError={(e) => { e.target.src = default_avt }}
+                    onError={(e) => { e.target.src = default_avt; }}
                 />
             );
         }
 
         if (participants.length > 0) {
-            // Resolve avatars for the first 2 participants from Friends list if available
             const resolveAvatar = (member) => {
                 if (!member) return null;
-                // Try to find in friends list
                 if (friends && friends.length > 0) {
                     const friend = friends.find(f => f._id === member._id || f._id === member._id?.toString());
                     if (friend && friend.avatarURL) return friend.avatarURL;
@@ -72,14 +71,14 @@ const GroupChatCard = ({ props }) => {
                         src={getAvatarSrc(firstAvatar)}
                         alt="mem1"
                         className={cx('stack-avatar', 'first')}
-                        onError={(e) => { e.target.src = default_avt }}
+                        onError={(e) => { e.target.src = default_avt; }}
                     />
                     {participants.length > 1 && (
                         <img
                             src={getAvatarSrc(secondAvatar)}
                             alt="mem2"
                             className={cx('stack-avatar', 'second')}
-                            onError={(e) => { e.target.src = default_avt }}
+                            onError={(e) => { e.target.src = default_avt; }}
                         />
                     )}
                 </div>
@@ -88,24 +87,19 @@ const GroupChatCard = ({ props }) => {
         return <img src={default_avt} alt="default" className={cx('avatar', 'single-avatar')} />;
     };
 
-    // 4. Xử lý khi click vào Card: Set Active ID + Tải tin nhắn
     const handleSelectConversation = async (conversationId) => {
         setActiveConversationId(conversationId);
         navigate(`/chat?id=${conversationId}`);
-
-        // Luôn gọi fetchMessages để đảm bảo tải dữ liệu mới nhất
-        // Store sẽ tự xử lý nếu cần thiết (dựa vào cursor) nhưng gọi ở đây là an toàn nhất
         await fetchMessages(conversationId);
     };
 
     const formatLastMessage = (lastMsg) => {
-        if (!lastMsg) return <span className={cx('empty-msg')}>No messages yet</span>;
+        if (!lastMsg) return <span className={cx('empty-msg')}>Chưa có tin nhắn</span>;
         if (lastMsg.isRecalled || lastMsg.content === "Tin nhắn đã bị thu hồi") {
             return "Tin nhắn đã bị thu hồi";
         }
         
         const type = lastMsg.messageType || 'text';
-        
         const senderIdStr = typeof lastMsg.senderId === 'object' 
             ? lastMsg.senderId?._id?.toString() 
             : lastMsg.senderId?.toString();
@@ -124,65 +118,63 @@ const GroupChatCard = ({ props }) => {
             });
             if (p) senderName = p.displayName || p.username;
         }
-        
-        if (!senderName) senderName = "Ai đó";
+        if (!senderName) senderName = "Thành viên";
 
         switch (type) {
             case 'image':
-                return isMe ? "Bạn đã gửi hình ảnh" : `${senderName} đã gửi hình ảnh`;
+                return `${senderName}: 🖼️ Hình ảnh`;
             case 'audio':
-                return isMe ? "Bạn đã gửi file âm thanh" : `${senderName} đã gửi file âm thanh`;
+                return `${senderName}: 🎙️ Tin nhắn thoại`;
             case 'video':
-                return isMe ? "Bạn đã gửi video" : `${senderName} đã gửi video`;
+                return `${senderName}: 🎬 Video`;
             case 'file':
-                return isMe ? "Bạn đã gửi tệp đính kèm" : `${senderName} đã gửi tệp đính kèm`;
+                return `${senderName}: 📁 Tập tin`;
             case 'location':
-                return isMe ? "Bạn đã gửi vị trí" : `${senderName} đã gửi vị trí`;
+                return `${senderName}: 📍 Vị trí`;
             case 'text':
             default:
-                if (lastMsg.content && (lastMsg.content.startsWith('http') || lastMsg.content.includes('/uploads/'))) {
-                    if (lastMsg.content.match(/\.(jpeg|jpg|gif|png|webp)/i)) {
-                        return isMe ? "Bạn đã gửi hình ảnh" : `${senderName} đã gửi hình ảnh`;
-                    }
-                    if (lastMsg.content.match(/\.(mp3|wav|ogg|webm|m4a)/i)) {
-                        return isMe ? "Bạn đã gửi file âm thanh" : `${senderName} đã gửi file âm thanh`;
-                    }
-                }
-                return isMe ? `Bạn: ${lastMsg.content || ""}` : `${senderName}: ${lastMsg.content || ""}`;
+                return `${senderName}: ${lastMsg.content || ""}`;
         }
     };
 
+    const isActive = Boolean(activeConversationId) && props._id === activeConversationId;
+    const timeDisplay = props?.lastMessage?.createdAt || props?.updatedAt || props?.lastMessageAt;
+
     return (
         <div
-            className={cx('chat-card-wrapper', { active: (Boolean(activeConversationId) && props._id === activeConversationId) })}
+            className={cx('chat-card-wrapper', { active: isActive })}
             onClick={() => handleSelectConversation(props._id)}
-            style={{
-                cursor: 'pointer',
-                border: (Boolean(activeConversationId) && props._id === activeConversationId) ? "2px solid var(--primary-color)" : "none"
-            }}
         >
             <div className={cx('avatar-wrapper')}>
                 {renderAvatar()}
             </div>
 
             <div className={cx('info-wrapper')}>
-                <p className={cx('group-name')}>
-                    {groupInfo?.name || "Unnamed Group"}
-                </p>
+                {/* Row 1: Group Name · Time */}
+                <div className={cx('card-top-row')}>
+                    <p className={cx('group-name')}>
+                        {props.name || groupInfo?.name || "Nhóm trò chuyện"}
+                    </p>
+                    <span className={cx('username')}>({participants.length})</span>
+                    {timeDisplay && (
+                        <>
+                            <span className={cx('separator')}>·</span>
+                            <span className={cx('time')}>{formatTime(timeDisplay)}</span>
+                        </>
+                    )}
+                </div>
 
-                <p className={cx('last-message', { 'unseen': props?.unreadCounts > 0 })}>
-                    {formatLastMessage(lastMessage)}
-                </p>
-            </div>
-
-            <div className={cx('status-wrapper')}>
-                <p className={cx('time')}>{formatTime(props?.updatedAt || props?.lastMessageAt)}</p>
-
-                {props?.unreadCounts > 0 && (
-                    <span className={cx('unread-badge')}>
-                        {props?.unreadCounts > 9 ? '9+' : props?.unreadCounts}
-                    </span>
-                )}
+                {/* Row 2: Snippet + Unread badge */}
+                <div className={cx('card-bottom-row')}>
+                    <p className={cx('last-message', { unseen: props?.unreadCounts > 0 })}>
+                        {formatLastMessage(lastMessage)}
+                    </p>
+                    {props?.unreadCounts > 0 && (
+                        <span className={cx('unread-badge')}>
+                            {props.unreadCounts > 9 ? '9+' : props.unreadCounts}
+                        </span>
+                    )}
+                </div>
             </div>
         </div>
     );
