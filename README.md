@@ -4,7 +4,7 @@ Shrimple là ứng dụng mạng xã hội full-stack kết hợp nhắn tin th�
 
 ## Điểm nổi bật
 
-- **Xác thực:** đăng ký/đăng nhập bằng email và mật khẩu, đăng nhập Google, quên mật khẩu bằng OTP.
+- **Xác thực:** đăng ký/đăng nhập bằng email và mật khẩu, xác minh email đăng ký bằng OTP, đăng nhập Google, quên mật khẩu bằng OTP.
 - **Hồ sơ và quan hệ:** quản lý hồ sơ cá nhân, kết bạn và chặn người dùng.
 - **Nhắn tin trực tiếp và nhóm:** gửi nội dung và media, reaction, thu hồi, xóa, ghim, chuyển tiếp, trạng thái đã đọc và trạng thái online.
 - **Cuộc gọi:** gọi thoại/video ngang hàng bằng WebRTC; server chuyển tiếp tín hiệu thiết lập cuộc gọi qua Socket.IO.
@@ -74,6 +74,16 @@ Copy-Item -LiteralPath ".\server\.env.example" -Destination ".\server\.env"
 ~~~
 
 Mở hai tệp vừa tạo và thay placeholder bằng cấu hình của môi trường của bạn. Không chia sẻ hoặc commit giá trị thật.
+
+Để gửi OTP khi đăng ký hoặc quên mật khẩu, cấu hình tài khoản email gửi trong `server/.env`. Với Gmail, hãy bật 2-Step Verification và tạo Google App Password; không dùng mật khẩu Gmail thông thường:
+
+~~~env
+EMAIL_SERVICE=gmail
+EMAIL_USER=shrimple.sender@gmail.com
+EMAIL_PASS=your_16_character_app_password
+~~~
+
+`EMAIL_USER` là email hệ thống dùng để gửi thư; OTP sẽ được gửi đến địa chỉ người dùng nhập. Sau khi thay đổi `server/.env`, cần khởi động lại backend. Nếu chưa cấu hình SMTP, server chỉ ghi OTP vào console để hỗ trợ development.
 
 ### 3. Chạy backend trong terminal riêng
 
