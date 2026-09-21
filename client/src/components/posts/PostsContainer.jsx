@@ -27,6 +27,7 @@ import PostItem from './PostItem';
 import WhoToFollowWidget from './WhoToFollowWidget';
 import TrendsWidget from './TrendsWidget';
 import LoadingSpin from '../common/loading/LoadingSpin';
+import { useTranslation } from 'react-i18next';
 import default_avt from '../../../public/favicon.png';
 import { friendService } from '../../services/friendService';
 import { toast } from 'sonner';
@@ -34,6 +35,7 @@ import { toast } from 'sonner';
 const cx = classNames.bind(styles);
 
 const PostsContainer = () => {
+    const { t } = useTranslation();
     const { posts, fetchPosts, createPost, likePost, addComment, deletePost, isLoading, hasMorePosts } = usePostStore();
     const { user } = useAuthStore();
     const { friends } = useChatStore();
@@ -233,7 +235,7 @@ const PostsContainer = () => {
                             className={cx('tab-item', { active: activeTab === 'forYou' })}
                             onClick={() => setActiveTab('forYou')}
                         >
-                            <span className={cx('tab-label')}>Dành cho bạn</span>
+                            <span className={cx('tab-label')}>{t('feed.forYou')}</span>
                             {activeTab === 'forYou' && (
                                 <Motion.div 
                                     className={cx('active-tab-bar')} 
@@ -247,7 +249,7 @@ const PostsContainer = () => {
                             className={cx('tab-item', { active: activeTab === 'following' })}
                             onClick={() => setActiveTab('following')}
                         >
-                            <span className={cx('tab-label')}>Đang theo dõi</span>
+                            <span className={cx('tab-label')}>{t('feed.following')}</span>
                             {activeTab === 'following' && (
                                 <Motion.div 
                                     className={cx('active-tab-bar')} 
@@ -274,12 +276,12 @@ const PostsContainer = () => {
                             {isReloading ? (
                                 <>
                                     <Loader2 size={16} className={cx('spin-loader')} />
-                                    <span>Đang làm mới...</span>
+                                    <span>{t('feed.reloading')}</span>
                                 </>
                             ) : (
                                 <>
                                     <ArrowUp size={16} />
-                                    <span>Bài viết mới</span>
+                                    <span>{t('feed.newPosts')}</span>
                                 </>
                             )}
                         </Motion.button>
@@ -333,12 +335,12 @@ const PostsContainer = () => {
                         <div className={cx('empty-timeline-box')}>
                             <h3 className={cx('empty-timeline-title')}>
                                 {activeTab === 'following' 
-                                    ? "Chưa có bài viết từ người đang theo dõi" 
-                                    : "Bảng tin chưa có bài viết"}
+                                    ? t('feed.emptyFollowing')
+                                    : t('feed.emptyForYou')}
                             </h3>
                             <p className={cx('empty-timeline-desc')}>
                                 {activeTab === 'following'
-                                    ? "Hãy kết nối thêm bạn bè hoặc chuyển sang tab 'Dành cho bạn' để khám phá những điều mới mẻ!"
+                                    ? "Hãy kết nối thêm bạn bè hoặc chuyển sang tab khác để khám phá những điều mới mẻ!"
                                     : "Hãy là người đầu tiên chia sẻ suy nghĩ của bạn với cộng đồng Shrimple!"}
                             </p>
                         </div>
@@ -363,8 +365,8 @@ const PostsContainer = () => {
                                 type="button"
                                 className={cx('widgets-notif-btn', { active: showNotifPopover })}
                                 onClick={() => setShowNotifPopover(!showNotifPopover)}
-                                title="Thông báo"
-                                aria-label="Thông báo"
+                                title={t('feed.notifications')}
+                                aria-label={t('feed.notifications')}
                             >
                                 <Bell size={19} />
                                 {totalUnreadNotifs > 0 && (
@@ -385,14 +387,14 @@ const PostsContainer = () => {
                                         transition={{ duration: 0.15 }}
                                     >
                                         <div className={cx('notif-popover-header')}>
-                                            <div className={cx('notif-popover-title')}>Thông báo</div>
+                                            <div className={cx('notif-popover-title')}>{t('feed.notifications')}</div>
                                             {(activityNotifications.length > 0 || friendRequests.length > 0) && (
                                                 <button
                                                     type="button"
                                                     className={cx('notif-mark-read-btn')}
                                                     onClick={() => markAllActivityAsRead()}
                                                 >
-                                                    Đã đọc tất cả
+                                                    {t('feed.markAllRead')}
                                                 </button>
                                             )}
                                         </div>
@@ -498,7 +500,7 @@ const PostsContainer = () => {
                             <Search size={18} className={cx('search-icon')} />
                             <input
                                 type="text"
-                                placeholder="Tìm kiếm trên Shrimple..."
+                                placeholder={t('feed.search')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onKeyDown={(e) => {
@@ -545,6 +547,7 @@ const XPostComposer = ({
     onSubmit, 
     isCreating 
 }) => {
+    const { t } = useTranslation();
     const imageInputRef = useRef(null);
     const videoInputRef = useRef(null);
     const textareaRef = useRef(null);
@@ -598,45 +601,29 @@ const XPostComposer = ({
         const files = Array.from(e.target.files || []);
         if (files.length === 0) return;
 
-        const newImages = [];
-        let detectedVideo = null;
-
-        files.forEach(file => {
-            if (file.type.startsWith('video/')) {
-                detectedVideo = file;
-            } else if (file.type.startsWith('image/')) {
-                newImages.push(file);
-            }
-        });
-
-        if (detectedVideo) {
-            setVideo(detectedVideo);
+        const imageFiles = files.filter(f => f.type.startsWith('image/'));
+        if (imageFiles.length > 0) {
+            setImages(prev => [...(prev || []), ...imageFiles].slice(0, 4));
         }
 
-        if (newImages.length > 0) {
-            setImages(prev => {
-                const combined = [...prev, ...newImages];
-                if (combined.length > 4) {
-                    toast.info("Tối đa 4 hình ảnh cho mỗi bài viết");
-                }
-                return combined.slice(0, 4);
-            });
+        const videoFile = files.find(f => f.type.startsWith('video/'));
+        if (videoFile && !video) {
+            setVideo(videoFile);
         }
 
-        if (imageInputRef.current) imageInputRef.current.value = "";
+        if (imageInputRef.current) imageInputRef.current.value = '';
     };
 
     const handleVideoChange = (e) => {
         const file = e.target.files?.[0];
-        if (!file) return;
-
-        setVideo(file);
-
-        if (videoInputRef.current) videoInputRef.current.value = "";
+        if (file && file.type.startsWith('video/')) {
+            setVideo(file);
+        }
+        if (videoInputRef.current) videoInputRef.current.value = '';
     };
 
-    const handleRemoveImage = (indexToRemove) => {
-        setImages(prev => prev.filter((_, idx) => idx !== indexToRemove));
+    const handleRemoveImage = (idx) => {
+        setImages(prev => prev.filter((_, i) => i !== idx));
     };
 
     const handleRemoveVideo = () => {
@@ -670,7 +657,7 @@ const XPostComposer = ({
                 <textarea
                     ref={textareaRef}
                     data-composer-input="true"
-                    placeholder="Chuyện gì đang xảy ra?!"
+                    placeholder={t('feed.whatHappening')}
                     value={content}
                     onChange={handleTextChange}
                     rows={2}
@@ -819,7 +806,7 @@ const XPostComposer = ({
                             {isCreating ? (
                                 <Loader2 size={16} className={cx('btn-spinner')} />
                             ) : (
-                                <span>Đăng</span>
+                                <span>{t('feed.post')}</span>
                             )}
                         </Motion.button>
                     </div>

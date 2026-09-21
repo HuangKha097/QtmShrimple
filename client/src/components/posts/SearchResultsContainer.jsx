@@ -6,7 +6,6 @@ import { usePostStore } from '../../stores/usePostStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import PostItem from './PostItem';
 import TrendsWidget from './TrendsWidget';
-import WhoToFollowWidget from './WhoToFollowWidget';
 import LoadingSpin from '../common/loading/LoadingSpin';
 import { ArrowLeft, Search, Hash, Users, FileText, X } from 'lucide-react';
 import default_avt from '../../../public/favicon.png';
@@ -53,9 +52,9 @@ const SearchResultsContainer = () => {
     const usersCount = searchResults.users?.length || 0;
 
     return (
-        <div className={cx('x-feed-layout')}>
+        <div className={cx('feed-page-layout')}>
             {/* Center Timeline Column */}
-            <div className={cx('feed-timeline-col')}>
+            <main className={cx('main-timeline-col')}>
                 {/* Search Header Bar */}
                 <div className={cx('search-page-header')} style={{
                     position: 'sticky',
@@ -89,17 +88,18 @@ const SearchResultsContainer = () => {
                         <ArrowLeft size={20} />
                     </button>
 
-                    <form onSubmit={handleSearchSubmit} style={{ flex: 1, position: 'relative' }}>
+                    <form onSubmit={handleSearchSubmit} style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                         <div style={{
                             display: 'flex',
                             alignItems: 'center',
                             backgroundColor: '#16181c',
-                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            border: '1.5px solid rgba(255, 255, 255, 0.15)',
                             borderRadius: '9999px',
-                            padding: '6px 14px',
-                            gap: '10px'
+                            padding: '8px 14px',
+                            gap: '8px',
+                            boxSizing: 'border-box'
                         }}>
-                            <Search size={18} color="#71767b" />
+                            <Search size={18} color="#71767b" style={{ flexShrink: 0 }} />
                             <input
                                 type="text"
                                 value={inputVal}
@@ -107,11 +107,14 @@ const SearchResultsContainer = () => {
                                 placeholder="Tìm kiếm bài viết, #hashtag, người dùng..."
                                 style={{
                                     flex: 1,
+                                    minWidth: 0,
+                                    width: '100%',
                                     background: 'transparent',
                                     border: 'none',
                                     outline: 'none',
                                     color: '#eff3f4',
-                                    fontSize: '1.4rem'
+                                    fontSize: '1.4rem',
+                                    padding: 0
                                 }}
                             />
                             {inputVal && (
@@ -119,16 +122,23 @@ const SearchResultsContainer = () => {
                                     type="button"
                                     onClick={() => setInputVal('')}
                                     style={{
-                                        background: 'transparent',
+                                        background: 'rgba(255, 255, 255, 0.12)',
                                         border: 'none',
-                                        color: '#71767b',
+                                        color: '#e7e9ea',
                                         cursor: 'pointer',
-                                        padding: '2px',
+                                        width: '20px',
+                                        height: '20px',
+                                        borderRadius: '50%',
                                         display: 'flex',
-                                        alignItems: 'center'
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: 0,
+                                        flexShrink: 0,
+                                        marginLeft: 'auto'
                                     }}
+                                    title="Xóa tìm kiếm"
                                 >
-                                    <X size={16} />
+                                    <X size={13} />
                                 </button>
                             )}
                         </div>
@@ -332,13 +342,14 @@ const SearchResultsContainer = () => {
                         )}
                     </div>
                 )}
-            </div>
+            </main>
 
             {/* Right Sidebar Column */}
-            <div className={cx('feed-widgets-col')}>
-                <TrendsWidget />
-                <WhoToFollowWidget />
-            </div>
+            <aside className={cx('feed-widgets-col')}>
+                <div className={cx('widgets-sticky-wrapper')}>
+                    <TrendsWidget />
+                </div>
+            </aside>
         </div>
     );
 };

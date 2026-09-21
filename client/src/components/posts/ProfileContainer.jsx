@@ -12,6 +12,8 @@ import {
     MapPin, 
     Briefcase, 
     GraduationCap, 
+    BookOpen,
+    Cake,
     Lock, 
     MessageSquare, 
     UserPlus, 
@@ -192,6 +194,27 @@ const ProfileContainer = () => {
         return `Đã tham gia tháng ${d.getMonth() + 1} năm ${d.getFullYear()}`;
     }, [profileUser?.createdAt, currentUser?.createdAt]);
 
+    // Format Birthday respecting privacy settings
+    const birthdayText = useMemo(() => {
+        const u = profileUser || (isOwnProfile ? currentUser : null);
+        if (!u?.birthday) return null;
+        const priv = u.privacy || {};
+        const vis = priv.birthdayVisibility || 'full';
+        if (vis === 'private' && !isOwnProfile) return null;
+        if (vis === 'friends' && !isFriend && !isOwnProfile) return null;
+
+        try {
+            const d = new Date(u.birthday);
+            if (isNaN(d.getTime())) return null;
+            if (vis === 'day_month') {
+                return `Sinh ngày ${d.getDate()} tháng ${d.getMonth() + 1}`;
+            }
+            return `Sinh ngày ${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+        } catch {
+            return null;
+        }
+    }, [profileUser, currentUser, isOwnProfile, isFriend]);
+
     // Determine current posts to display
     const currentDisplayPosts = useMemo(() => {
         if (activeTab === 'saved') {
@@ -337,52 +360,73 @@ const ProfileContainer = () => {
 
                     {/* 4. User Information */}
                     <div className={cx('profile-info-block')}>
-                        <div className={cx('profile-display-name')}>{activeUser.displayName}</div>
-                        <div className={cx('profile-username')}>@{activeUser.username || 'user'}</div>
+                        <div className={cx('profile-name-row')}>
+                            <h1 className={cx('profile-display-name')}>{activeUser.displayName}</h1>
+                            <span className={cx('profile-username')}>@{activeUser.username || 'user'}</span>
+                        </div>
 
-                        {activeUser.bio && (
+                        {activeUser.bio && (isOwnProfile || activeUser.privacy?.showBio !== false) && (
                             <p className={cx('profile-bio')}>{activeUser.bio}</p>
                         )}
 
                         <div className={cx('profile-details-grid')}>
-                            {activeUser.workplace && (
+                            {activeUser.workplace && (isOwnProfile || activeUser.privacy?.showWorkplace !== false) && (
                                 <div className={cx('detail-item')}>
-                                    <Briefcase size={16} className={cx('detail-icon')} />
+                                    <Briefcase size={15} className={cx('detail-icon')} />
                                     <span>{activeUser.workplace}</span>
                                 </div>
                             )}
 
-                            {activeUser.school && (
+                            {activeUser.school && (isOwnProfile || activeUser.privacy?.showSchool !== false) && (
                                 <div className={cx('detail-item')}>
-                                    <GraduationCap size={16} className={cx('detail-icon')} />
+                                    <GraduationCap size={15} className={cx('detail-icon')} />
                                     <span>{activeUser.school}</span>
                                 </div>
                             )}
 
-                            {activeUser.location && (
+                            {activeUser.major && (isOwnProfile || activeUser.privacy?.showSchool !== false) && (
                                 <div className={cx('detail-item')}>
-                                    <MapPin size={16} className={cx('detail-icon')} />
+                                    <BookOpen size={15} className={cx('detail-icon')} />
+                                    <span>{activeUser.major}</span>
+                                </div>
+                            )}
+
+                            {activeUser.location && (isOwnProfile || activeUser.privacy?.showLocation !== false) && (
+                                <div className={cx('detail-item')}>
+                                    <MapPin size={15} className={cx('detail-icon')} />
                                     <span>
                                         {typeof activeUser.location === 'object' 
-                                            ? [activeUser.location.city, activeUser.location.country].filter(Boolean).join(', ')
+                                            ? [activeUser.location.province || activeUser.location.city, activeUser.location.country].filter(Boolean).join(', ')
                                             : activeUser.location}
                                     </span>
                                 </div>
                             )}
 
+                            {birthdayText && (
+                                <div className={cx('detail-item')}>
+                                    <Cake size={15} className={cx('detail-icon')} />
+                                    <span>{birthdayText}</span>
+                                </div>
+                            )}
+
                             {joinedDateText && (
                                 <div className={cx('detail-item')}>
-                                    <Calendar size={16} className={cx('detail-icon')} />
+                                    <Calendar size={15} className={cx('detail-icon')} />
                                     <span>{joinedDateText}</span>
                                 </div>
                             )}
                         </div>
 
                         <div className={cx('profile-counts-row')}>
-                            <div className={cx('count-item')}>
+                            <button
+                                type="button"
+                                className={cx('count-item-btn')}
+                                onClick={() => navigate('/feed/friends')}
+                                title="Xem danh sách bạn bè"
+                            >
                                 <strong>{friends?.length || 0}</strong>
                                 <span>Bạn bè</span>
-                            </div>
+                            </button>
                         </div>
                     </div>
                 </div>

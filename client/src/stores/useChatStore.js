@@ -17,6 +17,8 @@ export const useChatStore = create(
             loading: false, // convo loading
             messageLoading: false,
             isCreatingGroup: false,
+            activeReactionMessageId: null,
+            setActiveReactionMessageId: (id) => set({ activeReactionMessageId: id }),
 
             friends: [],
             friendRequests: [],
@@ -37,6 +39,7 @@ export const useChatStore = create(
                     pinnedMessages: {},
                     pinnedMessagesLoading: false,
                     activeConversationId: null,
+                    activeReactionMessageId: null,
                     loading: false,
                     messageLoading: false,
 
@@ -316,12 +319,16 @@ export const useChatStore = create(
                 set({ isCreatingGroup: true });
                 try {
                     // Gọi API từ chatService
-                    const newConversation = await chatService.createConversation(isGroup, name, memberIds);
+                    const response = await chatService.createConversation(isGroup, name, memberIds);
+                    const newConversation = response.conversation || response;
 
                     set((state) => ({
-                        // Thêm cuộc trò chuyện mới vào đầu danh sách
-                        conversations: [newConversation, ...state.conversations],
-                        // Tự động chuyển sang cuộc trò chuyện mới vừa tạo (tuỳ chọn)
+                        // Thêm cuộc trò chuyện mới vào đầu danh sách (tránh duplicate)
+                        conversations: [
+                            newConversation,
+                            ...state.conversations.filter(c => c._id !== newConversation._id)
+                        ],
+                        // Tự động chuyển sang cuộc trò chuyện mới vừa tạo
                         activeConversationId: newConversation._id,
                         isCreatingGroup: false
                     }));
@@ -711,9 +718,21 @@ export const useChatStore = create(
                 socket.off("messageReaction");
                 socket.off("messageRecalled");
                 socket.off("messagePinStatus");
+                socket.off("newConversation");
                 socket.off("newFriendRequest");
                 socket.off("friendRequestAccepted");
                 socket.off("friendRequestDeclined");
+
+                socket.on("newConversation", (convo) => {
+                    if (!convo || !convo._id) return;
+                    set((state) => {
+                        const exists = state.conversations.some(c => c._id === convo._id);
+                        if (exists) return state;
+                        return {
+                            conversations: [convo, ...state.conversations]
+                        };
+                    });
+                });
 
                 socket.on("newMessage", (newMessage) => {
                     const myId = useAuthStore.getState().user?._id?.toString();
@@ -936,6 +955,7 @@ export const useChatStore = create(
                     socket.off("messageReaction");
                     socket.off("messageRecalled");
                     socket.off("messagePinStatus");
+                    socket.off("newConversation");
                     socket.off("newFriendRequest");
                     socket.off("friendRequestAccepted");
                     socket.off("friendRequestDeclined");

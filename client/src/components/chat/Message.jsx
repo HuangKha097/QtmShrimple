@@ -32,7 +32,6 @@ const Message = ({
     messageId,
     createdAt
 }) => {
-    const [showPicker, setShowPicker] = useState(false);
     const [pickerStyle, setPickerStyle] = useState({});
     const [showDropdown, setShowDropdown] = useState(false);
     const [isForwardOpen, setIsForwardOpen] = useState(false);
@@ -40,7 +39,15 @@ const Message = ({
     const containerRef = React.useRef(null);
     const timeoutRef = React.useRef(null);
 
-    const { recallMessageAction, deleteMessageForMeAction, togglePinMessageAction } = useChatStore();
+    const { 
+        recallMessageAction, 
+        deleteMessageForMeAction, 
+        togglePinMessageAction,
+        activeReactionMessageId,
+        setActiveReactionMessageId
+    } = useChatStore();
+
+    const isPickerOpen = !isRecalled && activeReactionMessageId === messageId;
 
     let locationData = null;
     if (messageType === 'location' && text && !isRecalled) {
@@ -71,7 +78,7 @@ const Message = ({
 
         if (containerRef.current) {
             const rect = containerRef.current.getBoundingClientRect();
-            const top = rect.top - 50; 
+            const top = Math.max(8, rect.top - 46); 
             
             const style = {
                 position: 'fixed',
@@ -80,22 +87,31 @@ const Message = ({
             };
 
             if (isMe) {
-                style.right = `${window.innerWidth - rect.right}px`;
+                style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
                 style.left = 'auto';
             } else {
-                style.left = `${rect.left}px`;
+                style.left = `${Math.max(12, rect.left)}px`;
                 style.right = 'auto';
             }
             setPickerStyle(style);
-            setShowPicker(true);
+
+            if (activeReactionMessageId !== messageId) {
+                setActiveReactionMessageId(messageId);
+            }
         }
     };
 
     const handleMouseLeave = () => {
+        if (showDropdown) return;
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
         timeoutRef.current = setTimeout(() => {
-            setShowPicker(false);
-            setShowDropdown(false);
-        }, 300);
+            if (useChatStore.getState().activeReactionMessageId === messageId && !showDropdown) {
+                setActiveReactionMessageId(null);
+                setShowDropdown(false);
+            }
+        }, 400);
     };
 
     const isRecallable = isMe && createdAt && (Date.now() - new Date(createdAt).getTime() < 3 * 60 * 60 * 1000);
@@ -105,7 +121,7 @@ const Message = ({
         try {
             await togglePinMessageAction(messageId);
             toast.success(isPinned ? "Đã bỏ ghim tin nhắn!" : "Đã ghim tin nhắn!");
-            setShowPicker(false);
+            setActiveReactionMessageId(null);
             setShowDropdown(false);
         } catch (err) {
             console.error("Failed to pin:", err);
@@ -118,7 +134,7 @@ const Message = ({
         try {
             await recallMessageAction(messageId);
             toast.success("Đã thu hồi tin nhắn!");
-            setShowPicker(false);
+            setActiveReactionMessageId(null);
             setShowDropdown(false);
         } catch (err) {
             console.error("Failed to recall:", err);
@@ -131,7 +147,7 @@ const Message = ({
         try {
             await deleteMessageForMeAction(messageId);
             toast.success("Đã xóa tin nhắn đối với bạn!");
-            setShowPicker(false);
+            setActiveReactionMessageId(null);
             setShowDropdown(false);
         } catch (err) {
             console.error("Failed to delete:", err);
@@ -175,11 +191,16 @@ const Message = ({
                     onMouseLeave={handleMouseLeave}
                 >
                     {/* Reaction Picker */}
-                    {showPicker && !isRecalled && (
+                    {isPickerOpen && (
                         <div 
                             className={cx('reaction-picker')} 
                             style={pickerStyle}
-                            onMouseEnter={handleMouseEnter}
+                            onMouseEnter={() => {
+                                if (timeoutRef.current) {
+                                    clearTimeout(timeoutRef.current);
+                                    timeoutRef.current = null;
+                                }
+                            }}
                             onMouseLeave={handleMouseLeave}
                         >
                             {EMOJIS.map(emoji => (
@@ -188,7 +209,8 @@ const Message = ({
                                     className={cx('emoji-btn')}
                                     onClick={() => {
                                         onReact(emoji);
-                                        setShowPicker(false);
+                                        setActiveReactionMessageId(null);
+                                        setShowDropdown(false);
                                     }}
                                 >
                                     {emoji}
@@ -209,14 +231,19 @@ const Message = ({
                                 <div 
                                     className={cx('actions-dropdown', { 'dropdown-me': isMe })} 
                                     onClick={(e) => e.stopPropagation()}
-                                    onMouseEnter={handleMouseEnter}
+                                    onMouseEnter={() => {
+                                        if (timeoutRef.current) {
+                                            clearTimeout(timeoutRef.current);
+                                            timeoutRef.current = null;
+                                        }
+                                    }}
                                     onMouseLeave={handleMouseLeave}
                                 >
                                     <button className={cx('dropdown-item')} onClick={handleTogglePin}>
                                         {isPinned ? <PinOff size={14} className={cx('icon')} /> : <Pin size={14} className={cx('icon')} />}
                                         <span>{isPinned ? "Bỏ ghim" : "Ghim"}</span>
                                     </button>
-                                    <button className={cx('dropdown-item')} onClick={() => { setIsForwardOpen(true); setShowPicker(false); setShowDropdown(false); }}>
+                                    <button className={cx('dropdown-item')} onClick={() => { setIsForwardOpen(true); setActiveReactionMessageId(null); setShowDropdown(false); }}>
                                         <CornerUpRight size={14} className={cx('icon')} />
                                         <span>Chuyển tiếp</span>
                                     </button>

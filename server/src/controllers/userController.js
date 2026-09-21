@@ -120,7 +120,7 @@ export const getUserById = async (req, res) => {
 export const updateProfile = async (req, res) => {
     try {
         const userId = req.user._id;
-        const { displayName, bio, username, location, school, major, workplace } = req.body;
+        const { displayName, bio, username, location, school, major, workplace, birthday, gender } = req.body;
         
         const updateData = {};
         if (displayName) updateData.displayName = displayName;
@@ -129,6 +129,15 @@ export const updateProfile = async (req, res) => {
         if (school !== undefined) updateData.school = String(school || "").trim().slice(0, 150);
         if (major !== undefined) updateData.major = String(major || "").trim().slice(0, 150);
         if (workplace !== undefined) updateData.workplace = String(workplace || "").trim().slice(0, 150);
+        if (birthday) {
+            const parsedBirth = new Date(birthday);
+            if (!Number.isNaN(parsedBirth.getTime())) {
+                updateData.birthday = parsedBirth;
+            }
+        }
+        if (gender && ["male", "female", "other"].includes(gender)) {
+            updateData.gender = gender;
+        }
         if (location !== undefined) {
             let parsedLocation = location;
             if (typeof location === "string") {
@@ -346,18 +355,34 @@ export const completeProfile = async (req, res) => {
 export const updatePrivacy = async (req, res) => {
     try {
         const userId = req.user._id;
-        const { whoCanMessage, showBirthday, showOnlineStatus } = req.body;
+        const { 
+            showBirthday, 
+            birthdayVisibility,
+            showOnlineStatus,
+            showWorkplace,
+            showSchool,
+            showLocation,
+            showBio,
+            whoCanMessage
+        } = req.body;
 
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ message: "User not found" });
 
         if (!user.privacy) {
-            user.privacy = { whoCanMessage: "Everyone", showBirthday: true, showOnlineStatus: true };
+            user.privacy = { showBirthday: true, showOnlineStatus: true, birthdayVisibility: "full" };
         }
 
+        if (showBirthday !== undefined) user.privacy.showBirthday = Boolean(showBirthday);
+        if (birthdayVisibility !== undefined && ["full", "day_month", "friends", "private"].includes(birthdayVisibility)) {
+            user.privacy.birthdayVisibility = birthdayVisibility;
+        }
+        if (showOnlineStatus !== undefined) user.privacy.showOnlineStatus = Boolean(showOnlineStatus);
+        if (showWorkplace !== undefined) user.privacy.showWorkplace = Boolean(showWorkplace);
+        if (showSchool !== undefined) user.privacy.showSchool = Boolean(showSchool);
+        if (showLocation !== undefined) user.privacy.showLocation = Boolean(showLocation);
+        if (showBio !== undefined) user.privacy.showBio = Boolean(showBio);
         if (whoCanMessage !== undefined) user.privacy.whoCanMessage = whoCanMessage;
-        if (showBirthday !== undefined) user.privacy.showBirthday = showBirthday;
-        if (showOnlineStatus !== undefined) user.privacy.showOnlineStatus = showOnlineStatus;
 
         await user.save();
         return res.status(200).json(user.privacy);

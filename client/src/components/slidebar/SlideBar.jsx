@@ -1,5 +1,6 @@
 import React from 'react';
 import classNames from 'classnames/bind';
+import { useTranslation } from 'react-i18next';
 import styles from '../../assets/css/SlideBar.module.scss';
 import SlidebarBody from './SlidebarBody.jsx';
 import { Settings, SquarePen, Users, ArrowLeft } from 'lucide-react';
@@ -8,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 const cx = classNames.bind(styles);
 
 const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPopup }) => {
+    const { t } = useTranslation();
     const navigate = useNavigate();
 
     return (
@@ -20,21 +22,21 @@ const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPop
                             type="button" 
                             className={cx('header-back-btn')} 
                             onClick={() => navigate('/feed')}
-                            title="Quay lại Bảng tin (Home)"
-                            aria-label="Quay lại Bảng tin"
+                            title={t('chat.backToFeed')}
+                            aria-label={t('chat.backToFeed')}
                         >
                             <ArrowLeft size={20} />
                         </button>
-                        <h1 className={cx('header-title')}>Tin nhắn</h1>
+                        <h1 className={cx('header-title')}>{t('chat.messages')}</h1>
                     </div>
 
                     <div className={cx('header-actions')}>
                         <button 
                             type="button" 
                             className={cx('header-action-btn')} 
-                            onClick={() => navigate('/setting?tab=chat')}
-                            title="Cài đặt tin nhắn"
-                            aria-label="Cài đặt"
+                            onClick={() => navigate('/setting')}
+                            title={t('nav.settings')}
+                            aria-label={t('nav.settings')}
                         >
                             <Settings size={20} />
                         </button>
@@ -42,8 +44,8 @@ const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPop
                             type="button" 
                             className={cx('header-action-btn')} 
                             onClick={onCloseAddFriendPopup}
-                            title="Tin nhắn mới / Thêm bạn"
-                            aria-label="Tin nhắn mới"
+                            title={t('chat.addFriend')}
+                            aria-label={t('chat.addFriend')}
                         >
                             <SquarePen size={20} />
                         </button>
@@ -51,8 +53,8 @@ const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPop
                             type="button" 
                             className={cx('header-action-btn')} 
                             onClick={onCloseCreateGroupPopup}
-                            title="Tạo nhóm trò chuyện"
-                            aria-label="Tạo nhóm"
+                            title={t('chat.createGroup')}
+                            aria-label={t('chat.createGroup')}
                         >
                             <Users size={20} />
                         </button>

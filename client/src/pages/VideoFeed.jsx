@@ -1,190 +1,764 @@
-import MotionPresence from '../components/common/MotionPresence';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { usePostStore } from '../stores/usePostStore';
 import styles from '../assets/css/VideoFeed.module.scss';
 import classNames from 'classnames/bind';
-import { Heart, MessageCircle, Share2, Volume2, VolumeX, Send, X, Menu, ChevronLeft, MoreHorizontal, Trash2, Flag, Upload } from 'lucide-react';
+import { 
+    Heart, 
+    MessageCircle, 
+    Share2, 
+    Volume2, 
+    VolumeX, 
+    Send, 
+    X, 
+    ChevronLeft, 
+    MoreHorizontal, 
+    Trash2, 
+    Flag, 
+    Upload, 
+    Play, 
+    Pause, 
+    Music, 
+    Sparkles, 
+    UserPlus, 
+    UserCheck,
+    Loader2
+} from 'lucide-react';
+import { motion as Motion, AnimatePresence } from 'motion/react';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useChatStore } from '../stores/useChatStore';
 import VideoUploadModal from '../components/posts/VideoUploadModal';
 import { toast } from 'sonner';
+import { formatHashtags } from '../utils/hashtagFormatter';
+import { formatDistanceToNow } from 'date-fns';
+import { vi } from 'date-fns/locale';
+import default_avt from '../../public/favicon.png';
 
 const cx = classNames.bind(styles);
 
-const VideoItem = ({ post, isActive, toggleLike, toggleMute, isMuted, volume, onVolumeChange, onDelete }) => {
+// Single Video Item Component
+const VideoItem = ({ 
+    post, 
+    isActive, 
+    toggleLike, 
+    toggleMute, 
+    isMuted, 
+    volume, 
+    onVolumeChange, 
+    onDelete,
+    onOpenUpload
+}) => {
     const videoRef = useRef(null);
-    const { user } = useAuthStore();
+    const progressRef = useRef(null);
+    const { user: currentUser } = useAuthStore();
+    const { friends = [], sendRequestAction } = useChatStore();
     const navigate = useNavigate();
 
+    const [isPlaying, setIsPlaying] = useState(true);
+    const [showPlaySplash, setShowPlaySplash] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [isCaptionExpanded, setIsCaptionExpanded] = useState(false);
     const [showComments, setShowComments] = useState(false);
-    const [showOptions, setShowOptions] = useState(false); // For local options state
+    const [showOptions, setShowOptions] = useState(false);
+    const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+    const [isFriendRequested, setIsFriendRequested] = useState(false);
 
+    const isOwner = currentUser?._id === post.author?._id;
+    const isFriend = Array.isArray(friends) && friends.some(f => f && f._id === post.author?._id);
+    const isLiked = Array.isArray(post.likes) && post.likes.includes(currentUser?._id);
+
+    // Hashtag & Mention handlers
+    const handleHashtagClick = useCallback((tag) => {
+        navigate(`/feed/search?q=${encodeURIComponent('#' + tag)}`);
+    }, [navigate]);
+
+    const handleMentionClick = useCallback((username) => {
+        navigate(`/feed/search?q=${encodeURIComponent('@' + username)}`);
+    }, [navigate]);
+
+    // Autoplay / Pause based on viewport visibility
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
 
         if (isActive) {
             video.volume = isMuted ? 0 : volume;
-
-            // Should play
-            const playVideo = async () => {
-                try {
-                    await video.play();
-                } catch (err) {
-                    console.log("Autoplay prevented:", err);
-                }
-            };
-
-            playVideo();
-
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => setIsPlaying(true))
+                    .catch((err) => {
+                        console.log("Autoplay was prevented:", err);
+                        setIsPlaying(false);
+                    });
+            }
         } else {
             video.pause();
-            video.currentTime = 0; // Reset time
+            video.currentTime = 0;
+            setIsPlaying(false);
+            setProgress(0);
         }
-
-        if (video) video.volume = isMuted ? 0 : volume;
-
     }, [isActive, isMuted, volume]);
 
-    const handleVolumeChange = (e) => {
+    // Update progress bar
+    const handleTimeUpdate = () => {
+        const video = videoRef.current;
+        if (!video || !video.duration) return;
+        const currentProgress = (video.currentTime / video.duration) * 100;
+        setProgress(currentProgress);
+    };
+
+    // Seek video on click/scrub
+    const handleSeek = (e) => {
         e.stopPropagation();
-        const newVol = parseFloat(e.target.value);
-        onVolumeChange(newVol);
+        const video = videoRef.current;
+        const bar = progressRef.current;
+        if (!video || !bar) return;
+        const rect = bar.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const newTime = (clickX / rect.width) * video.duration;
+        video.currentTime = newTime;
+    };
+
+    // Toggle Play/Pause on video click
+    const handleVideoClick = (e) => {
+        e.stopPropagation();
+        const video = videoRef.current;
+        if (!video) return;
+
+        if (video.paused) {
+            video.play();
+            setIsPlaying(true);
+        } else {
+            video.pause();
+            setIsPlaying(false);
+        }
+        setShowPlaySplash(true);
+        setTimeout(() => setShowPlaySplash(false), 550);
     };
 
     const handleShare = (e) => {
         e.stopPropagation();
-        navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
-        toast.success("Link copied to clipboard");
+        const url = `${window.location.origin}/post/${post._id}`;
+        navigator.clipboard.writeText(url);
+        toast.success("Đã sao chép liên kết vào bộ nhớ tạm");
     };
-
-    const isLiked = post.likes && post.likes.includes(user?._id);
-
-    const handleVolumeWheel = (e) => {
-        e.stopPropagation();
-        const step = 0.05;
-        const currentVol = isMuted ? 0 : volume;
-        const delta = e.deltaY > 0 ? -step : step;
-        const newVol = Math.min(Math.max(currentVol + delta, 0), 0.5);
-        onVolumeChange(newVol);
-    };
-
-    const isOwner = user?._id === post.author?._id;
 
     const handleDelete = async (e) => {
         e.stopPropagation();
-        if (confirm("Are you sure you want to delete this video?")) {
+        if (window.confirm("Bạn có chắc chắn muốn xóa video này không?")) {
             await onDelete(post._id);
-            // Optionally close drawer? Parent handles state update
+            toast.success("Đã xóa video thành công");
             setShowOptions(false);
         }
-    }
+    };
+
+    const handleAddFriend = async (e) => {
+        e.stopPropagation();
+        if (!post.author?._id || isFriendRequested) return;
+        try {
+            await sendRequestAction(post.author._id);
+            setIsFriendRequested(true);
+            toast.success("Đã gửi lời mời kết bạn");
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Không thể gửi lời mời kết bạn");
+        }
+    };
+
+    const videoSrc = post.video?.startsWith('http') 
+        ? post.video 
+        : `http://localhost:5001${post.video}`;
+
+    const authorAvatar = post.author?.avatarURL?.startsWith('http')
+        ? post.author.avatarURL
+        : post.author?.avatarURL
+            ? `http://localhost:5001${post.author.avatarURL}`
+            : default_avt;
+
+    const authorDisplayName = post.author?.displayName || post.author?.username || 'Người dùng';
+    const authorHandle = post.author?.username ? `@${post.author.username}` : '';
 
     return (
-        <>
+        <div className={cx('videoItem')}>
+            {/* Video Element */}
             <video
                 ref={videoRef}
-                className={cx('video-player')}
+                className={cx('videoPlayer')}
+                src={videoSrc}
                 loop
                 muted={isMuted}
                 playsInline
-                onClick={toggleMute}
+                onClick={handleVideoClick}
+                onTimeUpdate={handleTimeUpdate}
                 preload="auto"
+            />
+
+            {/* Play/Pause Splash Indicator */}
+            <AnimatePresence>
+                {showPlaySplash && (
+                    <Motion.div 
+                        className={cx('playPauseIndicator')}
+                        initial={{ opacity: 0, scale: 0.6 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1.2 }}
+                        transition={{ duration: 0.25 }}
+                    >
+                        {isPlaying ? <Play size={36} fill="#ffffff" /> : <Pause size={36} fill="#ffffff" />}
+                    </Motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Bottom Scrubber Progress Bar */}
+            <div 
+                ref={progressRef}
+                className={cx('videoProgressBarWrapper')}
+                onClick={handleSeek}
             >
-                <source src={post.video.startsWith('http') ? post.video : `http://localhost:5001${post.video}`} type="video/mp4" />
-                Your browser does not support the video tag.
-            </video>
-            {/* Overlay */}
-            <div className={cx('video-overlay')}>
-                <div
-                    className={cx('author-info')}
-                    onClick={() => navigate(`/feed/profile/${post.author?._id}`)}
-                >
-                    <img src={post.author?.avatarURL ? (post.author.avatarURL.startsWith('http') ? post.author.avatarURL : `http://localhost:5001${post.author.avatarURL}`) : "/favicon.png"} alt="user" onError={(e) => { e.target.src = "/favicon.png" }} />
-                    <span>{post.author?.displayName || post.author?.username}</span>
+                <div className={cx('videoProgressBar')}>
+                    <div 
+                        className={cx('videoProgressFill')} 
+                        style={{ width: `${progress}%` }} 
+                    />
                 </div>
-                <p className={cx('content-text')}>{post.content}</p>
             </div>
 
-            {/* Actions */}
-            <div className={cx('actions-bar')}>
-                <button aria-label={isLiked ? "Unlike video" : "Like video"} aria-pressed={Boolean(isLiked)} className={cx('action-btn')} onClick={(e) => { e.stopPropagation(); toggleLike(post._id); }}>
-                    <Heart fill={isLiked ? "#fe2c55" : "rgba(255,255,255,0.2)"} color={isLiked ? "#fe2c55" : "white"} className={cx({ 'liked-anim': isLiked })} />
-                    <span>{post.likes?.length || 0}</span>
-                </button>
-                <button aria-label="Open comments" className={cx('action-btn')} onClick={(e) => { e.stopPropagation(); setShowComments(true); }}>
-                    <MessageCircle color="white" fill="rgba(255,255,255,0.2)" />
-                    <span>{post.comments?.length || 0}</span>
-                </button>
-                <button className={cx('action-btn')} onClick={handleShare}>
-                    <Share2 color="white" fill="rgba(255,255,255,0.2)" />
-                    <span>Share</span>
-                </button>
+            {/* Bottom Left: Author & Caption Overlay */}
+            <div className={cx('videoOverlay')}>
+                {/* Author row */}
+                <div className={cx('authorRow')}>
+                    <div 
+                        className={cx('authorAvatarWrap')}
+                        onClick={() => navigate(`/feed/profile/${post.author?._id}`)}
+                    >
+                        <img 
+                            src={authorAvatar} 
+                            alt={authorDisplayName} 
+                            className={cx('authorAvatarImg')}
+                            onError={(e) => { e.currentTarget.src = default_avt; }}
+                        />
+                    </div>
 
-                <div className={cx('more-options-wrapper')} onClick={e => e.stopPropagation()}>
-                    <button aria-label="Video options" aria-expanded={showOptions} className={cx('action-btn')} onClick={() => setShowOptions(!showOptions)}>
-                        <MoreHorizontal color="white" />
-                    </button>
-                    {showOptions && (
-                        <div className={cx('options-popup')}>
-                            {isOwner ? (
-                                <button className={cx('option-item', 'delete')} onClick={handleDelete}>
-                                    <Trash2 size={18} />
-                                    <span>Delete</span>
-                                </button>
+                    <div 
+                        className={cx('authorMeta')}
+                        onClick={() => navigate(`/feed/profile/${post.author?._id}`)}
+                    >
+                        <span className={cx('authorName')}>{authorDisplayName}</span>
+                        {authorHandle && <span className={cx('authorHandle')}>{authorHandle}</span>}
+                    </div>
+
+                    {/* Follow/Add Friend Button */}
+                    {!isOwner && !isFriend && (
+                        <button
+                            type="button"
+                            className={cx('authorFollowBtn')}
+                            onClick={handleAddFriend}
+                            disabled={isFriendRequested}
+                        >
+                            {isFriendRequested ? (
+                                <>
+                                    <UserCheck size={14} />
+                                    <span>Đã gửi</span>
+                                </>
                             ) : (
-                                <button className={cx('option-item')} onClick={() => { alert('Reported!'); setShowOptions(false); }}>
-                                    <Flag size={18} />
-                                    <span>Report</span>
-                                </button>
+                                <>
+                                    <UserPlus size={14} />
+                                    <span>Kết bạn</span>
+                                </>
                             )}
-                        </div>
+                        </button>
                     )}
                 </div>
 
-                <div
-                    className={cx('volume-control-wrapper')}
-                    onClick={(e) => e.stopPropagation()}
-                    onWheel={handleVolumeWheel}
-                >
-                    <div className={cx('volume-slider-container')}>
-                        <input
-                            type="range"
-                            min="0"
-                            max="0.5"
-                            step="0.05"
-                            value={isMuted ? 0 : volume}
-                            onChange={handleVolumeChange}
-                            aria-label="Video volume"
-                            className={cx('vertical-slider')}
-                        />
+                {/* Caption with Tag & URL Linking */}
+                {post.content && (
+                    <div className={cx('captionText', { collapsed: !isCaptionExpanded })}>
+                        {formatHashtags(post.content, handleHashtagClick, handleMentionClick)}
+                        {post.content.length > 90 && (
+                            <button 
+                                type="button"
+                                className={cx('moreTextBtn')}
+                                onClick={() => setIsCaptionExpanded(!isCaptionExpanded)}
+                            >
+                                {isCaptionExpanded ? 'Ẩn bớt' : '...Xem thêm'}
+                            </button>
+                        )}
                     </div>
-                    <button aria-label={isMuted ? "Unmute video" : "Mute video"} className={cx('action-btn')} onClick={(e) => { e.stopPropagation(); toggleMute(); }}>
-                        {isMuted || volume === 0 ? <VolumeX color="white" /> : <Volume2 color="white" />}
-                    </button>
+                )}
+
+                {/* Audio track info */}
+                <div className={cx('soundTrackInfo')}>
+                    <Music size={14} />
+                    <span>Âm thanh gốc - {authorDisplayName}</span>
                 </div>
             </div>
 
-            {/* Comments Modal / Drawer for this specific video */}
-            <CommentsDrawer open={showComments} post={post} onClose={() => setShowComments(false)} />
-        </>
+            {/* Right Action Bar */}
+            <aside className={cx('actionsBar')}>
+                {/* Like */}
+                <div className={cx('actionItemWrap')}>
+                    <button 
+                        type="button"
+                        aria-label={isLiked ? "Bỏ thích" : "Thích"}
+                        className={cx('actionBtn', { liked: isLiked })} 
+                        onClick={(e) => { e.stopPropagation(); toggleLike(post._id); }}
+                    >
+                        <Heart size={24} />
+                    </button>
+                    <span className={cx('actionLabel')}>{post.likes?.length || 0}</span>
+                </div>
+
+                {/* Comment */}
+                <div className={cx('actionItemWrap')}>
+                    <button 
+                        type="button"
+                        aria-label="Bình luận"
+                        className={cx('actionBtn')} 
+                        onClick={(e) => { e.stopPropagation(); setShowComments(true); }}
+                    >
+                        <MessageCircle size={24} />
+                    </button>
+                    <span className={cx('actionLabel')}>{post.comments?.length || 0}</span>
+                </div>
+
+                {/* Share */}
+                <div className={cx('actionItemWrap')}>
+                    <button 
+                        type="button"
+                        aria-label="Chia sẻ"
+                        className={cx('actionBtn')} 
+                        onClick={handleShare}
+                    >
+                        <Share2 size={22} />
+                    </button>
+                    <span className={cx('actionLabel')}>Chia sẻ</span>
+                </div>
+
+                {/* Sound & Volume */}
+                <div 
+                    className={cx('volumeWrapper')}
+                    onMouseEnter={() => setShowVolumeSlider(true)}
+                    onMouseLeave={() => setShowVolumeSlider(false)}
+                >
+                    <AnimatePresence>
+                        {showVolumeSlider && (
+                            <Motion.div 
+                                className={cx('volumeSliderFlyout')}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 10 }}
+                                transition={{ duration: 0.15 }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                    value={isMuted ? 0 : volume}
+                                    onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                                    className={cx('verticalVolumeSlider')}
+                                    aria-label="Âm lượng"
+                                />
+                            </Motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    <button 
+                        type="button"
+                        aria-label={isMuted ? "Bật âm thanh" : "Tắt âm thanh"} 
+                        className={cx('actionBtn')} 
+                        onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                    >
+                        {isMuted || volume === 0 ? <VolumeX size={22} /> : <Volume2 size={22} />}
+                    </button>
+                </div>
+
+                {/* More Options */}
+                <div className={cx('moreOptionsWrapper')} onClick={(e) => e.stopPropagation()}>
+                    <button 
+                        type="button"
+                        aria-label="Tùy chọn khác"
+                        className={cx('actionBtn')} 
+                        onClick={() => setShowOptions(!showOptions)}
+                    >
+                        <MoreHorizontal size={22} />
+                    </button>
+
+                    <AnimatePresence>
+                        {showOptions && (
+                            <Motion.div 
+                                className={cx('optionsPopup')}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                transition={{ duration: 0.15 }}
+                            >
+                                {isOwner ? (
+                                    <button 
+                                        type="button" 
+                                        className={cx('optionItem', 'deleteItem')} 
+                                        onClick={handleDelete}
+                                    >
+                                        <Trash2 size={16} />
+                                        <span>Xóa video</span>
+                                    </button>
+                                ) : (
+                                    <button 
+                                        type="button" 
+                                        className={cx('optionItem')} 
+                                        onClick={() => { toast.success("Đã báo cáo bài viết"); setShowOptions(false); }}
+                                    >
+                                        <Flag size={16} />
+                                        <span>Báo cáo</span>
+                                    </button>
+                                )}
+                            </Motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </aside>
+
+            {/* Comments Drawer */}
+            <CommentsDrawer 
+                open={showComments} 
+                post={post} 
+                onClose={() => setShowComments(false)} 
+            />
+        </div>
     );
 };
 
+// Comments Drawer Component
+const CommentsDrawer = ({ post, onClose, open }) => {
+    const { addComment } = usePostStore();
+    const { user: currentUser } = useAuthStore();
+    const [text, setText] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const commentsRef = useRef(null);
+    const navigate = useNavigate();
+
+    const handleHashtagClick = useCallback((tag) => {
+        navigate(`/feed/search?q=${encodeURIComponent('#' + tag)}`);
+    }, [navigate]);
+
+    const handleMentionClick = useCallback((username) => {
+        navigate(`/feed/search?q=${encodeURIComponent('@' + username)}`);
+    }, [navigate]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const trimmed = text.trim();
+        if (!trimmed || isSubmitting) return;
+
+        setIsSubmitting(true);
+        try {
+            await addComment(post._id, trimmed);
+            setText("");
+            setTimeout(() => {
+                if (commentsRef.current) {
+                    commentsRef.current.scrollTop = commentsRef.current.scrollHeight;
+                }
+            }, 100);
+        } catch (err) {
+            toast.error("Không thể gửi bình luận");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    if (!open) return null;
+
+    const userAvatar = currentUser?.avatarURL?.startsWith('http')
+        ? currentUser.avatarURL
+        : currentUser?.avatarURL
+            ? `http://localhost:5001${currentUser.avatarURL}`
+            : default_avt;
+
+    return (
+        <AnimatePresence>
+            {open && (
+                <Motion.div 
+                    className={cx('commentsDrawerBackdrop')}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={onClose}
+                >
+                    <Motion.div 
+                        className={cx('commentsDrawerPanel')}
+                        initial={{ y: "100%", opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: "100%", opacity: 0 }}
+                        transition={{ type: "spring", damping: 28, stiffness: 300 }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className={cx('drawerHeader')}>
+                            <span className={cx('drawerTitle')}>
+                                {post.comments?.length || 0} bình luận
+                            </span>
+                            <button 
+                                type="button" 
+                                className={cx('drawerCloseBtn')} 
+                                onClick={onClose} 
+                                aria-label="Đóng"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Comments Body */}
+                        <div className={cx('drawerBody')} ref={commentsRef}>
+                            {post.comments && post.comments.length > 0 ? (
+                                post.comments.map((comment, idx) => (
+                                    <VideoCommentItem
+                                        key={comment._id || idx}
+                                        comment={comment}
+                                        postId={post._id}
+                                        currentUserId={currentUser?._id}
+                                        onHashtagClick={handleHashtagClick}
+                                        onMentionClick={handleMentionClick}
+                                    />
+                                ))
+                            ) : (
+                                <div className={cx('noCommentsPlaceholder')}>
+                                    <MessageCircle size={38} color="#71767b" />
+                                    <p>Chưa có bình luận nào</p>
+                                    <small>Hãy là người đầu tiên bình luận về video này!</small>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Input Footer */}
+                        <form className={cx('drawerFooter')} onSubmit={handleSubmit}>
+                            <img 
+                                src={userAvatar} 
+                                alt={currentUser?.displayName || 'Avatar'} 
+                                className={cx('footerAvatar')}
+                                onError={(e) => { e.currentTarget.src = default_avt; }}
+                            />
+
+                            <div className={cx('commentInputWrap')}>
+                                <input
+                                    type="text"
+                                    className={cx('commentTextInput')}
+                                    placeholder="Thêm bình luận... #tag hoặc @nhắc_tên"
+                                    value={text}
+                                    onChange={(e) => setText(e.target.value)}
+                                />
+                                <button 
+                                    type="submit" 
+                                    className={cx('sendCommentBtn')}
+                                    disabled={!text.trim() || isSubmitting}
+                                    aria-label="Gửi"
+                                >
+                                    {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} />}
+                                </button>
+                            </div>
+                        </form>
+                    </Motion.div>
+                </Motion.div>
+            )}
+        </AnimatePresence>
+    );
+};
+
+// Comment Item with replies & like
+const VideoCommentItem = ({ comment, postId, currentUserId, onHashtagClick, onMentionClick }) => {
+    const { reactToComment, replyComment, reactToReply } = usePostStore();
+    const navigate = useNavigate();
+
+    const [isReplying, setIsReplying] = useState(false);
+    const [replyText, setReplyText] = useState("");
+    const [showReplies, setShowReplies] = useState(false);
+
+    const isLiked = comment.reactions?.some(r => r.userId === currentUserId && r.reaction === 'like');
+    const likeCount = comment.reactions?.filter(r => r.reaction === 'like').length || 0;
+
+    const timeAgo = comment.created
+        ? formatDistanceToNow(new Date(comment.created), { addSuffix: true, locale: vi })
+        : '';
+
+    const commenterAvatar = comment.postedBy?.avatarURL?.startsWith('http')
+        ? comment.postedBy.avatarURL
+        : comment.postedBy?.avatarURL
+            ? `http://localhost:5001${comment.postedBy.avatarURL}`
+            : default_avt;
+
+    const commenterName = comment.postedBy?.displayName || comment.postedBy?.username || 'Người dùng';
+
+    const handleLike = () => {
+        reactToComment(postId, comment._id, "like");
+    };
+
+    const handleReply = async (e) => {
+        e.preventDefault();
+        const trimmed = replyText.trim();
+        if (!trimmed) return;
+        await replyComment(postId, comment._id, trimmed);
+        setReplyText("");
+        setIsReplying(false);
+        setShowReplies(true);
+    };
+
+    return (
+        <div className={cx('commentItemWrapper')}>
+            <div className={cx('commentItem')}>
+                <img 
+                    src={commenterAvatar} 
+                    alt={commenterName} 
+                    className={cx('commentAvatar')}
+                    onClick={() => comment.postedBy?._id && navigate(`/feed/profile/${comment.postedBy._id}`)}
+                    onError={(e) => { e.currentTarget.src = default_avt; }}
+                />
+
+                <div className={cx('commentContent')}>
+                    <div className={cx('commentUserRow')}>
+                        <span 
+                            className={cx('commentUserName')}
+                            onClick={() => comment.postedBy?._id && navigate(`/feed/profile/${comment.postedBy._id}`)}
+                        >
+                            {commenterName}
+                        </span>
+                        {timeAgo && <span className={cx('commentTime')}>{timeAgo}</span>}
+                    </div>
+
+                    <div className={cx('commentBodyText')}>
+                        {formatHashtags(comment.text, onHashtagClick, onMentionClick)}
+                    </div>
+
+                    <div className={cx('commentActionsRow')}>
+                        <button 
+                            type="button" 
+                            className={cx('actionTextBtn', { liked: isLiked })} 
+                            onClick={handleLike}
+                        >
+                            <Heart size={13} fill={isLiked ? "#f43f5e" : "none"} />
+                            <span>{likeCount > 0 ? likeCount : "Thích"}</span>
+                        </button>
+
+                        <button 
+                            type="button" 
+                            className={cx('actionTextBtn')} 
+                            onClick={() => setIsReplying(!isReplying)}
+                        >
+                            Trả lời
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Replies List */}
+            {comment.replies && comment.replies.length > 0 && (
+                <div className={cx('repliesSection')}>
+                    {!showReplies ? (
+                        <button 
+                            type="button"
+                            className={cx('toggleRepliesBtn')} 
+                            onClick={() => setShowReplies(true)}
+                        >
+                            Xem {comment.replies.length} câu trả lời
+                        </button>
+                    ) : (
+                        <div className={cx('repliesList')}>
+                            {comment.replies.map((reply, ridx) => {
+                                const isReplyLiked = reply.reactions?.some(r => r.userId === currentUserId && r.reaction === 'like');
+                                const replyLikeCount = reply.reactions?.filter(r => r.reaction === 'like').length || 0;
+                                const replyAvatar = reply.postedBy?.avatarURL?.startsWith('http')
+                                    ? reply.postedBy.avatarURL
+                                    : reply.postedBy?.avatarURL
+                                        ? `http://localhost:5001${reply.postedBy.avatarURL}`
+                                        : default_avt;
+                                const replyTime = reply.created
+                                    ? formatDistanceToNow(new Date(reply.created), { addSuffix: true, locale: vi })
+                                    : '';
+
+                                return (
+                                    <div key={reply._id || ridx} className={cx('commentItem')}>
+                                        <img 
+                                            src={replyAvatar} 
+                                            alt={reply.postedBy?.displayName || 'User'} 
+                                            className={cx('commentAvatar')}
+                                            onClick={() => reply.postedBy?._id && navigate(`/feed/profile/${reply.postedBy._id}`)}
+                                            onError={(e) => { e.currentTarget.src = default_avt; }}
+                                        />
+                                        <div className={cx('commentContent')}>
+                                            <div className={cx('commentUserRow')}>
+                                                <span 
+                                                    className={cx('commentUserName')}
+                                                    onClick={() => reply.postedBy?._id && navigate(`/feed/profile/${reply.postedBy._id}`)}
+                                                >
+                                                    {reply.postedBy?.displayName || reply.postedBy?.username || 'Người dùng'}
+                                                </span>
+                                                {replyTime && <span className={cx('commentTime')}>{replyTime}</span>}
+                                            </div>
+                                            <div className={cx('commentBodyText')}>
+                                                {formatHashtags(reply.text, onHashtagClick, onMentionClick)}
+                                            </div>
+                                            <div className={cx('commentActionsRow')}>
+                                                <button 
+                                                    type="button" 
+                                                    className={cx('actionTextBtn', { liked: isReplyLiked })} 
+                                                    onClick={() => reactToReply(postId, comment._id, reply._id, "like")}
+                                                >
+                                                    <Heart size={12} fill={isReplyLiked ? "#f43f5e" : "none"} />
+                                                    <span>{replyLikeCount > 0 ? replyLikeCount : "Thích"}</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <button 
+                                type="button"
+                                className={cx('toggleRepliesBtn')} 
+                                onClick={() => setShowReplies(false)}
+                            >
+                                Ẩn câu trả lời
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Inline Reply Input */}
+            {isReplying && (
+                <form onSubmit={handleReply} className={cx('replyForm')}>
+                    <input
+                        type="text"
+                        className={cx('replyInput')}
+                        placeholder={`Trả lời @${comment.postedBy?.username || 'user'}...`}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        autoFocus
+                    />
+                    <button 
+                        type="submit" 
+                        className={cx('replySendBtn')}
+                        disabled={!replyText.trim()}
+                    >
+                        Gửi
+                    </button>
+                </form>
+            )}
+        </div>
+    );
+};
+
+// Main Video Feed Page
 const VideoFeed = () => {
     const { videoPosts, fetchVideoFeed, likePost, deletePost, hasMoreVideos } = usePostStore();
-    // Default to no-op function if context is missing (e.g. standalone test)
-    const { toggleSidebar, isSidebarOpen = true } = useOutletContext() || { toggleSidebar: () => { }, isSidebarOpen: true };
+    const { toggleSidebar } = useOutletContext() || { toggleSidebar: () => { } };
+    const navigate = useNavigate();
+
     const [activePostId, setActivePostId] = useState(() => {
         return sessionStorage.getItem('last_active_video_id') || null;
     });
 
     const [isScrollRestored, setIsScrollRestored] = useState(() => {
-        // If no saved ID, we are "restored" (ready) immediately
         return !sessionStorage.getItem('last_active_video_id');
     });
 
-    // Initialize from LocalStorage or Default
     const [isMuted, setIsMuted] = useState(() => {
         const saved = localStorage.getItem('video_muted');
         return saved ? JSON.parse(saved) : false;
@@ -192,7 +766,7 @@ const VideoFeed = () => {
 
     const [volume, setVolume] = useState(() => {
         const saved = localStorage.getItem('video_volume');
-        return saved ? parseFloat(saved) : 0.5;
+        return saved ? parseFloat(saved) : 0.6;
     });
 
     const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -201,7 +775,6 @@ const VideoFeed = () => {
     const containerRef = useRef(null);
     const isLoadingRef = useRef(false);
 
-    // Save to LocalStorage whenever they change
     useEffect(() => {
         localStorage.setItem('video_muted', JSON.stringify(isMuted));
     }, [isMuted]);
@@ -214,22 +787,22 @@ const VideoFeed = () => {
         setIsMuted(prev => !prev);
     };
 
-    const handleVolumeChangeGlobal = (newVol) => {
+    const handleVolumeChange = (newVol) => {
         setVolume(newVol);
         if (newVol > 0 && isMuted) setIsMuted(false);
         if (newVol === 0 && !isMuted) setIsMuted(true);
     };
 
-    // 1. Fetch only if empty
+    // Initial Fetch
     useEffect(() => {
-        if (videoPosts.length === 0) {
-            fetchVideoFeed(true); // Initial load
+        if (!videoPosts || videoPosts.length === 0) {
+            fetchVideoFeed(true);
         }
-    }, [fetchVideoFeed, videoPosts.length]);
+    }, [fetchVideoFeed, videoPosts?.length]);
 
-    // Restore once after data arrives; subsequent pagination must not jump the feed.
+    // Restore scroll position
     useEffect(() => {
-        if (!videoPosts.length || !restoreTargetId.current) return;
+        if (!videoPosts?.length || !restoreTargetId.current) return;
         const timeout = setTimeout(() => {
             const element = Array.from(containerRef.current?.querySelectorAll('[data-id]') || [])
                 .find(item => item.dataset.id === restoreTargetId.current);
@@ -238,9 +811,9 @@ const VideoFeed = () => {
             setIsScrollRestored(true);
         }, 100);
         return () => clearTimeout(timeout);
-    }, [videoPosts.length]);
+    }, [videoPosts?.length]);
 
-    // Intersection Observer logic
+    // Intersection Observer for active video detection
     useEffect(() => {
         const options = {
             root: containerRef.current,
@@ -259,16 +832,15 @@ const VideoFeed = () => {
         };
 
         observer.current = new IntersectionObserver(handleIntersect, options);
-
-        // Immediate observation
         const elements = containerRef.current?.querySelectorAll('[data-id]') || [];
         elements.forEach(el => observer.current.observe(el));
 
         return () => {
             observer.current?.disconnect();
-        }
-    }, [videoPosts]); // Re-run observer when posts change
+        };
+    }, [videoPosts]);
 
+    // Infinite scroll pagination
     const handleScroll = async (e) => {
         const bottom = Math.abs(e.target.scrollHeight - e.target.scrollTop - e.target.clientHeight) < 300;
         if (bottom && hasMoreVideos && !isLoadingRef.current) {
@@ -278,217 +850,79 @@ const VideoFeed = () => {
         }
     };
 
-    if (!videoPosts || videoPosts.length === 0) {
-        return (
-            <div className={cx('local-video-feed-container', 'empty-feed')} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: '1rem' }}>
-                <button className={cx('sidebar-toggle-btn')} onClick={toggleSidebar} aria-label="Open navigation">
-                    <Menu className={cx('icon-mobile')} size={24} />
-                    <ChevronLeft className={cx('icon-desktop')} size={24} />
-                </button>
-                <p>No videos available. Upload a video to get started!</p>
-                <button className={cx('floating-upload-btn', 'static-btn')} onClick={() => setIsUploadOpen(true)}>
-                    Upload Video
-                </button>
-                <VideoUploadModal isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} />
-            </div>
-        );
-    }
-
     return (
-        <div className={cx('feed-wrapper')}>
-            <button className={cx('sidebar-toggle-btn', { 'sidebar-closed': !isSidebarOpen })} onClick={toggleSidebar} aria-label="Open navigation">
-                <Menu className={cx('icon-mobile')} size={24} />
-                <ChevronLeft className={cx('icon-desktop')} size={24} />
-            </button>
-            <div
-                className={cx('local-video-feed-container')}
-                ref={containerRef}
-                onScroll={handleScroll}
-                style={{ opacity: isScrollRestored ? 1 : 0, transition: 'opacity 0.2s' }}
-            >
-                {videoPosts.map(post => (
-                    <div key={post._id} data-id={post._id} className={cx('video-item', 'video-item-target')}>
-                        <VideoItem
-                            post={post}
-                            isActive={isScrollRestored && activePostId === post._id}
-                            toggleLike={likePost}
-                            toggleMute={toggleMute}
-                            isMuted={isMuted}
-                            volume={volume}
-                            onVolumeChange={handleVolumeChangeGlobal}
-                            onDelete={deletePost}
-                        />
-                    </div>
-                ))}
+        <div className={cx('feedWrapper')}>
+            {/* Top Floating Controls */}
+            <div className={cx('topControlsRow')}>
+                <button 
+                    type="button" 
+                    className={cx('navBtn')} 
+                    onClick={() => navigate('/feed')} 
+                    aria-label="Quay lại Bảng tin"
+                    title="Quay lại Bảng tin"
+                >
+                    <ChevronLeft size={22} />
+                </button>
 
-                {/* End of Feed Message */}
-                <div className={cx('video-item', 'end-of-feed')}>
-                    <p>You have watched all videos</p>
-                    <p style={{ fontSize: '1.6rem', color: 'var(--text-muted)' }}>Post a video to watch more!</p>
-                    <button className={cx('floating-upload-btn', 'static-btn')} onClick={() => setIsUploadOpen(true)}>
-                        Upload Video
+                <button 
+                    type="button" 
+                    className={cx('uploadVideoBtn')} 
+                    onClick={() => setIsUploadOpen(true)}
+                >
+                    <Upload size={16} />
+                    <span>Đăng video</span>
+                </button>
+            </div>
+
+            {/* Video Feed Stream */}
+            {!videoPosts || videoPosts.length === 0 ? (
+                <div className={cx('emptyFeedBox')}>
+                    <div className={cx('emptyIconWrap')}>
+                        <Sparkles size={40} />
+                    </div>
+                    <h3>Chưa có video nào</h3>
+                    <p>Hãy là người đầu tiên chia sẻ khoảnh khắc với cộng đồng Shrimple!</p>
+                    <button 
+                        type="button" 
+                        className={cx('uploadVideoBtn')} 
+                        onClick={() => setIsUploadOpen(true)}
+                    >
+                        <Upload size={16} />
+                        <span>Đăng video ngay</span>
                     </button>
                 </div>
-            </div>
+            ) : (
+                <div
+                    ref={containerRef}
+                    className={cx('videoFeedContainer')}
+                    onScroll={handleScroll}
+                    style={{ opacity: isScrollRestored ? 1 : 0, transition: 'opacity 0.2s' }}
+                >
+                    {videoPosts.map(post => (
+                        <div key={post._id} data-id={post._id} className={cx('videoItem')}>
+                            <VideoItem
+                                post={post}
+                                isActive={isScrollRestored && activePostId === post._id}
+                                toggleLike={likePost}
+                                toggleMute={toggleMute}
+                                isMuted={isMuted}
+                                volume={volume}
+                                onVolumeChange={handleVolumeChange}
+                                onDelete={deletePost}
+                                onOpenUpload={() => setIsUploadOpen(true)}
+                            />
+                        </div>
+                    ))}
+                </div>
+            )}
 
-            <button className={cx('floating-upload-btn')} onClick={() => setIsUploadOpen(true)}>
-                <Upload size={18} /><span>Upload video</span>
-            </button>
-
-            <VideoUploadModal isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} />
+            {/* Upload Modal */}
+            <VideoUploadModal 
+                isOpen={isUploadOpen} 
+                onClose={() => setIsUploadOpen(false)} 
+            />
         </div>
     );
 };
-
-
-const VideoCommentItem = ({ comment, postId, currentUserId }) => {
-    const { reactToComment, replyComment, reactToReply } = usePostStore();
-    const [isReplying, setIsReplying] = useState(false);
-    const [replyText, setReplyText] = useState("");
-    const [showReplies, setShowReplies] = useState(false);
-
-    const isLiked = comment.reactions?.some(r => r.userId === currentUserId && r.reaction === 'like');
-    const likeCount = comment.reactions?.filter(r => r.reaction === 'like').length || 0;
-
-    const handleLike = () => {
-        reactToComment(postId, comment._id, "like");
-    };
-
-    const handleReply = async (e) => {
-        e.preventDefault();
-        if (!replyText.trim()) return;
-        await replyComment(postId, comment._id, replyText);
-        setReplyText("");
-        setIsReplying(false);
-        setShowReplies(true); // Auto show replies
-    };
-
-    return (
-        <div className={cx('comment-item-wrapper')}>
-            <div className={cx('comment-item')}>
-                <img src={comment.postedBy?.avatarURL ? (comment.postedBy.avatarURL.startsWith('http') ? comment.postedBy.avatarURL : `http://localhost:5001${comment.postedBy.avatarURL}`) : "/favicon.png"} alt="user" onError={(e) => { e.target.src = "/favicon.png" }} />
-                <div className={cx('comment-content')}>
-                    <span className={cx('comment-user')}>{comment.postedBy?.displayName || 'User'}</span>
-                    <p>{comment.text}</p>
-                    <div className={cx('comment-actions')}>
-                        <span className={cx('comment-date')}>{new Date(comment.created).toLocaleDateString()}</span>
-                        <button className={cx('text-btn', { liked: isLiked })} onClick={handleLike}>
-                            {isLiked ? "Unlike" : "Like"} ({likeCount})
-                        </button>
-                        <button className={cx('text-btn')} onClick={() => setIsReplying(!isReplying)}>Reply</button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Replies List */}
-            {comment.replies && comment.replies.length > 0 && (
-                <div className={cx('replies-section')}>
-                    {!showReplies ? (
-                        <button className={cx('view-replies-btn')} onClick={() => setShowReplies(true)}>
-                            View {comment.replies.length} replies
-                        </button>
-                    ) : (
-                        <div className={cx('replies-list')}>
-                            {comment.replies.map((reply, ridx) => {
-                                const isReplyLiked = reply.reactions?.some(r => r.userId === currentUserId && r.reaction === 'like');
-                                const replyLikeCount = reply.reactions?.filter(r => r.reaction === 'like').length || 0;
-
-                                return (
-                                    <div key={ridx} className={cx('comment-item', 'reply-item')}>
-                                        <img src={reply.postedBy?.avatarURL ? (reply.postedBy.avatarURL.startsWith('http') ? reply.postedBy.avatarURL : `http://localhost:5001${reply.postedBy.avatarURL}`) : "/favicon.png"} alt="user" onError={(e) => { e.target.src = "/favicon.png" }} className={cx('small-avatar')} />
-                                        <div className={cx('comment-content')}>
-                                            <span className={cx('comment-user')}>{reply.postedBy?.displayName || 'User'}</span>
-                                            <p>{reply.text}</p>
-                                            <div className={cx('comment-actions')}>
-                                                <span className={cx('comment-date')}>{new Date(reply.created).toLocaleDateString()}</span>
-                                                <button className={cx('text-btn', { liked: isReplyLiked })} onClick={() => reactToReply(postId, comment._id, reply._id, "like")}>
-                                                    {isReplyLiked ? "Unlike" : "Like"} ({replyLikeCount})
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                            <button className={cx('hide-replies-btn')} onClick={() => setShowReplies(false)}>Hide replies</button>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Reply Input */}
-            {isReplying && (
-                <form onSubmit={handleReply} className={cx('reply-form')}>
-                    <input
-                        type="text"
-                        placeholder={`Reply to ${comment.postedBy?.displayName || 'user'}...`}
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        autoFocus
-                    />
-                    <button type="submit" disabled={!replyText.trim()}>Send</button>
-                </form>
-            )}
-        </div>
-    );
-}
-
-const CommentsDrawer = ({ post, onClose, open }) => {
-    const { addComment } = usePostStore();
-    const { user } = useAuthStore();
-    const [text, setText] = useState("");
-    const commentsRef = useRef(null);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!text.trim()) return;
-
-        await addComment(post._id, text);
-        setText("");
-        // Scroll to bottom
-        setTimeout(() => {
-            if (commentsRef.current) {
-                commentsRef.current.scrollTop = commentsRef.current.scrollHeight;
-            }
-        }, 100);
-    };
-
-    return (
-        <MotionPresence open={open} className={cx('comments-drawer-overlay')} onClick={onClose}>
-            <div className={cx('comments-drawer')} onClick={e => e.stopPropagation()}>
-                <div className={cx('drawer-header')}>
-                    <h3>{post.comments?.length || 0} comments</h3>
-                    <button onClick={onClose} aria-label="Close comments"><X size={20} /></button>
-                </div>
-
-                <div className={cx('drawer-body')} ref={commentsRef}>
-                    {post.comments && post.comments.length > 0 ? (
-                        post.comments.map((comment, idx) => (
-                            <VideoCommentItem
-                                key={idx}
-                                comment={comment}
-                                postId={post._id}
-                                currentUserId={user?._id}
-                            />
-                        ))
-                    ) : (
-                        <div className={cx('no-comments')}>No comments yet. Be the first!</div>
-                    )}
-                </div>
-
-                <form className={cx('drawer-footer')} onSubmit={handleSubmit}>
-                    <input
-                        type="text"
-                        placeholder="Add a comment..."
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                    />
-                    <button type="submit" aria-label="Send comment" disabled={!text.trim()}>
-                        <Send size={18} />
-                    </button>
-                </form>
-            </div>
-        </MotionPresence>
-    );
-}
 
 export default VideoFeed;

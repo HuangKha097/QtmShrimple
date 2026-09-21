@@ -8,12 +8,14 @@ import {
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import default_avt from "../../../public/favicon.png";
 
+import { useNavigate } from 'react-router-dom';
 import { useChatStore } from "../../stores/useChatStore.js";
 import { toast } from "sonner";
 
 const cx = classNames.bind(styles);
 
 const CreateGroupPopup = ({ onCloseCreateGroupPopup }) => {
+    const navigate = useNavigate();
     const { friends, fetchFriends, isCreatingGroup, createConversation } = useChatStore();
 
     // --- State Form ---
@@ -84,9 +86,12 @@ const CreateGroupPopup = ({ onCloseCreateGroupPopup }) => {
 
         try {
             const memberIds = selectedMembers.map(user => user._id);
-            await createConversation(true, groupName.trim(), memberIds);
+            const newConvo = await createConversation(true, groupName.trim(), memberIds);
             toast.success(`Nhóm "${groupName}" đã được tạo thành công!`);
             onCloseCreateGroupPopup();
+            if (newConvo && newConvo._id) {
+                navigate(`/chat?id=${newConvo._id}`);
+            }
         } catch (error) {
             console.error("Error creating group:", error);
             const msg = error.response?.data?.message || "Không thể tạo nhóm. Vui lòng thử lại.";

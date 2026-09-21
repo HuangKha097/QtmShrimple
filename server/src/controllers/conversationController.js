@@ -1,6 +1,6 @@
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
-
+import { io } from '../socket/socket.js';
 
 export const createConversation = async (req, res) => {
     try {
@@ -15,9 +15,14 @@ export const createConversation = async (req, res) => {
             return res.status(400).json({message: "GroupName and membersList are required"});
         }
 
+        // Clean memberIds: exclude creator's id and deduplicate
+        const cleanMemberIds = Array.from(
+            new Set((memberIds || []).map(id => (id?._id || id).toString()).filter(id => id && id !== userId.toString()))
+        );
+
         let conversation;
         if (!isGroup) {
-            const participantId = memberIds[0];
+            const participantId = cleanMemberIds[0] || memberIds[0];
 
             conversation = await Conversation.findOne({
                 isGroup: false,
@@ -29,7 +34,7 @@ export const createConversation = async (req, res) => {
                     isGroup: false,
                     participants: [{userId}, {userId: participantId}],
                     lastMessageAt: new Date()
-                })
+                });
                 await conversation.save();
             }
         }
@@ -38,7 +43,7 @@ export const createConversation = async (req, res) => {
                 isGroup: true,
                 participants: [
                     {userId},
-                    ...memberIds.map(id => ({userId: id})),
+                    ...cleanMemberIds.map(id => ({userId: id})),
                 ],
                 group: {
                     name,
@@ -61,7 +66,31 @@ export const createConversation = async (req, res) => {
                 path: "lastMessage.senderId", select: "displayName avatarURL"
             }
         ]);
-        return res.status(201).json({conversation});
+
+        const participants = (conversation.participants || []).map((p) => ({
+            _id: p.userId?._id || p.userId,
+            displayName: p.userId?.displayName,
+            avatarURL: p.userId?.avatarURL ?? null,
+            joinedAt: p.joinedAt,
+        }));
+
+        const formatted = {
+            ...conversation.toObject(),
+            unreadCounts: conversation.unreadCounts || {},
+            participants,
+        };
+
+        // Realtime socket emit to all participants
+        try {
+            const allParticipantIds = [userId.toString(), ...cleanMemberIds];
+            allParticipantIds.forEach(uid => {
+                io.to(uid).emit("newConversation", formatted);
+            });
+        } catch (socketErr) {
+            console.error("Error emitting newConversation:", socketErr);
+        }
+
+        return res.status(201).json({conversation: formatted});
     } catch (error) {
         console.error("Error creating conversation", error);
         return res.status(500).json({message: "System error"});

@@ -648,3 +648,409 @@
     padding: 16px 16px 40px;
   }
 }
+
+// ------------------------------------------
+// X-Style Account Settings & Profile View / Edit
+// ------------------------------------------
+.profile-view-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 28px;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .profile-top-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .profile-user-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+
+    .profile-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(255, 255, 255, 0.12);
+      flex-shrink: 0;
+    }
+
+    .profile-names {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+
+      .profile-display-name {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #e7e9ea;
+        line-height: 1.2;
+      }
+
+      .profile-username {
+        font-size: 1.35rem;
+        color: #71767b;
+      }
+    }
+  }
+
+  .btn-edit-profile {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    border-radius: 9999px;
+    background: transparent;
+    color: #e7e9ea;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    font-size: 1.35rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+  }
+
+  .profile-bio {
+    font-size: 1.45rem;
+    color: #cfd9de;
+    line-height: 1.5;
+    margin-bottom: 20px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding-left: 2px;
+  }
+
+  .profile-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+    .detail-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.35rem;
+      color: #71767b;
+
+      .detail-icon {
+        color: #f97316;
+        flex-shrink: 0;
+      }
+
+      .detail-label {
+        color: #71767b;
+      }
+
+      .detail-val {
+        color: #e7e9ea;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .detail-badge {
+        font-size: 1.1rem;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        background: rgba(249, 115, 22, 0.12);
+        color: #f97316;
+        margin-left: auto;
+      }
+    }
+  }
+}
+
+// Edit Form
+.profile-edit-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 28px;
+  position: relative;
+
+  .edit-header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #f97316;
+    background: rgba(249, 115, 22, 0.1);
+    padding: 4px 12px;
+    border-radius: 9999px;
+    margin-bottom: 18px;
+  }
+
+  .two-cols-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+
+    @media (max-width: 600px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .edit-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+    .btn-cancel {
+      padding: 10px 22px;
+      border-radius: 9999px;
+      background: transparent;
+      color: #e7e9ea;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 1.4rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+    }
+
+    .btn-save {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      border-radius: 9999px;
+      background: #f97316;
+      color: #ffffff;
+      border: none;
+      font-size: 1.4rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background: #ea580c;
+        transform: translateY(-1px);
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+    }
+  }
+}
+
+// ------------------------------------------
+// Privacy Controls & Checkboxes
+// ------------------------------------------
+.privacy-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .privacy-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+
+    .privacy-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+
+      .privacy-item-title {
+        font-size: 1.45rem;
+        font-weight: 600;
+        color: #e7e9ea;
+      }
+
+      .privacy-item-desc {
+        font-size: 1.25rem;
+        color: #71767b;
+        line-height: 1.4;
+      }
+    }
+  }
+
+  .field-checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 6px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+
+    .field-checkbox-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      font-size: 1.35rem;
+      color: #cfd9de;
+
+      &:hover {
+        color: #ffffff;
+      }
+
+      span {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+    }
+  }
+}
+
+// ------------------------------------------
+// Language Selector UI
+// ------------------------------------------
+.language-settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  .language-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+
+    .language-icon-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(249, 115, 22, 0.12);
+      color: #f97316;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    h3 {
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: #e7e9ea;
+      margin: 0;
+    }
+
+    .language-subtitle {
+      font-size: 1.35rem;
+      color: #71767b;
+      margin: 4px 0 0;
+    }
+  }
+
+  .language-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    .language-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+
+      &.active {
+        background: rgba(249, 115, 22, 0.08);
+        border-color: #f97316;
+      }
+
+      .language-info-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+
+        .language-flag {
+          font-size: 2.2rem;
+          line-height: 1;
+        }
+
+        .language-labels {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+
+          .language-main-name {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #e7e9ea;
+
+            .language-native {
+              font-size: 1.25rem;
+              color: #71767b;
+              font-weight: 400;
+            }
+          }
+
+          .language-desc {
+            font-size: 1.25rem;
+            color: #71767b;
+          }
+        }
+      }
+
+      .language-radio {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+
+        &.checked {
+          background: #f97316;
+          border-color: #f97316;
+          color: #ffffff;
+        }
+      }
+    }
+  }
+}

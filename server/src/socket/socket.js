@@ -21,6 +21,22 @@ const io = new Server(server, {
 
 // Map { [userId: string]: Set<socketId> }
 const userSocketMap = {}; 
+// Map { [userId: string]: boolean }
+const userVisibilityMap = {};
+
+export const broadcastOnlineUsers = () => {
+    const visibleOnlineUserIds = Object.keys(userSocketMap).filter(
+        (uid) => userVisibilityMap[uid] !== false
+    );
+
+    Object.entries(userSocketMap).forEach(([uid, sockets]) => {
+        const isSelfVisible = userVisibilityMap[uid] !== false;
+        const listToSend = isSelfVisible ? visibleOnlineUserIds : [];
+        sockets.forEach((sid) => {
+            io.to(sid).emit("getOnlineUsers", listToSend);
+        });
+    });
+};
 
 export const getReceiverSocketId = (receiverId) => {
     if (!receiverId) return null;
@@ -33,24 +49,34 @@ export const getReceiverSocketId = (receiverId) => {
 export const isUserOnline = (userId) => {
     if (!userId) return false;
     const sockets = userSocketMap[userId.toString()];
-    return !!(sockets && sockets.size > 0);
+    const isVisible = userVisibilityMap[userId.toString()] !== false;
+    return !!(sockets && sockets.size > 0 && isVisible);
 };
 
 io.on("connection", (socket) => {
     console.log("A user connected", socket.id);
 
     const userId = socket.handshake.query.userId?.toString();
+    const showOnline = socket.handshake.query.showOnlineStatus !== "false";
+
     if (userId && userId !== "undefined") {
         if (!userSocketMap[userId]) {
             userSocketMap[userId] = new Set();
         }
         userSocketMap[userId].add(socket.id);
+        userVisibilityMap[userId] = showOnline;
         // Cho socket gia nhập room theo userId
         socket.join(userId);
     }
 
-    // io.emit() is used to send events to all the connected clients
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    broadcastOnlineUsers();
+
+    socket.on("setOnlineVisibility", (isVisible) => {
+        if (userId) {
+            userVisibilityMap[userId] = !!isVisible;
+            broadcastOnlineUsers();
+        }
+    });
 
     // --- CALLING EVENTS (Signaling) ---
     
@@ -95,9 +121,10 @@ io.on("connection", (socket) => {
             userSocketMap[userId].delete(socket.id);
             if (userSocketMap[userId].size === 0) {
                 delete userSocketMap[userId];
+                delete userVisibilityMap[userId];
             }
         }
-        io.emit("getOnlineUsers", Object.keys(userSocketMap));
+        broadcastOnlineUsers();
     });
 });
 

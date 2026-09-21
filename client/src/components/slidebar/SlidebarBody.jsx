@@ -6,12 +6,14 @@ import styles from '../../assets/css/SlideBarBody.module.scss';
 import BodyFriendsChat from "./BodyFriendsChat.jsx";
 import BodyGroupsChat from "./BodyGroupsChat.jsx";
 import BodyRequests from "./BodyRequests.jsx";
+import { useTranslation } from 'react-i18next';
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 
 const cx = classNames.bind(styles);
 
 const SlidebarBody = () => {
+    const { t } = useTranslation();
     const { conversations = [], friendRequests = [], friends = [], fetchFriends } = useChatStore();
     const { user } = useAuthStore();
     const [activeTab, setActiveTab] = useState('friends');
@@ -58,59 +60,45 @@ const SlidebarBody = () => {
         const friendsNoChat = safeFriends
             .filter(friend => friend && friend._id && !processedPartnerIds.has(friend._id))
             .map(friend => ({
-                _id: `temp_${friend._id}`,
-                isGroup: false,
-                participants: [friend],
+                _id: `virtual_${friend._id}`,
+                isVirtual: true,
+                participants: [user, friend],
                 lastMessage: null,
-                unreadCounts: 0,
-                updatedAt: 0
+                updatedAt: new Date(0)
             }));
 
         return [...uniqueConversations, ...friendsNoChat];
     }, [conversations, friends, user]);
 
-    // Lọc Group riêng
-    const groupConversations = (conversations || []).filter((convo) => convo && convo.isGroup);
-
-    // --- LOGIC SEARCH ---
+    // Lọc theo search input
     const filteredFriends = useMemo(() => {
         if (!searchText.trim()) return combinedList;
-        const lowerSearch = searchText.toLowerCase();
-
-        return combinedList.filter(item => {
-            if (!item) return false;
-            const participants = item.participants || [];
-            let partner;
-            
-            if (item.isGroup) {
-                 return (item.name || item.group?.name || "").toLowerCase().includes(lowerSearch);
-            } else {
-                partner = participants.find(p => p && p._id && user && p._id !== user._id) || participants[0];
-            }
-
-            const name = partner?.displayName || partner?.username || "";
-            return name.toLowerCase().includes(lowerSearch);
+        return combinedList.filter(c => {
+            const partner = c.participants?.find(p => p && p._id && user && p._id !== user._id);
+            const name = partner?.displayName || partner?.username || '';
+            return name.toLowerCase().includes(searchText.toLowerCase());
         });
     }, [combinedList, searchText, user]);
 
+    // Nhóm chat
+    const groupConversations = useMemo(() => {
+        return (conversations || []).filter(c => c && c.isGroup);
+    }, [conversations]);
+
     const filteredGroups = useMemo(() => {
         if (!searchText.trim()) return groupConversations;
-        const lowerSearch = searchText.toLowerCase();
-
-        return groupConversations.filter(group => {
-            if (!group) return false;
-            const name = group.name || group.group?.name || "";
-            return name.toLowerCase().includes(lowerSearch);
-        });
+        return groupConversations.filter(c => 
+            (c.groupName || '').toLowerCase().includes(searchText.toLowerCase())
+        );
     }, [groupConversations, searchText]);
 
     const countGroups = groupConversations.length;
     const countFriendRequest = (friendRequests || []).length;
 
     const tabs = [
-        { key: 'friends', label: 'Hộp thư đến', count: 0 },
-        { key: 'groups', label: 'Nhóm', count: countGroups },
-        { key: 'requests', label: 'Lời mời', count: countFriendRequest }
+        { key: 'friends', label: t('chat.directMessages'), count: 0 },
+        { key: 'groups', label: t('chat.groups'), count: countGroups },
+        { key: 'requests', label: t('chat.requests'), count: countFriendRequest }
     ];
 
     const renderContent = () => {
@@ -134,7 +122,7 @@ const SlidebarBody = () => {
                     <Search className={cx("search-icon")} size={16} />
                     <input
                         type="text"
-                        placeholder="Tìm kiếm tin nhắn trực tiếp..."
+                        placeholder={t('chat.searchDirect')}
                         className={cx("search-input")}
                         value={searchText}
                         onChange={(e) => setSearchText(e.target.value)}

@@ -1,12 +1,15 @@
-import MotionPresence from '../common/MotionPresence';
 import React, { useState, useRef } from 'react';
-import { X, Upload, Film, Loader2 } from 'lucide-react';
+import { X, UploadCloud, Film, Loader2, Globe, Users, Lock, Sparkles } from 'lucide-react';
 import { usePostStore } from '../../stores/usePostStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import styles from '../../assets/css/VideoUploadModal.module.scss';
 import classNames from 'classnames/bind';
+import { toast } from 'sonner';
+import { motion as Motion, AnimatePresence } from 'motion/react';
 
 const cx = classNames.bind(styles);
+
+const POPULAR_TAGS = ['Shrimple', 'Viral', 'Video', 'HaiHuoc', 'CongNghe', 'Chill', 'KhamPha', 'AmThuc'];
 
 const VideoUploadModal = ({ isOpen, onClose }) => {
     const { createPost, isLoading } = usePostStore();
@@ -15,24 +18,34 @@ const VideoUploadModal = ({ isOpen, onClose }) => {
     const [content, setContent] = useState('');
     const [file, setFile] = useState(null);
     const [preview, setPreview] = useState(null);
-    const fileInputRef = useRef(null);
+    const [privacy, setPrivacy] = useState('public');
     const [dragActive, setDragActive] = useState(false);
-
-
-
-    const handleFileChange = (e) => {
-        const selectedFile = e.target.files[0];
-        validateAndSetFile(selectedFile);
-    };
+    const fileInputRef = useRef(null);
 
     const validateAndSetFile = (selectedFile) => {
-        if (selectedFile && selectedFile.type.startsWith('video/')) {
-            setFile(selectedFile);
-            setPreview(URL.createObjectURL(selectedFile));
-        } else {
-            alert("Please upload a valid video file.");
+        if (!selectedFile) return;
+
+        if (!selectedFile.type.startsWith('video/')) {
+            toast.error("Vui lòng chọn tệp video hợp lệ (MP4, WebM, MOV)!");
+            return;
         }
-    }
+
+        // Limit size: e.g. 100MB
+        const maxBytes = 100 * 1024 * 1024;
+        if (selectedFile.size > maxBytes) {
+            toast.error("Dung lượng video không được vượt quá 100MB!");
+            return;
+        }
+
+        setFile(selectedFile);
+        const objectUrl = URL.createObjectURL(selectedFile);
+        setPreview(objectUrl);
+    };
+
+    const handleFileChange = (e) => {
+        const selected = e.target.files?.[0];
+        validateAndSetFile(selected);
+    };
 
     const handleDrag = (e) => {
         e.preventDefault();
@@ -53,88 +66,227 @@ const VideoUploadModal = ({ isOpen, onClose }) => {
         }
     };
 
-    const handleSubmit = async () => {
-        if (!file) return;
-        
-        // Ensure duration check happens on server, but we can also check client side if we load metadata
-        // For now, rely on server
-        
-        await createPost({
-            content: content || "Check out this video! 🎥", // Default caption if empty
-            image: file // reusing the 'image' field helper in store which handles media
-        });
-        
-        onClose();
-        setContent('');
-        setFile(null);
-        setPreview(null);
+    const handleAddTag = (tag) => {
+        const tagText = `#${tag} `;
+        if (!content.includes(tagText.trim())) {
+            setContent(prev => (prev ? `${prev.trim()} ${tagText}` : tagText));
+        }
     };
 
+    const handleSubmit = async () => {
+        if (!file || isLoading) return;
+
+        try {
+            await createPost({
+                content: content.trim() || "Video mới trên Shrimple 🎥",
+                video: file,
+                privacy: privacy
+            });
+
+            onClose();
+            setContent('');
+            setFile(null);
+            if (preview) URL.revokeObjectURL(preview);
+            setPreview(null);
+        } catch (err) {
+            toast.error("Không thể tải lên video");
+        }
+    };
+
+    const formatFileSize = (bytes) => {
+        if (!bytes) return '';
+        const mb = bytes / (1024 * 1024);
+        return `${mb.toFixed(1)} MB`;
+    };
+
+    if (!isOpen) return null;
+
     return (
-        <MotionPresence open={isOpen} className={cx('modal-overlay')} onClick={onClose}>
-            <div role="dialog" aria-modal="true" aria-labelledby="upload-video-title" className={cx('modal-content')} onClick={e => e.stopPropagation()}>
-                <button className={cx('close-btn')} onClick={onClose} aria-label="Close upload">
-                    <X size={24} />
-                </button>
-                
-                <h2 id="upload-video-title" className={cx('modal-title')}>Upload Video</h2>
-                
-                <div className={cx('upload-body')}>
-                    {!preview ? (
-                        <div 
-                            className={cx('drag-drop-zone', { active: dragActive })}
-                            role="button" tabIndex={0}
-                            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInputRef.current?.click(); } }}
-                            onDragEnter={handleDrag}
-                            onDragLeave={handleDrag}
-                            onDragOver={handleDrag}
-                            onDrop={handleDrop}
-                            onClick={() => fileInputRef.current?.click()}
-                        >
-                            <Upload size={48} className={cx('upload-icon')} />
-                            <h3>Select video to upload</h3>
-                            <p>Or drag and drop a file</p>
-                            <span className={cx('info-text')}>MP4 or WebM • 60s max</span>
-                            <input 
-                                type="file" 
-                                ref={fileInputRef} 
-                                onChange={handleFileChange} 
-                                accept="video/*" 
-                                hidden 
-                            />
-                        </div>
-                    ) : (
-                        <div className={cx('preview-zone')}>
-                            <video src={preview} controls className={cx('video-preview')} />
-                            <button className={cx('remove-video-btn')} onClick={() => { setFile(null); setPreview(null); }}>
-                                Change Video
+        <AnimatePresence>
+            {isOpen && (
+                <Motion.div 
+                    className={cx('modalOverlay')}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={onClose}
+                >
+                    <Motion.div 
+                        className={cx('modalContent')}
+                        initial={{ scale: 0.92, opacity: 0, y: 16 }}
+                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                        exit={{ scale: 0.92, opacity: 0, y: 16 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className={cx('modalHeader')}>
+                            <h2 className={cx('modalTitle')}>Đăng video mới</h2>
+                            <button 
+                                type="button" 
+                                className={cx('closeBtn')} 
+                                onClick={onClose} 
+                                aria-label="Đóng"
+                            >
+                                <X size={20} />
                             </button>
                         </div>
-                    )}
-                    
-                    <div className={cx('form-group')}>
-                        <label>Caption</label>
-                        <textarea 
-                            value={content}
-                            onChange={(e) => setContent(e.target.value)}
-                            placeholder={`What's on your mind, ${user?.displayName || 'User'}?`}
-                            rows={3}
-                        />
-                    </div>
-                </div>
 
-                <div className={cx('modal-footer')}>
-                    <button className={cx('cancel-btn')} onClick={onClose} disabled={isLoading}>Cancel</button>
-                    <button 
-                        className={cx('post-btn')} 
-                        onClick={handleSubmit}
-                        disabled={!file || isLoading}
-                    >
-                        {isLoading ? <><Loader2 className={cx('spinner')} size={18} /> Posting...</> : 'Post'}
-                    </button>
-                </div>
-            </div>
-        </MotionPresence>
+                        {/* Body */}
+                        <div className={cx('modalBody')}>
+                            {/* Drag & Drop or Video Preview */}
+                            {!preview ? (
+                                <div 
+                                    className={cx('dragDropZone', { active: dragActive })}
+                                    onDragEnter={handleDrag}
+                                    onDragLeave={handleDrag}
+                                    onDragOver={handleDrag}
+                                    onDrop={handleDrop}
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <div className={cx('uploadIconCircle')}>
+                                        <UploadCloud size={32} />
+                                    </div>
+                                    <span className={cx('dropTitle')}>Kéo thả video vào đây</span>
+                                    <span className={cx('dropSubtitle')}>hoặc nhấp để chọn tệp từ máy tính của bạn</span>
+                                    
+                                    <button type="button" className={cx('browseBtn')}>
+                                        Chọn tệp video
+                                    </button>
+
+                                    <span className={cx('formatsInfo')}>
+                                        MP4, WebM hoặc MOV • Tối đa 100MB
+                                    </span>
+
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef} 
+                                        onChange={handleFileChange} 
+                                        accept="video/mp4,video/webm,video/quicktime" 
+                                        hidden 
+                                    />
+                                </div>
+                            ) : (
+                                <div className={cx('previewZone')}>
+                                    <div className={cx('previewPlayerWrapper')}>
+                                        <video 
+                                            src={preview} 
+                                            controls 
+                                            autoPlay 
+                                            muted 
+                                            className={cx('videoPreviewPlayer')} 
+                                        />
+                                    </div>
+
+                                    <div className={cx('previewMetaRow')}>
+                                        <div className={cx('fileDetails')}>
+                                            <Film size={16} />
+                                            <span className={cx('fileName')}>{file?.name}</span>
+                                            <span>• {formatFileSize(file?.size)}</span>
+                                        </div>
+
+                                        <button 
+                                            type="button" 
+                                            className={cx('changeVideoBtn')}
+                                            onClick={() => {
+                                                setFile(null);
+                                                if (preview) URL.revokeObjectURL(preview);
+                                                setPreview(null);
+                                            }}
+                                        >
+                                            Đổi video
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Caption Section */}
+                            <div className={cx('captionSection')}>
+                                <div className={cx('captionLabelRow')}>
+                                    <label>Mô tả video</label>
+                                    <span className={cx('charCount')}>{content.length}/500</span>
+                                </div>
+
+                                <textarea 
+                                    className={cx('captionTextarea')}
+                                    value={content}
+                                    onChange={(e) => setContent(e.target.value.slice(0, 500))}
+                                    placeholder={`Chia sẻ điều gì đó về video của bạn, ${user?.displayName || ''}...`}
+                                    rows={3}
+                                />
+
+                                {/* Quick Hashtag Suggestions */}
+                                <div className={cx('hashtagSuggestions')}>
+                                    <span style={{ fontSize: '1.2rem', color: '#71767b', marginRight: 4 }}>
+                                        Gợi ý hashtag:
+                                    </span>
+                                    {POPULAR_TAGS.map(tag => (
+                                        <button 
+                                            key={tag}
+                                            type="button"
+                                            className={cx('suggestionChip')}
+                                            onClick={() => handleAddTag(tag)}
+                                        >
+                                            #{tag}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Privacy Option */}
+                            <div className={cx('privacySection')}>
+                                <div className={cx('privacyLabel')}>
+                                    {privacy === 'public' && <Globe size={18} color="#f97316" />}
+                                    {privacy === 'friends' && <Users size={18} color="#f97316" />}
+                                    {privacy === 'private' && <Lock size={18} color="#f97316" />}
+                                    <span>Quyền riêng tư</span>
+                                </div>
+
+                                <select 
+                                    value={privacy} 
+                                    onChange={(e) => setPrivacy(e.target.value)}
+                                    className={cx('privacySelect')}
+                                >
+                                    <option value="public">Công khai</option>
+                                    <option value="friends">Bạn bè</option>
+                                    <option value="private">Chỉ mình tôi</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className={cx('modalFooter')}>
+                            <button 
+                                type="button" 
+                                className={cx('cancelBtn')} 
+                                onClick={onClose} 
+                                disabled={isLoading}
+                            >
+                                Hủy
+                            </button>
+                            <button 
+                                type="button" 
+                                className={cx('postBtn')} 
+                                onClick={handleSubmit}
+                                disabled={!file || isLoading}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Đang đăng video...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles size={16} />
+                                        <span>Đăng video</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </Motion.div>
+                </Motion.div>
+            )}
+        </AnimatePresence>
     );
 };
 

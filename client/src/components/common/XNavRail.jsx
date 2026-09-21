@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/XNavRail.module.scss';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useChatStore } from '../../stores/useChatStore';
 import { motion as Motion } from 'motion/react';
@@ -24,6 +25,7 @@ import { ASSET_BASE_URL } from '../../config/env';
 const cx = classNames.bind(styles);
 
 export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModal }) {
+    const { t } = useTranslation();
     const { user, signOut } = useAuthStore();
     const conversations = useChatStore(state => state.conversations || []);
     const navigate = useNavigate();
@@ -50,18 +52,17 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
     };
 
     const handleLogout = async () => {
-        if (confirm("Bạn có muốn đăng xuất không?")) {
+        if (confirm(t('nav.signOutConfirm'))) {
             await signOut();
         }
     };
 
     const navItems = [
-        { path: '/feed', icon: <Newspaper size={24} strokeWidth={2} />, label: 'Bảng tin' },
-        { path: '/chat', icon: <MessageSquare size={24} strokeWidth={2} />, label: 'Tin nhắn' },
-        { path: '/video', icon: <Video size={24} strokeWidth={2} />, label: 'Video' },
-        { path: '/feed/friends', icon: <Users size={24} strokeWidth={2} />, label: 'Bạn bè' },
-        { path: '/feed/saved', icon: <Bookmark size={24} strokeWidth={2} />, label: 'Đã lưu' },
-        { path: user?._id ? `/feed/profile/${user._id}` : '/feed', icon: <User size={24} strokeWidth={2} />, label: 'Hồ sơ' },
+        { path: '/feed', icon: <Newspaper size={24} strokeWidth={2} />, label: t('nav.feed') },
+        { path: '/chat', icon: <MessageSquare size={24} strokeWidth={2} />, label: t('nav.chat') },
+        { path: '/video', icon: <Video size={24} strokeWidth={2} />, label: t('nav.video') },
+        { path: '/feed/friends', icon: <Users size={24} strokeWidth={2} />, label: t('nav.friends') },
+        { path: user?._id ? `/feed/profile/${user._id}` : '/feed', icon: <User size={24} strokeWidth={2} />, label: t('nav.profile') },
     ];
 
     const handlePostClick = () => {
@@ -127,13 +128,13 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                 <NavLink
                     to="/setting"
                     className={({ isActive }) => cx('nav-item', { active: isActive || location.pathname.startsWith('/setting') })}
-                    title="Cài đặt"
-                    aria-label="Cài đặt"
+                    title={t('nav.settings')}
+                    aria-label={t('nav.settings')}
                 >
                     <div className={cx('icon-wrapper')}>
                         <Settings size={24} strokeWidth={2} />
                     </div>
-                    <span className={cx('nav-label')}>Cài đặt</span>
+                    <span className={cx('nav-label')}>{t('nav.settings')}</span>
                 </NavLink>
 
                 {/* Post Action Button */}
@@ -144,11 +145,11 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                     type="button"
                     className={cx('post-action-btn')}
                     onClick={handlePostClick}
-                    title="Đăng bài viết mới"
-                    aria-label="Đăng bài"
+                    title={t('nav.postNew')}
+                    aria-label={t('nav.post')}
                 >
                     <div className={cx('btn-shimmer')} aria-hidden="true" />
-                    <span className={cx('post-btn-text')}>Đăng</span>
+                    <span className={cx('post-btn-text')}>{t('nav.post')}</span>
                     <Feather size={20} className={cx('post-btn-icon')} />
                 </Motion.button>
             </nav>
@@ -204,7 +205,7 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                                     }}
                                 >
                                     <User size={16} />
-                                    <span>Hồ sơ của bạn</span>
+                                    <span>{t('nav.yourProfile')}</span>
                                 </button>
                                 <button
                                     type="button"
@@ -215,7 +216,7 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                                     }}
                                 >
                                     <LogOut size={16} />
-                                    <span>Đăng xuất @{user?.username}</span>
+                                    <span>{t('nav.signOut')} @{user?.username}</span>
                                 </button>
                             </div>
                         </>

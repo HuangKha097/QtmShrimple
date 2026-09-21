@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import classNames from 'classnames/bind';
+import { useTranslation } from 'react-i18next';
 import styles from '../../assets/css/SettingContainer.module.scss';
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import { userSettingsService } from "../../services/userSettingsService.js";
@@ -7,6 +8,7 @@ import { userSettingsService } from "../../services/userSettingsService.js";
 const cx = classNames.bind(styles);
 
 const Notifications = () => {
+    const { t } = useTranslation();
     const { user, checkAuth } = useAuthStore();
     
     // Initialize from user settings or defaults
@@ -47,12 +49,12 @@ const Notifications = () => {
 
     return (
         <>
-            <h3>Notifications</h3>
+            <h3>{t('settings.notificationsTab')}</h3>
             
             <div className={cx('section')}>
                 <h4>Alerts</h4>
                 <div className={cx('form-group', 'row-layout')}>
-                    <label>Sound</label>
+                    <label>{t('settings.sound')}</label>
                     <label className={cx('switch')}>
                         <input 
                             type="checkbox" 
@@ -64,7 +66,7 @@ const Notifications = () => {
                 </div>
 
                  <div className={cx('form-group', 'row-layout')}>
-                    <label>Desktop Notifications</label>
+                    <label>{t('settings.desktopNotifications')}</label>
                     <label className={cx('switch')}>
                         <input 
                             type="checkbox" 

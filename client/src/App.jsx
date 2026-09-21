@@ -29,6 +29,8 @@ import { useUIStore } from "./stores/useUIStore.js";
 import { AntiPeepProvider } from "./components/anti-peep/AntiPeepProvider.jsx";
 
 
+import { useTranslation } from 'react-i18next';
+
 // Wrapper to consume outlet context and pass it to ChatContainer
 const ChatContainerWrapper = () => {
     const context = useOutletContext();
@@ -36,11 +38,16 @@ const ChatContainerWrapper = () => {
 };
 
 const App = () => {
+    const { i18n } = useTranslation();
     const { isLight } = useThemeStore();
     const { subscribeToCallEvents, unsubscribeFromCallEvents } = useCallStore();
 
     const { user, socket } = useAuthStore(); // Check if user and socket are ready to subscribe
     const { setOffline } = useUIStore();
+
+    useEffect(() => {
+        document.documentElement.lang = i18n.language || 'vi';
+    }, [i18n.language]);
 
     // Subscribe to call events
     useEffect(() => {

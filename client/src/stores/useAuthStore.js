@@ -300,6 +300,7 @@ export const useAuthStore = create(
                 const newSocket = io(SOCKET_URL, {
                     query: {
                         userId: user._id,
+                        showOnlineStatus: user?.privacy?.showOnlineStatus !== false ? "true" : "false",
                     },
                 });
 
@@ -307,7 +308,12 @@ export const useAuthStore = create(
                 set({ socket: newSocket });
 
                 newSocket.on("getOnlineUsers", (userIds) => {
-                    set({ onlineUsers: userIds });
+                    const currentUser = get().user;
+                    if (currentUser?.privacy?.showOnlineStatus === false) {
+                        set({ onlineUsers: [] });
+                    } else {
+                        set({ onlineUsers: userIds });
+                    }
                 });
                 
                 // Subscribe to chat and notification events
@@ -317,6 +323,16 @@ export const useAuthStore = create(
                 // Subscribe to like/comment/reply notification events
                 useNotificationStore.getState().subscribeToNotificationEvents();
                 useNotificationStore.getState().fetchNotifications();
+            },
+
+            setOnlineVisibility: (isVisible) => {
+                const { socket } = get();
+                if (socket?.connected) {
+                    socket.emit("setOnlineVisibility", isVisible);
+                }
+                if (!isVisible) {
+                    set({ onlineUsers: [] });
+                }
             },
 
             disconnectSocket: () => {

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Users, Bookmark, Settings, X } from 'lucide-react';
+import { Users, Settings, X } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useChatStore } from '../../stores/useChatStore';
 import AppNavigation, { ThemeToggle } from '../common/AppNavigation';
@@ -30,7 +30,7 @@ export default function PostsSidebar({ onCloseSetting, onNavigate, onClose }) {
             <div className={styles.body}>
                 <p className={styles.sectionTitle}>YOUR SPACE</p>
                 <nav aria-label="Your space" className={styles.menu}>
-                    {[[ '/feed/friends', <Users size={20} />, 'Friends' ], [ '/feed/saved', <Bookmark size={20} />, 'Saved posts' ]].map(([path, icon, label]) => (
+                    {[[ '/feed/friends', <Users size={20} />, 'Bạn bè' ]].map(([path, icon, label]) => (
                         <NavLink key={path} to={path} onClick={onNavigate} className={({isActive}) => isActive ? styles.active : ''}>
                             {icon}<span>{label}</span>
                         </NavLink>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import classNames from 'classnames/bind';
+import { useTranslation } from 'react-i18next';
 import styles from '../../assets/css/PostsContainer.module.scss';
 import { useChatStore } from '../../stores/useChatStore';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -12,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 const cx = classNames.bind(styles);
 
 const WhoToFollowWidget = ({ onOpenAddFriend }) => {
+    const { t } = useTranslation();
     const { suggestedFriends, fetchSuggestedFriends, friends } = useChatStore();
     const { user: currentUser } = useAuthStore();
     const navigate = useNavigate();
@@ -58,7 +60,7 @@ const WhoToFollowWidget = ({ onOpenAddFriend }) => {
 
     return (
         <div className={cx('x-widget-card')}>
-            <h3 className={cx('widget-title')}>Gợi ý kết bạn</h3>
+            <h3 className={cx('widget-title')}>{t('feed.whoToFollow')}</h3>
 
             <div className={cx('widget-list')}>
                 {displaySuggestions.map((user) => {
@@ -106,13 +108,13 @@ const WhoToFollowWidget = ({ onOpenAddFriend }) => {
                                 {isPending ? (
                                     <Loader2 className={cx('btn-spinner')} size={14} />
                                 ) : isFriend ? (
-                                    <span>Bạn bè</span>
+                                    <span>{t('feed.friends')}</span>
                                 ) : isSent ? (
                                     <>
-                                        <Check size={14} /> Đã gửi
+                                        <Check size={14} /> {t('feed.sentRequest')}
                                     </>
                                 ) : (
-                                    "Theo dõi"
+                                    t('feed.addFriend')
                                 )}
                             </button>
                         </div>
@@ -126,7 +128,7 @@ const WhoToFollowWidget = ({ onOpenAddFriend }) => {
                     className={cx('widget-footer-btn')}
                     onClick={onOpenAddFriend}
                 >
-                    Hiển thị thêm
+                    {t('feed.showMore')}
                 </button>
             )}
         </div>

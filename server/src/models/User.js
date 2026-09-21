@@ -121,7 +121,16 @@ const userSchema = new mongoose.Schema(
         privacy: {
             whoCanMessage: { type: String, enum: ["Everyone", "Friends", "Nobody"], default: "Everyone" },
             showBirthday: { type: Boolean, default: true },
-            showOnlineStatus: { type: Boolean, default: true }
+            birthdayVisibility: { 
+                type: String, 
+                enum: ["full", "day_month", "friends", "private"], 
+                default: "full" 
+            },
+            showOnlineStatus: { type: Boolean, default: true },
+            showWorkplace: { type: Boolean, default: true },
+            showSchool: { type: Boolean, default: true },
+            showLocation: { type: Boolean, default: true },
+            showBio: { type: Boolean, default: true }
         }
     },
     {

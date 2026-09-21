@@ -1,38 +1,57 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import classNames from 'classnames/bind';
+import { motion as Motion, AnimatePresence } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 import styles from '../../assets/css/ChatInfo.module.scss';
 import defaultAvatar from "../../../public/favicon.png";
 import { useAuthStore } from "../../stores/useAuthStore.js";
-import { chatService } from "../../services/chatService";
-import { userSettingsService } from "../../services/userSettingsService";
-import { FileText, Ban, X, Image as ImageIcon, Users, Info } from "lucide-react";
-
 import { useChatStore } from "../../stores/useChatStore.js";
+import { chatService } from "../../services/chatService.js";
+import { userSettingsService } from "../../services/userSettingsService.js";
 import { ASSET_BASE_URL } from "../../config/env.js";
+import { 
+    X, 
+    Image as ImageIcon, 
+    FileText, 
+    Users, 
+    User, 
+    Bell, 
+    BellOff, 
+    Ban, 
+    Share2, 
+    Download, 
+    Crown,
+    Check,
+    Loader2
+} from "lucide-react";
+import { toast } from 'sonner';
 
 const cx = classNames.bind(styles);
 
 const ChatInfo = ({ chat, onClose }) => {
-    const { user: currentUser } = useAuthStore();
+    const navigate = useNavigate();
+    const { user: currentUser, onlineUsers } = useAuthStore();
     const { friends } = useChatStore();
+
+    const [activeTab, setActiveTab] = useState('media'); // 'media' | 'files' | 'members'
     const [media, setMedia] = useState({ images: [], files: [] });
     const [loadingMedia, setLoadingMedia] = useState(false);
     const [isBlocked, setIsBlocked] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
     const [selectedImage, setSelectedImage] = useState(null);
+
+    const isGroup = !!chat?.isGroup;
+    const participants = chat?.participants || [];
 
     useEffect(() => {
         if (chat?._id) {
             setLoadingMedia(true);
             chatService.getSharedMedia(chat._id)
-                .then(data => setMedia(data))
+                .then(data => setMedia(data || { images: [], files: [] }))
                 .catch(err => console.error("Failed to fetch media", err))
                 .finally(() => setLoadingMedia(false));
         }
     }, [chat?._id]);
-
-
-    const isGroup = chat?.isGroup;
-    const participants = chat?.participants || [];
 
     const sortedParticipants = useMemo(() => {
         return [...(chat?.participants || [])].sort((a, b) => {
@@ -44,7 +63,9 @@ const ChatInfo = ({ chat, onClose }) => {
 
     if (!chat) return null;
 
-    let partner = !isGroup ? (participants.find(p => p && p._id && currentUser && p._id !== currentUser?._id) || participants[0]) : null;
+    let partner = !isGroup 
+        ? (participants.find(p => p && p._id && currentUser && p._id !== currentUser?._id) || participants[0]) 
+        : null;
 
     if (partner && partner._id && Array.isArray(friends) && friends.length > 0) {
         const friend = friends.find(f => f && f._id && (f._id === partner._id || f._id === partner._id?.toString()));
@@ -53,9 +74,19 @@ const ChatInfo = ({ chat, onClose }) => {
         }
     }
 
-    const displayName = isGroup ? (chat.name || chat.group?.name || "Group Chat") : (partner?.displayName || partner?.username || "User");
-    const subInfo = isGroup ? `${participants.length} members` : (partner?.email || "No email provided");
     const partnerId = partner?._id;
+    const isOnline = partnerId && Array.isArray(onlineUsers) && onlineUsers.includes(partnerId.toString());
+
+    const displayName = isGroup 
+        ? (chat.name || chat.group?.name || "Cuộc trò chuyện nhóm") 
+        : (partner?.displayName || partner?.username || "Người dùng");
+
+    const usernameTag = !isGroup && partner?.username ? `@${partner.username}` : null;
+    const subInfo = isGroup 
+        ? `${participants.length} thành viên` 
+        : (isOnline ? "Đang hoạt động" : "Ngoại tuyến");
+
+    const groupCreatorId = chat?.group?.createdBy?.toString();
 
     const getAvatarSrc = (url) => {
         if (!url) return defaultAvatar;
@@ -63,193 +94,382 @@ const ChatInfo = ({ chat, onClose }) => {
         return `${ASSET_BASE_URL}${url}`;
     };
 
-    const renderAvatar = () => {
-        if (isGroup) {
-            if (chat.avatarURL || chat.group?.avatarURL) {
-                return (
-                    <img
-                        src={getAvatarSrc(chat.avatarURL || chat.group?.avatarURL)}
-                        alt="Group Avatar"
-                        className={cx('hero-avatar')}
-                        onError={(e) => e.target.src = defaultAvatar}
-                    />
-                );
-            }
-            return (
-                <div className={cx('hero-avatar-stack')}>
-                    <img src={getAvatarSrc(participants[0]?.avatarURL)} className={cx('stack-img', 'first')} alt="" />
-                    {participants.length > 1 && <img src={getAvatarSrc(participants[1]?.avatarURL)} className={cx('stack-img', 'second')} alt="" />}
-                </div>
-            );
-        }
-
-        return (
-            <img
-                src={getAvatarSrc(partner?.avatarURL)}
-                alt="avatar"
-                className={cx('hero-avatar')}
-                onError={(e) => e.target.src = defaultAvatar}
-            />
-        );
-    };
-
     const handleBlockUser = async () => {
-        if (partnerId && window.confirm(`Are you sure you want to block ${displayName}?`)) {
+        if (!partnerId) return;
+        if (window.confirm(`Bạn có chắc chắn muốn chặn ${displayName}?`)) {
             try {
                 await userSettingsService.blockUser(partnerId);
                 await useAuthStore.getState().checkAuth();
                 setIsBlocked(true);
+                toast.success(`Đã chặn ${displayName}`);
             } catch (error) {
                 console.error("Failed to block user", error);
+                toast.error("Không thể chặn người dùng");
             }
         }
     };
 
-    return (
-        <div 
-            className={cx('chat-info-container')}
+    const handleToggleMute = () => {
+        setIsMuted(prev => {
+            const next = !prev;
+            toast.info(next ? "Đã tắt thông báo cuộc trò chuyện" : "Đã bật thông báo cuộc trò chuyện");
+            return next;
+        });
+    };
 
+    const handleCopyLink = () => {
+        navigator.clipboard.writeText(window.location.href);
+        toast.success("Đã sao chép liên kết vào bộ nhớ tạm");
+    };
+
+    const handleViewProfile = (uid) => {
+        if (uid) {
+            navigate(`/profile/${uid}`);
+        }
+    };
+
+    return (
+        <Motion.div 
+            className={cx('chat-info-container')}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
         >
+            {/* 1. Header (X Style Sticky Top) */}
             <header className={cx('header-nav')}>
-                <button className={cx('back-btn')} onClick={onClose} aria-label="Close Info">
-                    <X size={24} strokeWidth={2.5} />
+                <button 
+                    className={cx('back-btn')} 
+                    onClick={onClose} 
+                    aria-label="Đóng chi tiết"
+                    title="Đóng"
+                >
+                    <X size={20} strokeWidth={2.2} />
                 </button>
-                <span className={cx('nav-title')}>Details</span>
+                <div className={cx('nav-title-box')}>
+                    <span className={cx('nav-title')}>Thông tin cuộc trò chuyện</span>
+                </div>
             </header>
 
-            <section className={cx('profile-hero')} >
+            {/* 2. Hero Profile */}
+            <section className={cx('profile-hero')}>
                 <div className={cx('hero-content')}>
-                    <div className={cx('hero-avatar-container')}>
-                        {renderAvatar()}
-                        {!isGroup && partner?.status === 'online' && <div className={cx('online-indicator')} />}
+                    <div className={cx('avatar-wrapper')}>
+                        {isGroup ? (
+                            chat.avatarURL || chat.group?.avatarURL ? (
+                                <img
+                                    src={getAvatarSrc(chat.avatarURL || chat.group?.avatarURL)}
+                                    alt="Group Avatar"
+                                    className={cx('single-avatar')}
+                                    onError={(e) => { e.target.src = defaultAvatar; }}
+                                />
+                            ) : (
+                                <div className={cx('group-avatar-stack')}>
+                                    <img 
+                                        src={getAvatarSrc(participants[0]?.avatarURL)} 
+                                        className={cx('stack-img', 'first')} 
+                                        alt="" 
+                                        onError={(e) => { e.target.src = defaultAvatar; }}
+                                    />
+                                    {participants.length > 1 && (
+                                        <img 
+                                            src={getAvatarSrc(participants[1]?.avatarURL)} 
+                                            className={cx('stack-img', 'second')} 
+                                            alt="" 
+                                            onError={(e) => { e.target.src = defaultAvatar; }}
+                                        />
+                                    )}
+                                </div>
+                            )
+                        ) : (
+                            <div className={cx('single-avatar-box')}>
+                                <img
+                                    src={getAvatarSrc(partner?.avatarURL)}
+                                    alt={displayName}
+                                    className={cx('single-avatar')}
+                                    onError={(e) => { e.target.src = defaultAvatar; }}
+                                />
+                                <span className={cx('online-status-dot', { online: isOnline })} />
+                            </div>
+                        )}
                     </div>
-                    <h1 className={cx('hero-name')}>{displayName}</h1>
-                    <p className={cx('hero-sub')}>{subInfo}</p>
+
+                    <h2 className={cx('hero-name')}>{displayName}</h2>
+                    
+                    <div className={cx('hero-meta')}>
+                        {usernameTag && <span className={cx('hero-username')}>{usernameTag}</span>}
+                        <span className={cx('hero-sub', { online: isOnline })}>{subInfo}</span>
+                    </div>
+
+                    {/* Quick Action Pills (X Style) */}
+                    <div className={cx('quick-actions')}>
+                        {!isGroup && partnerId && (
+                            <Motion.button 
+                                className={cx('action-pill')}
+                                whileTap={{ scale: 0.94 }}
+                                onClick={() => handleViewProfile(partnerId)}
+                                title="Xem hồ sơ"
+                            >
+                                <User size={18} />
+                                <span>Hồ sơ</span>
+                            </Motion.button>
+                        )}
+
+                        <Motion.button 
+                            className={cx('action-pill', { active: isMuted })}
+                            whileTap={{ scale: 0.94 }}
+                            onClick={handleToggleMute}
+                            title={isMuted ? "Bật thông báo" : "Tắt thông báo"}
+                        >
+                            {isMuted ? <BellOff size={18} /> : <Bell size={18} />}
+                            <span>{isMuted ? "Đã tắt" : "Tắt báo"}</span>
+                        </Motion.button>
+
+                        {isGroup ? (
+                            <Motion.button 
+                                className={cx('action-pill')}
+                                whileTap={{ scale: 0.94 }}
+                                onClick={handleCopyLink}
+                                title="Chia sẻ liên kết"
+                            >
+                                <Share2 size={18} />
+                                <span>Chia sẻ</span>
+                            </Motion.button>
+                        ) : (
+                            <Motion.button 
+                                className={cx('action-pill', 'danger-pill', { blocked: isBlocked })}
+                                whileTap={{ scale: 0.94 }}
+                                onClick={handleBlockUser}
+                                title={isBlocked ? "Đã chặn" : "Chặn người dùng"}
+                            >
+                                <Ban size={18} />
+                                <span>{isBlocked ? "Đã chặn" : "Chặn"}</span>
+                            </Motion.button>
+                        )}
+                    </div>
                 </div>
             </section>
 
-            <div className={cx('scroll-content')}>
-                {/* Media Section */}
-                <section className={cx('info-section')} >
-                    <div className={cx('section-header')}>
-                        <div className={cx('header-title')}>
-                            <ImageIcon size={18} />
-                            <span>Shared Media</span>
-                        </div>
-                        <span className={cx('count-badge')}>{media.images.length}</span>
-                    </div>
-                    <div className={cx('media-grid')}>
-                        {loadingMedia ? (
-                            <div className={cx('skeleton-grid')}>{[1,2,3].map(i => <div key={i} className={cx('skeleton-item')} />)}</div>
-                        ) : media.images.length > 0 ? (
-                            media.images.slice(0, 6).map((img) => (
-                                <div 
-                                    key={img._id} 
-                                    className={cx('media-item-wrapper')}
+            {/* 3. Segmented Navigation Tabs (X Style) */}
+            <div className={cx('tabs-container')}>
+                <button 
+                    className={cx('tab-btn', { active: activeTab === 'media' })}
+                    onClick={() => setActiveTab('media')}
+                >
+                    <ImageIcon size={16} />
+                    <span>Ảnh ({media.images.length})</span>
+                    {activeTab === 'media' && (
+                        <Motion.div 
+                            className={cx('tab-indicator')} 
+                            layoutId="activeChatInfoTab" 
+                            transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                        />
+                    )}
+                </button>
 
-                                    onClick={() => setSelectedImage(img.url)}
-                                >
-                                    <img src={img.url} alt="Shared" className={cx('media-img')} />
-                                </div>
-                            ))
-                        ) : (
-                            <div className={cx('empty-state')}>
-                                <p>No photos yet</p>
-                            </div>
-                        )}
-                    </div>
-                </section>
+                <button 
+                    className={cx('tab-btn', { active: activeTab === 'files' })}
+                    onClick={() => setActiveTab('files')}
+                >
+                    <FileText size={16} />
+                    <span>Tệp ({media.files.length})</span>
+                    {activeTab === 'files' && (
+                        <Motion.div 
+                            className={cx('tab-indicator')} 
+                            layoutId="activeChatInfoTab" 
+                            transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                        />
+                    )}
+                </button>
 
-                {/* Files Section */}
-                <section className={cx('info-section')} >
-                    <div className={cx('section-header')}>
-                        <div className={cx('header-title')}>
-                            <FileText size={18} />
-                            <span>Files</span>
-                        </div>
-                    </div>
-                    <div className={cx('files-list')}>
-                        {loadingMedia ? (
-                            <div className={cx('skeleton-list')}>{[1,2].map(i => <div key={i} className={cx('skeleton-line')} />)}</div>
-                        ) : media.files.length > 0 ? (
-                            media.files.map((file) => (
-                                <a key={file._id} href={file.url} target="_blank" rel="noopener noreferrer" className={cx('file-card')}>
-                                    <div className={cx('file-icon')}>
-                                        <FileText size={20} />
-                                    </div>
-                                    <div className={cx('file-info')}>
-                                        <span className={cx('file-name')}>{file.fileName || "Shared File"}</span>
-                                        <span className={cx('file-meta')}>Document</span>
-                                    </div>
-                                </a>
-                            ))
-                        ) : (
-                            <div className={cx('empty-state')}>
-                                <p>No files shared</p>
-                            </div>
-                        )}
-                    </div>
-                </section>
-
-                {/* Members Section (Groups Only) */}
                 {isGroup && (
-                    <section className={cx('info-section')} >
-                        <div className={cx('section-header')}>
-                            <div className={cx('header-title')}>
-                                <Users size={18} />
-                                <span>Members</span>
-                            </div>
-                            <span className={cx('count-badge')}>{participants.length}</span>
-                        </div>
-                        <div className={cx('members-list')}>
-                            {sortedParticipants.map((member) => (
-                                <div key={member._id} className={cx('member-row')}>
-                                    <img 
-                                        src={getAvatarSrc(member.avatarURL)} 
-                                        className={cx('member-avatar')} 
-                                        alt="" 
-                                    />
-                                    <div className={cx('member-info')}>
-                                        <span className={cx('member-name')}>
-                                            {member._id === currentUser?._id ? "You" : (member.displayName || member.username)}
-                                        </span>
-                                        {member._id === currentUser?._id && <span className={cx('me-badge')}>You</span>}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-                )}
-
-                {/* Actions */}
-                {!isGroup && (
-                    <section className={cx('info-section', 'no-border')} >
-                        <button className={cx('danger-action-btn', { blocked: isBlocked })} onClick={handleBlockUser}>
-                            <Ban size={18} />
-                            <span>{isBlocked ? "User Blocked" : "Block User"}</span>
-                        </button>
-                    </section>
+                    <button 
+                        className={cx('tab-btn', { active: activeTab === 'members' })}
+                        onClick={() => setActiveTab('members')}
+                    >
+                        <Users size={16} />
+                        <span>Thành viên ({participants.length})</span>
+                        {activeTab === 'members' && (
+                            <Motion.div 
+                                className={cx('tab-indicator')} 
+                                layoutId="activeChatInfoTab" 
+                                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                            />
+                        )}
+                    </button>
                 )}
             </div>
 
-            {/* Image Preview Overlay */}
+            {/* 4. Tab Content Area */}
+            <div className={cx('scroll-content')}>
+                <AnimatePresence mode="wait">
+                    {activeTab === 'media' && (
+                        <Motion.div 
+                            key="tab-media"
+                            className={cx('tab-pane')}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.18 }}
+                        >
+                            {loadingMedia ? (
+                                <div className={cx('loading-box')}>
+                                    <Loader2 size={24} className={cx('spinner')} />
+                                </div>
+                            ) : media.images.length > 0 ? (
+                                <div className={cx('media-grid')}>
+                                    {media.images.map((img) => (
+                                        <Motion.div 
+                                            key={img._id} 
+                                            className={cx('media-item')}
+                                            whileHover={{ scale: 1.03 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => setSelectedImage(img.url)}
+                                        >
+                                            <img src={img.url} alt="Shared" loading="lazy" />
+                                        </Motion.div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className={cx('empty-state')}>
+                                    <ImageIcon size={36} className={cx('empty-icon')} />
+                                    <p className={cx('empty-text')}>Chưa có ảnh nào được chia sẻ</p>
+                                </div>
+                            )}
+                        </Motion.div>
+                    )}
 
+                    {activeTab === 'files' && (
+                        <Motion.div 
+                            key="tab-files"
+                            className={cx('tab-pane')}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.18 }}
+                        >
+                            {loadingMedia ? (
+                                <div className={cx('loading-box')}>
+                                    <Loader2 size={24} className={cx('spinner')} />
+                                </div>
+                            ) : media.files.length > 0 ? (
+                                <div className={cx('files-list')}>
+                                    {media.files.map((file) => (
+                                        <a 
+                                            key={file._id} 
+                                            href={file.url} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className={cx('file-card')}
+                                        >
+                                            <div className={cx('file-icon-box')}>
+                                                <FileText size={20} />
+                                            </div>
+                                            <div className={cx('file-details')}>
+                                                <span className={cx('file-name')}>{file.fileName || "Tệp đính kèm"}</span>
+                                                <span className={cx('file-meta')}>Nhấn để mở / tải xuống</span>
+                                            </div>
+                                            <div className={cx('file-download-btn')}>
+                                                <Download size={16} />
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className={cx('empty-state')}>
+                                    <FileText size={36} className={cx('empty-icon')} />
+                                    <p className={cx('empty-text')}>Chưa có tệp nào được gửi</p>
+                                </div>
+                            )}
+                        </Motion.div>
+                    )}
+
+                    {activeTab === 'members' && isGroup && (
+                        <Motion.div 
+                            key="tab-members"
+                            className={cx('tab-pane')}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.18 }}
+                        >
+                            <div className={cx('members-list')}>
+                                {sortedParticipants.map((member) => {
+                                    const isMe = member._id?.toString() === currentUser?._id?.toString();
+                                    const isCreator = groupCreatorId && member._id?.toString() === groupCreatorId;
+                                    const memberOnline = Array.isArray(onlineUsers) && onlineUsers.includes(member._id?.toString());
+
+                                    return (
+                                        <div 
+                                            key={member._id} 
+                                            className={cx('member-row')}
+                                            onClick={() => !isMe && handleViewProfile(member._id)}
+                                        >
+                                            <div className={cx('member-avatar-box')}>
+                                                <img 
+                                                    src={getAvatarSrc(member.avatarURL)} 
+                                                    className={cx('member-avatar')} 
+                                                    alt="" 
+                                                    onError={(e) => { e.target.src = defaultAvatar; }}
+                                                />
+                                                {memberOnline && <span className={cx('member-online-dot')} />}
+                                            </div>
+                                            
+                                            <div className={cx('member-info')}>
+                                                <div className={cx('name-line')}>
+                                                    <span className={cx('member-name')}>
+                                                        {isMe ? `${member.displayName || "Bạn"} (Bạn)` : (member.displayName || member.username || "Thành viên")}
+                                                    </span>
+                                                    {isCreator && (
+                                                        <span className={cx('creator-badge')} title="Trưởng nhóm">
+                                                            <Crown size={12} />
+                                                            <span>Trưởng nhóm</span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {member.username && (
+                                                    <span className={cx('member-username')}>@{member.username}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </Motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            {/* Lightbox Modal */}
+            <AnimatePresence>
                 {selectedImage && (
-                    <div 
+                    <Motion.div 
                         className={cx('overlay')}
-
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
                         onClick={() => setSelectedImage(null)}
                     >
-                        <img 
+                        <Motion.img 
                             src={selectedImage} 
-
-                            className={cx('full-img')} 
+                            className={cx('full-img')}
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                            onClick={(e) => e.stopPropagation()}
                         />
-                        <button className={cx('overlay-close')}><X size={32} /></button>
-                    </div>
+                        <button 
+                            className={cx('overlay-close')}
+                            onClick={() => setSelectedImage(null)}
+                            title="Đóng xem trước"
+                        >
+                            <X size={24} />
+                        </button>
+                    </Motion.div>
                 )}
-
-        </div>
+            </AnimatePresence>
+        </Motion.div>
     );
 };
 

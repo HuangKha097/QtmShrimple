@@ -25,11 +25,15 @@ export const checkFriendship = async (req, res, next) => {
             return next();
         }
         // todo chat group
-        const friendCheck = memberIds.map(async (memberId) => {
+        const cleanMemberIds = memberIds
+            .map(id => id?.toString())
+            .filter(id => id && id !== me);
+
+        const friendCheck = cleanMemberIds.map(async (memberId) => {
             const [userA, userB] = pair(me, memberId);
             const friend = await Friend.findOne({userA, userB});
             return friend ? null : memberId;
-        })
+        });
 
         const results = await Promise.all(friendCheck);
         const notFriends = results.filter(Boolean);

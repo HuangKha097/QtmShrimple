@@ -119,16 +119,30 @@
   // Reaction Picker
   .reaction-picker {
     position: fixed;
-    background-color: rgba(0, 0, 0, 0.92); 
-    backdrop-filter: blur(14px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background-color: rgba(0, 0, 0, 0.94); 
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     padding: 6px 12px;
     border-radius: 9999px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 16px rgba(249, 115, 22, 0.15);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 16px rgba(249, 115, 22, 0.18);
     display: flex;
     align-items: center;
     gap: 8px;
     z-index: 9999;
+    user-select: none;
+    animation: pickerPop 0.16s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+    // Hover bridge to prevent losing hover when moving mouse down towards bubble
+    &::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      height: 20px;
+      background: transparent;
+      pointer-events: auto;
+    }
 
     .emoji-btn {
       font-size: 2rem;
@@ -442,4 +456,15 @@
   0% { box-shadow: 0 0 0 2px #f97316; }
   50% { box-shadow: 0 0 15px rgba(249, 115, 22, 0.6); }
   100% { box-shadow: none; }
+}
+
+@keyframes pickerPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
