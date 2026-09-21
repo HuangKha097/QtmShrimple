@@ -4,6 +4,11 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { toast } from 'sonner';
 import { Lock, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import axios from '../../lib/axios';
+import FaceIDCalibrationModal from './FaceIDCalibrationModal';
+import styles from '../../assets/css/AntiPeep.module.scss';
+import classNames from 'classnames/bind';
+
+const cx = classNames.bind(styles);
 
 const AntiPeepContext = createContext();
 
@@ -22,6 +27,8 @@ export const AntiPeepProvider = ({ children }) => {
     const [calibrationStep, setCalibrationStep] = useState('idle'); // 'idle', 'face', 'pin'
     const [tempDescriptor, setTempDescriptor] = useState(null);
     const [guidanceText, setGuidanceText] = useState("Initializing...");
+    const [isCapturing, setIsCapturing] = useState(false);
+    const [landmarksData, setLandmarksData] = useState(null);
     const calibrationInterval = useRef(null);
 
     // PIN State
@@ -224,22 +231,32 @@ export const AntiPeepProvider = ({ children }) => {
 
             // Use TinyFace for fast guidance updates
             const options = new faceapi.TinyFaceDetectorOptions();
-            const detections = await faceapi.detectAllFaces(videoRef.current, options);
+            const detections = await faceapi.detectAllFaces(videoRef.current, options).withFaceLandmarks();
 
             if (!detections || detections.length === 0) {
                 setGuidanceText("No face detected. Look at the camera.");
+                setLandmarksData(null);
                 return;
             }
 
             if (detections.length > 1) {
                 setGuidanceText("Multiple faces detected. Ensure you are alone.");
+                setLandmarksData(null);
                 return;
             }
 
             const face = detections[0];
-            const videoWidth = videoRef.current.videoWidth;
-            const videoHeight = videoRef.current.videoHeight;
+            const videoWidth = videoRef.current.videoWidth || 320;
+            const videoHeight = videoRef.current.videoHeight || 240;
             const { x, y, width, height } = face.box;
+
+            if (face.landmarks) {
+                setLandmarksData({
+                    positions: face.landmarks.positions,
+                    videoWidth,
+                    videoHeight
+                });
+            }
 
             // Check Size (Distance)
             const faceAreaRatio = (width * height) / (videoWidth * videoHeight);
@@ -273,38 +290,43 @@ export const AntiPeepProvider = ({ children }) => {
 
             setGuidanceText("Perfect! Hold still and Capture.");
 
-        }, 200);
+        }, 150);
     };
 
     const handleCaptureFace = async () => {
         if (!videoRef.current) return;
+        setIsCapturing(true);
 
-        toast.promise(
-            async () => {
-                // Use SSD MobileNet for high precision enrollment
-                const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.8 });
-                const detection = await faceapi.detectSingleFace(videoRef.current, options).withFaceLandmarks().withFaceDescriptor();
+        try {
+            await toast.promise(
+                async () => {
+                    // Use SSD MobileNet for high precision enrollment
+                    const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.8 });
+                    const detection = await faceapi.detectSingleFace(videoRef.current, options).withFaceLandmarks().withFaceDescriptor();
 
-                if (!detection) throw new Error("Could not capture high-quality face. Try again.");
+                    if (!detection) throw new Error("Không thể ghi nhận khuôn mặt rõ nét. Vui lòng nhìn thẳng và thử lại.");
 
-                return detection;
-            },
-            {
-                loading: 'Capturing high-quality face data...',
-                success: (detection) => {
-                    const descriptor = Array.from(detection.descriptor);
-                    setTempDescriptor(descriptor);
-                    setCalibrationStep('pin');
-
-                    // Stop guidance
-                    if (calibrationInterval.current) clearInterval(calibrationInterval.current);
-                    return "Face captured successfully!";
+                    return detection;
                 },
-                error: (err) => {
-                    return err.message;
+                {
+                    loading: 'Đang ghi nhận dữ liệu khuôn mặt 3D...',
+                    success: (detection) => {
+                        const descriptor = Array.from(detection.descriptor);
+                        setTempDescriptor(descriptor);
+                        setCalibrationStep('pin');
+
+                        // Stop guidance
+                        if (calibrationInterval.current) clearInterval(calibrationInterval.current);
+                        return "Ghi nhận khuôn mặt thành công!";
+                    },
+                    error: (err) => {
+                        return err.message;
+                    }
                 }
-            }
-        );
+            );
+        } finally {
+            setIsCapturing(false);
+        }
     };
 
     const saveCalibration = async () => {
@@ -327,10 +349,10 @@ export const AntiPeepProvider = ({ children }) => {
                 }
             });
 
-            toast.success("Calibration Successful and Enabled!");
+            toast.success("Thiết lập Face ID thành công và đã kích hoạt bảo vệ!");
             closeCalibration();
         } catch (err) {
-            toast.error("Failed to save calibration.");
+            toast.error("Lỗi khi lưu dữ liệu Face ID");
             console.error(err);
         }
     };
@@ -339,6 +361,7 @@ export const AntiPeepProvider = ({ children }) => {
         setCalibrationStep('idle');
         setTempPin("");
         setTempDescriptor(null);
+        setLandmarksData(null);
         if (calibrationInterval.current) clearInterval(calibrationInterval.current);
 
         // If we weren't protecting, turn off camera
@@ -347,9 +370,11 @@ export const AntiPeepProvider = ({ children }) => {
             tracks.forEach(t => t.stop());
             videoRef.current.srcObject = null;
         }
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+        }
     };
-
-    // ...
 
     return (
         <AntiPeepContext.Provider value={{
@@ -378,151 +403,71 @@ export const AntiPeepProvider = ({ children }) => {
                 }}
             />
 
-            {/* Calibration Modal Overlay */}
-            {calibrationStep !== 'idle' && (
-                <div style={{
-                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
-                }}>
-                    <div style={{ background: '#1e1e1e', padding: '2rem', borderRadius: '1rem', width: '300px', textAlign: 'center' }}>
-                        <h2 style={{ color: 'white', marginBottom: '1rem' }}>
-                            {calibrationStep === 'face' ? 'Step 1: Face Calibration' : 'Step 2: Set PIN'}
-                        </h2>
+            {/* Apple Face ID 3D Calibration Modal */}
+            <FaceIDCalibrationModal
+                isOpen={calibrationStep !== 'idle'}
+                stream={streamRef.current}
+                step={calibrationStep}
+                guidanceText={guidanceText}
+                onCaptureFace={handleCaptureFace}
+                isCapturing={isCapturing}
+                tempPin={tempPin}
+                setTempPin={setTempPin}
+                onSave={saveCalibration}
+                onClose={closeCalibration}
+                landmarksData={landmarksData}
+            />
 
-                        {calibrationStep === 'face' ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
-                                <p style={{ color: '#ccc', marginBottom: '0.5rem' }}>
-                                    {guidanceText}
-                                </p>
-
-                                {/* Display Video within layout flow */}
-                                <div style={{
-                                    width: '100%',
-                                    height: '240px',
-                                    background: 'black',
-                                    borderRadius: '1rem',
-                                    overflow: 'hidden',
-                                    border: '2px solid var(--primary-color)',
-                                    marginBottom: '1rem'
-                                }}>
-                                    <video
-                                        ref={node => { if (node && streamRef.current) node.srcObject = streamRef.current; }}
-                                        autoPlay
-                                        muted
-                                        playsInline
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                    />
-                                </div>
-
-                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                                    <button
-                                        onClick={handleCaptureFace}
-                                        style={{
-                                            padding: '0.8rem 1.5rem', background: 'var(--primary-color)', color: 'white',
-                                            border: 'none', borderRadius: '0.5rem', cursor: 'pointer'
-                                        }}
-                                    >
-                                        Capture Face
-                                    </button>
-                                    <button
-                                        onClick={closeCalibration}
-                                        style={{
-                                            padding: '0.8rem 1.5rem', background: '#444', color: 'white',
-                                            border: 'none', borderRadius: '0.5rem', cursor: 'pointer'
-                                        }}
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <p style={{ color: '#ccc' }}>Enter a 4-digit PIN to unlock screen.</p>
-                                <input
-                                    type="password"
-                                    placeholder="0000"
-                                    maxLength={4}
-                                    value={tempPin}
-                                    onChange={(e) => setTempPin(e.target.value)}
-                                    style={{
-                                        width: '100%', padding: '0.8rem',
-                                        background: '#333', border: '1px solid #555', color: 'white', borderRadius: '0.5rem',
-                                        fontSize: '1.2rem', letterSpacing: '0.5rem', textAlign: 'center'
-                                    }}
-                                />
-                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                                    <button
-                                        onClick={saveCalibration}
-                                        disabled={tempPin.length < 4}
-                                        style={{
-                                            padding: '0.8rem 1.5rem', background: 'var(--primary-color)', color: 'white',
-                                            border: 'none', borderRadius: '0.5rem', cursor: 'pointer', opacity: tempPin.length < 4 ? 0.5 : 1
-                                        }}
-                                    >
-                                        Save & Enable
-                                    </button>
-                                    <button
-                                        onClick={closeCalibration}
-                                        style={{
-                                            padding: '0.8rem 1.5rem', background: '#444', color: 'white',
-                                            border: 'none', borderRadius: '0.5rem', cursor: 'pointer'
-                                        }}
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* LOCK SCREEN OVERLAY */}
+            {/* MODERN SECURITY LOCK SCREEN OVERLAY */}
             {isLocked && (
-                <div style={{
-                    position: 'fixed', inset: 0, zIndex: 10000,
-                    backdropFilter: 'blur(20px)',
-                    backgroundColor: 'rgba(0,0,0,0.4)',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
-                }}>
-                    <div className="animate-shake" style={{
-                        background: '#1a1a1a', padding: '3rem', borderRadius: '2rem',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                        textAlign: 'center', maxWidth: '400px', width: '90%',
-                        border: '1px solid rgba(255,255,255,0.1)'
-                    }}>
-                        <div style={{
-                            background: '#ff4444', width: '80px', height: '80px', borderRadius: '50%',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem'
-                        }}>
-                            <Lock size={40} color="white" />
+                <div className={cx('security-lock-backdrop')}>
+                    <div className={cx('security-lock-card')}>
+                        <div className={cx('lock-badge')}>
+                            <Lock size={36} />
                         </div>
 
-                        <h2 style={{ color: 'white', marginBottom: '0.5rem', fontSize: '1.5rem' }}>Security Lock</h2>
-                        <p style={{ color: '#aaa', marginBottom: '2rem' }}>{lockReason}</p>
+                        <h3>Khóa Bảo Mật</h3>
+                        <p className={cx('lock-reason')}>{lockReason || "Phát hiện người lạ hoặc nhiều người cùng nhìn vào màn hình."}</p>
 
                         <input
                             type="password"
                             value={pinInput}
                             onChange={(e) => setPinInput(e.target.value)}
-                            placeholder="Enter PIN"
+                            placeholder="Nhập mã PIN"
                             maxLength={4}
+                            autoFocus
                             style={{
-                                width: '200px', height: '50px', fontSize: '1.5rem', textAlign: 'center',
-                                background: '#333', border: '2px solid #555', borderRadius: '0.5rem', color: 'white',
-                                letterSpacing: '0.5rem', marginBottom: '1.5rem'
+                                width: '180px',
+                                height: '50px',
+                                fontSize: '1.8rem',
+                                textAlign: 'center',
+                                background: 'rgba(255, 255, 255, 0.06)',
+                                border: '2px solid rgba(255, 255, 255, 0.15)',
+                                borderRadius: '12px',
+                                color: '#ffffff',
+                                letterSpacing: '0.6rem',
+                                marginBottom: '20px',
+                                outline: 'none'
                             }}
                         />
 
                         <button
+                            type="button"
                             onClick={handleUnlock}
                             style={{
-                                width: '100%', padding: '1rem', background: 'white', color: 'black',
-                                fontWeight: 'bold', border: 'none', borderRadius: '0.5rem',
-                                fontSize: '1.1rem', cursor: 'pointer'
+                                width: '100%',
+                                padding: '12px',
+                                background: '#f97316',
+                                color: '#ffffff',
+                                fontWeight: '700',
+                                border: 'none',
+                                borderRadius: '9999px',
+                                fontSize: '1.45rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
                             }}
                         >
-                            Unlock Screen
+                            Mở khóa màn hình
                         </button>
                     </div>
                 </div>

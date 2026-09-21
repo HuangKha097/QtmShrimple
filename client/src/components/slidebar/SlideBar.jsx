@@ -32,7 +32,7 @@ const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPop
                         <button 
                             type="button" 
                             className={cx('header-action-btn')} 
-                            onClick={onCloseSetting}
+                            onClick={() => navigate('/setting?tab=chat')}
                             title="Cài đặt tin nhắn"
                             aria-label="Cài đặt"
                         >

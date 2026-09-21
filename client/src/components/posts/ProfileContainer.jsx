@@ -46,7 +46,7 @@ const ProfileContainer = () => {
         addComment, 
         deletePost 
     } = usePostStore();
-    const { user: currentUser, updateProfile } = useAuthStore();
+    const { user: currentUser } = useAuthStore();
     const { friends, sendRequestAction } = useChatStore();
 
     const [profileUser, setProfileUser] = useState(null);
@@ -55,17 +55,6 @@ const ProfileContainer = () => {
 
     // Active tab: 'posts' | 'reposts' | 'videos' | 'saved'
     const [activeTab, setActiveTab] = useState('posts');
-
-    // Edit Profile Modal State
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [editFormData, setEditFormData] = useState({
-        displayName: '',
-        bio: '',
-        workplace: '',
-        school: '',
-        location: '',
-    });
-    const [isSavingProfile, setIsSavingProfile] = useState(false);
 
     // Robust Own Profile Detection
     const isOwnProfile = Boolean(
@@ -159,54 +148,7 @@ const ProfileContainer = () => {
         }
     }, [targetUserId]);
 
-    // Open Edit Profile Modal
-    const handleOpenEditModal = () => {
-        const u = profileUser || currentUser;
-        if (!u) return;
-        setEditFormData({
-            displayName: u.displayName || '',
-            bio: u.bio || '',
-            workplace: u.workplace || '',
-            school: u.school || '',
-            location: typeof u.location === 'object' 
-                ? [u.location?.city, u.location?.country].filter(Boolean).join(', ')
-                : (u.location || ''),
-        });
-        setIsEditModalOpen(true);
-    };
 
-    // Save Profile Changes
-    const handleSaveProfile = async (e) => {
-        e.preventDefault();
-        if (!editFormData.displayName.trim()) {
-            toast.error("Tên hiển thị không được để trống!");
-            return;
-        }
-
-        setIsSavingProfile(true);
-        try {
-            const updated = await updateProfile({
-                displayName: editFormData.displayName.trim(),
-                bio: editFormData.bio.trim(),
-                workplace: editFormData.workplace.trim(),
-                school: editFormData.school.trim(),
-                location: {
-                    city: editFormData.location.trim(),
-                }
-            });
-
-            if (updated) {
-                setProfileUser(prev => ({ ...prev, ...updated }));
-            }
-            toast.success("Đã cập nhật hồ sơ thành công!");
-            setIsEditModalOpen(false);
-        } catch (err) {
-            console.error(err);
-            toast.error(err.response?.data?.message || "Lỗi khi cập nhật hồ sơ");
-        } finally {
-            setIsSavingProfile(false);
-        }
-    };
 
     // Handle Direct Message
     const handleMessageUser = () => {
@@ -358,7 +300,7 @@ const ProfileContainer = () => {
                                 <button
                                     type="button"
                                     className={cx('edit-profile-btn')}
-                                    onClick={handleOpenEditModal}
+                                    onClick={() => navigate('/setting')}
                                 >
                                     Chỉnh sửa hồ sơ
                                 </button>
@@ -583,101 +525,6 @@ const ProfileContainer = () => {
                     <WhoToFollowWidget />
                 </div>
             </aside>
-
-            {/* 7. Edit Profile Modal */}
-            <AnimatePresence>
-                {isEditModalOpen && (
-                    <div className={cx('edit-modal-backdrop')} onClick={() => setIsEditModalOpen(false)}>
-                        <Motion.div 
-                            className={cx('edit-modal-card')}
-                            onClick={(e) => e.stopPropagation()}
-                            initial={{ opacity: 0, scale: 0.94, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.94, y: 10 }}
-                            transition={{ duration: 0.2 }}
-                        >
-                            <form onSubmit={handleSaveProfile}>
-                                <div className={cx('edit-modal-header')}>
-                                    <div className={cx('header-left')}>
-                                        <button
-                                            type="button"
-                                            className={cx('close-modal-btn')}
-                                            onClick={() => setIsEditModalOpen(false)}
-                                        >
-                                            <X size={18} />
-                                        </button>
-                                        <h3 className={cx('modal-title')}>Chỉnh sửa hồ sơ</h3>
-                                    </div>
-                                    <button
-                                        type="submit"
-                                        className={cx('save-profile-btn')}
-                                        disabled={isSavingProfile}
-                                    >
-                                        {isSavingProfile ? "Đang lưu..." : "Lưu"}
-                                    </button>
-                                </div>
-
-                                <div className={cx('edit-modal-body')}>
-                                    <div className={cx('form-group')}>
-                                        <label>Tên hiển thị *</label>
-                                        <input
-                                            type="text"
-                                            value={editFormData.displayName}
-                                            onChange={(e) => setEditFormData({ ...editFormData, displayName: e.target.value })}
-                                            placeholder="Tên của bạn"
-                                            maxLength={50}
-                                            required
-                                        />
-                                    </div>
-
-                                    <div className={cx('form-group')}>
-                                        <label>Tiểu sử (Bio)</label>
-                                        <textarea
-                                            value={editFormData.bio}
-                                            onChange={(e) => setEditFormData({ ...editFormData, bio: e.target.value })}
-                                            placeholder="Mô tả về bản thân..."
-                                            maxLength={300}
-                                        />
-                                    </div>
-
-                                    <div className={cx('form-group')}>
-                                        <label>Nơi làm việc</label>
-                                        <input
-                                            type="text"
-                                            value={editFormData.workplace}
-                                            onChange={(e) => setEditFormData({ ...editFormData, workplace: e.target.value })}
-                                            placeholder="Công ty, tổ chức..."
-                                            maxLength={100}
-                                        />
-                                    </div>
-
-                                    <div className={cx('form-group')}>
-                                        <label>Trường học</label>
-                                        <input
-                                            type="text"
-                                            value={editFormData.school}
-                                            onChange={(e) => setEditFormData({ ...editFormData, school: e.target.value })}
-                                            placeholder="Trường đại học, cấp 3..."
-                                            maxLength={100}
-                                        />
-                                    </div>
-
-                                    <div className={cx('form-group')}>
-                                        <label>Vị trí / Nơi ở</label>
-                                        <input
-                                            type="text"
-                                            value={editFormData.location}
-                                            onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
-                                            placeholder="Ví dụ: TP. Hồ Chí Minh, Việt Nam"
-                                            maxLength={100}
-                                        />
-                                    </div>
-                                </div>
-                            </form>
-                        </Motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
         </div>
     );
 };

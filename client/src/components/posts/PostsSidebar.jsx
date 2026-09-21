@@ -50,7 +50,7 @@ export default function PostsSidebar({ onCloseSetting, onNavigate, onClose }) {
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.settings} onClick={() => { onNavigate(); onCloseSetting(); }}><Settings size={19} /> Settings</button>
+                <button className={styles.settings} onClick={() => { if (onNavigate) onNavigate(); navigate('/setting'); }}><Settings size={19} /> Settings</button>
                 <ThemeToggle />
             </div>
         </aside>

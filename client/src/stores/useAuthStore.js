@@ -222,6 +222,14 @@ export const useAuthStore = create(
                 }
             },
 
+            updateUser: (updated) => {
+                set((state) => ({
+                    user: typeof updated === 'function' 
+                        ? updated(state.user) 
+                        : { ...state.user, ...(typeof updated === 'object' ? updated : {}) }
+                }));
+            },
+
             updateProfile: async (profileData) => {
                 try {
                     set({ loading: true });

@@ -3,14 +3,13 @@ import MotionPresence from '../components/common/MotionPresence';
 import React, { useRef, useState } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../assets/css/ChatPage.module.scss';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import SlideBar from "../components/slidebar/SlideBar.jsx";
 import XNavRail from "../components/common/XNavRail.jsx";
 import { useAuthStore } from "../stores/useAuthStore.js";
 import { useChatStore } from "../stores/useChatStore.js";
 import { toast } from "sonner";
-import SettingContainer from "../components/setting/SettingContainer.jsx";
 import AddFriendPopUp from "../components/slidebar/AddFriendPopUp.jsx";
 import CreateGroupPopUp from "../components/slidebar/CreateGroupPopUp.jsx";
 import PostsSidebar from "../components/posts/PostsSidebar.jsx";
@@ -20,13 +19,13 @@ const cx = classNames.bind(styles);
 
 const ChatPage = () => {
     const { activeConversationId } = useChatStore();
-    const [isShowSetting, setIsShowSetting] = useState(false);
     const [isShowSlideBar, setIsShowSlideBar] = useState(true);
     const [isShowChatInfo, setIsShowChatInfo] = useState(false);
     const [isShowAddFriendPopup, setIsShowAddFriendPopup] = useState(false);
     const [isShowCreateGroupPopup, setIsShowCreateGroupPopup] = useState(false);
     const signOut = useAuthStore((state) => state.signOut);
     const location = useLocation();
+    const navigate = useNavigate();
     const shellRef = useRef(null);
     const contentRef = useRef(null);
     useSceneMotion(shellRef, contentRef, location.pathname);
@@ -39,7 +38,8 @@ const ChatPage = () => {
     const isFeedView = location.pathname.startsWith('/feed') || 
                        location.pathname.startsWith('/video') || 
                        location.pathname.startsWith('/post') ||
-                       location.pathname.startsWith('/profile');
+                       location.pathname.startsWith('/profile') ||
+                       location.pathname.startsWith('/setting');
 
     React.useEffect(() => {
         if (!activeConversationId) {
@@ -57,7 +57,7 @@ const ChatPage = () => {
         }
     };
 
-    const onCloseSetting = () => setIsShowSetting((prev) => !prev);
+    const onCloseSetting = () => navigate('/setting');
     const onCloseSlideBar = () => setIsShowSlideBar((prev) => !prev);
     const onCloseChatInfo = () => setIsShowChatInfo((prev) => !prev);
     const onCloseAddFriendPopup = () => setIsShowAddFriendPopup((prev) => !prev);
@@ -120,15 +120,6 @@ const ChatPage = () => {
                 </div>
 
                 <GlobalLoadingOverlay />
-
-                {/* Settings Modal */}
-                <MotionPresence 
-                    open={isShowSetting}
-                    className={cx("setting-wrapper")}
-                    onClick={(e) => e.target === e.currentTarget && onCloseSetting()}
-                >
-                    <SettingContainer onCloseSetting={onCloseSetting} handleLogout={handleLogout} />
-                </MotionPresence>
             </div>
 
             {/* Add Friend / Compose Popup */}

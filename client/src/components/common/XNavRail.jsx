@@ -124,10 +124,9 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                 })}
 
                 {/* Settings Item */}
-                <button
-                    type="button"
-                    className={cx('nav-item')}
-                    onClick={onCloseSetting}
+                <NavLink
+                    to="/setting"
+                    className={({ isActive }) => cx('nav-item', { active: isActive || location.pathname.startsWith('/setting') })}
                     title="Cài đặt"
                     aria-label="Cài đặt"
                 >
@@ -135,7 +134,7 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                         <Settings size={24} strokeWidth={2} />
                     </div>
                     <span className={cx('nav-label')}>Cài đặt</span>
-                </button>
+                </NavLink>
 
                 {/* Post Action Button */}
                 <Motion.button

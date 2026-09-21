@@ -17,6 +17,7 @@ import FriendsContainer from "./components/posts/FriendsContainer.jsx";
 import ProfileContainer from "./components/posts/ProfileContainer.jsx";
 import VideoFeed from "./pages/VideoFeed.jsx";
 import CompleteProfile from "./pages/CompleteProfile.jsx";
+import SettingContainer from "./components/setting/SettingContainer.jsx";
 
 import CallModal from "./components/chat/CallModal.jsx";
 import { useCallStore } from "./stores/useCallStore.js";
@@ -98,6 +99,8 @@ const App = () => {
                             <Route path="/feed/profile/:userId" element={<ProfileContainer />} />
                             <Route path="/profile/:userId" element={<ProfileContainer />} />
                             <Route path="/video" element={<VideoFeed />} />
+                            <Route path="/setting" element={<SettingContainer />} />
+                            <Route path="/settings" element={<SettingContainer />} />
                         </Route>
                     </Route>
                 </Routes>

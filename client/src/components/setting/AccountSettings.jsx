@@ -10,11 +10,28 @@ import { userSettingsService } from '../../services/userSettingsService';
 const cx = classNames.bind(styles);
 
 const AccountSettings = ({ handleLogout }) => {
-    const { user, updateUser } = useAuthStore();
+    const { user, updateUser, signOut } = useAuthStore();
+
+    const executeLogout = async () => {
+        if (handleLogout) {
+            handleLogout();
+        } else {
+            if (confirm("Bạn có muốn đăng xuất không?")) {
+                await signOut();
+            }
+        }
+    };
 
     const [displayName, setDisplayName] = useState(user?.displayName || "");
     const [username, setUsername] = useState(user?.username || ""); 
     const [bio, setBio] = useState(user?.bio || "");
+    const [workplace, setWorkplace] = useState(user?.workplace || "");
+    const [school, setSchool] = useState(user?.school || "");
+    const [location, setLocation] = useState(
+        typeof user?.location === 'object' 
+            ? [user.location?.city, user.location?.country].filter(Boolean).join(', ')
+            : (user?.location || "")
+    );
     const [avatar, setAvatar] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(user?.avatarURL || null);
 
@@ -39,6 +56,13 @@ const AccountSettings = ({ handleLogout }) => {
             setDisplayName(user.displayName || "");
             setUsername(user.username || "");
             setBio(user.bio || "");
+            setWorkplace(user.workplace || "");
+            setSchool(user.school || "");
+            setLocation(
+                typeof user.location === 'object' 
+                    ? [user.location?.city, user.location?.country].filter(Boolean).join(', ')
+                    : (user.location || "")
+            );
             setAvatarPreview(user.avatarURL || null);
         }
     }, [user]);
@@ -62,6 +86,11 @@ const AccountSettings = ({ handleLogout }) => {
             formData.append("displayName", displayName);
             formData.append("bio", bio);
             formData.append("username", username);
+            formData.append("workplace", workplace);
+            formData.append("school", school);
+            if (location) {
+                formData.append("location", JSON.stringify({ city: location.trim(), country: "" }));
+            }
             if (avatar) {
                 formData.append("avatar", avatar);
             }
@@ -72,10 +101,10 @@ const AccountSettings = ({ handleLogout }) => {
                 updateUser(updatedUser);
             }
 
-            toast.success("Profile updated successfully!");
+            toast.success("Cập nhật hồ sơ thành công!");
         } catch (error) {
             console.error("Failed to update profile:", error);
-            toast.error(error.response?.data?.message || "Failed to update profile");
+            toast.error(error.response?.data?.message || "Lỗi khi cập nhật hồ sơ");
         } finally {
             setIsUpdating(false);
         }
@@ -128,7 +157,7 @@ const AccountSettings = ({ handleLogout }) => {
             setNewPassword("");
 
             setTimeout(() => {
-                handleLogout();
+                executeLogout();
             }, 2000);
         } catch (error) {
             console.error("Failed to change password:", error);
@@ -152,7 +181,7 @@ const AccountSettings = ({ handleLogout }) => {
             await userSettingsService.deleteAccount();
             toast.success("Your account has been deleted. Goodbye!");
             setTimeout(() => {
-                handleLogout();
+                executeLogout();
             }, 3000);
         } catch (error) {
             console.error("Failed to delete account:", error);
@@ -215,6 +244,36 @@ const AccountSettings = ({ handleLogout }) => {
                         value={bio}
                         onChange={(e) => setBio(e.target.value)}
                     ></textarea>
+                </div>
+                <div className={cx('form-group')}>
+                    <label htmlFor="workplace">Workplace (Nơi làm việc)</label>
+                    <input
+                        type="text"
+                        id="workplace"
+                        placeholder="Công ty, tổ chức..."
+                        value={workplace}
+                        onChange={(e) => setWorkplace(e.target.value)}
+                    />
+                </div>
+                <div className={cx('form-group')}>
+                    <label htmlFor="school">School (Trường học)</label>
+                    <input
+                        type="text"
+                        id="school"
+                        placeholder="Trường đại học, viện nghiên cứu..."
+                        value={school}
+                        onChange={(e) => setSchool(e.target.value)}
+                    />
+                </div>
+                <div className={cx('form-group')}>
+                    <label htmlFor="location">Location (Vị trí / Nơi ở)</label>
+                    <input
+                        type="text"
+                        id="location"
+                        placeholder="Ví dụ: TP. Hồ Chí Minh, Việt Nam"
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                    />
                 </div>
                 <button
                     className={cx("save-btn")}
@@ -312,7 +371,7 @@ const AccountSettings = ({ handleLogout }) => {
                 </button>
             </div>
 
-            <button className={cx("sign-out-btn")} onClick={handleLogout}>Sign out</button>
+            <button className={cx("sign-out-btn")} onClick={executeLogout}>Sign out</button>
 
         </>
     );
