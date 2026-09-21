@@ -86,15 +86,17 @@ const App = () => {
 
                     <Route element={<ProtectedRoute />}>
                         <Route path="/complete-profile" element={<CompleteProfile />} />
-                        <Route path="/post/:postId" element={<SinglePostPage />} />
                         <Route element={<ChatPage />}>
                             <Route path="/" element={<Navigate to="/chat" replace />} />
                             <Route path="/chat" element={<ChatContainerWrapper />} />
                             <Route path="/feed" element={<PostsContainer />} />
+                            <Route path="/post/:postId" element={<SinglePostPage />} />
+                            <Route path="/feed/post/:postId" element={<SinglePostPage />} />
                             <Route path="/feed/search" element={<SearchResultsContainer />} />
                             <Route path="/feed/saved" element={<SavedPostsContainer />} />
                             <Route path="/feed/friends" element={<FriendsContainer />} />
                             <Route path="/feed/profile/:userId" element={<ProfileContainer />} />
+                            <Route path="/profile/:userId" element={<ProfileContainer />} />
                             <Route path="/video" element={<VideoFeed />} />
                         </Route>
                     </Route>

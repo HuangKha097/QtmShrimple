@@ -318,16 +318,33 @@ export const getVideoFeed = async (req, res) => {
 export const getUserPosts = async (req, res) => {
     try {
         const { userId: targetUserId } = req.params;
+        const { type } = req.query; // 'posts', 'reposts', 'videos'
         const currentUserId = req.user?._id;
 
         if (!targetUserId || !mongoose.Types.ObjectId.isValid(targetUserId)) {
             return res.status(200).json([]);
         }
 
-        let query = { author: targetUserId };
+        let baseQuery = {};
+        if (type === 'reposts') {
+            baseQuery = { reposts: targetUserId };
+        } else if (type === 'videos') {
+            baseQuery = { author: targetUserId, video: { $exists: true, $ne: "" } };
+        } else {
+            baseQuery = { author: targetUserId };
+        }
 
+        let privacyFilter = {};
         if (currentUserId && currentUserId.toString() === targetUserId.toString()) {
-            // Viewing own profile: can see all posts
+            // Viewing own profile
+            if (type === 'reposts') {
+                privacyFilter = {
+                    $or: [
+                        { author: currentUserId },
+                        { privacy: { $in: ["public", null, undefined] } }
+                    ]
+                };
+            }
         } else {
             let isFriend = false;
             if (currentUserId) {
@@ -341,13 +358,17 @@ export const getUserPosts = async (req, res) => {
             }
 
             if (isFriend) {
-                query.privacy = { $in: ["public", "friends", null, undefined] };
+                privacyFilter = { privacy: { $in: ["public", "friends", null, undefined] } };
             } else {
-                query.privacy = { $in: ["public", null, undefined] };
+                privacyFilter = { privacy: { $in: ["public", null, undefined] } };
             }
         }
 
-        const posts = await Post.find(query)
+        const finalQuery = Object.keys(privacyFilter).length > 0
+            ? { $and: [baseQuery, privacyFilter] }
+            : baseQuery;
+
+        const posts = await Post.find(finalQuery)
             .sort({ createdAt: -1 })
             .populate(postPopulateOptions);
 

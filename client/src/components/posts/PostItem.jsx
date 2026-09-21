@@ -52,10 +52,10 @@ function formatXTime(dateString) {
     return date.toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' });
 }
 
-const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
+const PostItem = ({ post, currentUser, onLike, onComment, onDelete, defaultShowComments = false }) => {
     const { toggleSavePost, repostPost, updatePostPrivacy, editPost } = usePostStore();
     const [commentText, setCommentText] = useState('');
-    const [showComments, setShowComments] = useState(false);
+    const [showComments, setShowComments] = useState(defaultShowComments);
     const [showOptions, setShowOptions] = useState(false);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);

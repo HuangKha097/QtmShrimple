@@ -36,7 +36,10 @@ const ChatPage = () => {
     const toggleFeedMenu = () => setFeedMenuPath(isFeedMenuOpen ? null : location.pathname);
 
     // Determine view mode from URL
-    const isFeedView = location.pathname.startsWith('/feed') || location.pathname.startsWith('/video');
+    const isFeedView = location.pathname.startsWith('/feed') || 
+                       location.pathname.startsWith('/video') || 
+                       location.pathname.startsWith('/post') ||
+                       location.pathname.startsWith('/profile');
 
     React.useEffect(() => {
         if (!activeConversationId) {

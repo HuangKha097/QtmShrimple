@@ -49,19 +49,22 @@ export const usePostStore = create((set, get) => ({
         }
     },
 
-    fetchUserPosts: async (userId) => {
+    fetchUserPosts: async (userId, type = 'posts') => {
         if (!userId || userId === "undefined") {
             set({ userPosts: [] });
-            return;
+            return [];
         }
         set({ isLoading: true });
         try {
-            const res = await api.get(`/api/posts/user/${userId}`);
-            set({ userPosts: Array.isArray(res.data) ? res.data : [] });
+            const res = await api.get(`/api/posts/user/${userId}?type=${type}`);
+            const posts = Array.isArray(res.data) ? res.data : [];
+            set({ userPosts: posts });
+            return posts;
         } catch (error) {
             console.error(error);
             set({ userPosts: [] });
             toast.error("Failed to fetch user posts");
+            return [];
         } finally {
             set({ isLoading: false });
         }

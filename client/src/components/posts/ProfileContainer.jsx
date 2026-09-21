@@ -1,13 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePostStore } from '../../stores/usePostStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useChatStore } from '../../stores/useChatStore';
 import { authService } from '../../services/authService';
 import classNames from 'classnames/bind';
-import styles from '../../assets/css/PostsContainer.module.scss'; // Reuse styles
-import { ChevronLeft } from 'lucide-react';
+import styles from '../../assets/css/PostsContainer.module.scss';
+import { 
+    ArrowLeft, 
+    Calendar, 
+    MapPin, 
+    Briefcase, 
+    GraduationCap, 
+    Lock, 
+    MessageSquare, 
+    UserPlus, 
+    UserCheck, 
+    X,
+    FileText,
+    Repeat,
+    Video,
+    Bookmark
+} from 'lucide-react';
+import { motion as Motion, AnimatePresence } from 'motion/react';
 import PostItem from './PostItem';
+import TrendsWidget from './TrendsWidget';
+import WhoToFollowWidget from './WhoToFollowWidget';
+import LoadingSpin from '../common/loading/LoadingSpin';
+import default_avt from '../../../public/favicon.png';
 import { toast } from 'sonner';
 
 const cx = classNames.bind(styles);
@@ -15,233 +35,649 @@ const cx = classNames.bind(styles);
 const ProfileContainer = () => {
     const { userId } = useParams();
     const navigate = useNavigate();
-    const { userPosts, fetchUserPosts, likePost, addComment, deletePost } = usePostStore();
-    const { user: currentUser } = useAuthStore();
+    const feedLayoutRef = useRef(null);
+
+    const { 
+        userPosts, 
+        fetchUserPosts, 
+        savedPosts, 
+        fetchSavedPosts, 
+        likePost, 
+        addComment, 
+        deletePost 
+    } = usePostStore();
+    const { user: currentUser, updateProfile } = useAuthStore();
     const { friends, sendRequestAction } = useChatStore();
 
     const [profileUser, setProfileUser] = useState(null);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
+    const [isLoadingPosts, setIsLoadingPosts] = useState(false);
 
-    const isFriend = Array.isArray(friends) && friends.some(f => (f?._id || f?.id) === userId);
+    // Active tab: 'posts' | 'reposts' | 'videos' | 'saved'
+    const [activeTab, setActiveTab] = useState('posts');
 
-    const handleAddFriend = async () => {
-        if (!userId) return;
-        try {
-            await sendRequestAction(userId);
-            toast.success("Friend request sent!");
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Failed to send request");
-        }
-    };
+    // Edit Profile Modal State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editFormData, setEditFormData] = useState({
+        displayName: '',
+        bio: '',
+        workplace: '',
+        school: '',
+        location: '',
+    });
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
 
+    // Robust Own Profile Detection
+    const isOwnProfile = Boolean(
+        currentUser && (
+            userId === 'me' || 
+            !userId || 
+            (currentUser._id && String(currentUser._id) === String(userId)) ||
+            (currentUser.id && String(currentUser.id) === String(userId))
+        )
+    );
+
+    const targetUserId = (userId === 'me' || !userId ? currentUser?._id : userId) || currentUser?._id || '';
+
+    const isFriend = Array.isArray(friends) && friends.some(
+        f => String(f?._id || f?.id) === String(targetUserId)
+    );
+
+    // Load User Details
     useEffect(() => {
-        // Reset userPosts when switching profiles to avoid stale posts from previously viewed profile
-        usePostStore.setState({ userPosts: [] });
-    }, [userId]);
+        let isMounted = true;
 
-    useEffect(() => {
-        const loadData = async () => {
-            if (!userId || userId === "undefined") {
+        const loadUserInfo = async () => {
+            const uid = targetUserId;
+            if (!uid || uid === "undefined") {
+                if (currentUser) {
+                    setProfileUser(currentUser);
+                }
                 setIsLoadingUser(false);
                 return;
             }
-            setIsLoadingUser(true);
+
+            // Immediately display currentUser if viewing own profile (zero delay/flicker)
+            if (isOwnProfile && currentUser) {
+                setProfileUser(currentUser);
+                setIsLoadingUser(false);
+            } else {
+                setIsLoadingUser(true);
+            }
+
             try {
-                // Fetch User Info
-                const userData = await authService.getUserById(userId);
-                setProfileUser(userData);
-                
-                // Fetch User Posts
-                await fetchUserPosts(userId);
+                const userData = await authService.getUserById(uid);
+                if (isMounted && userData) {
+                    setProfileUser(userData);
+                }
             } catch (error) {
                 console.error("Failed to load profile", error);
-                toast.error("Failed to load profile");
+                if (isOwnProfile && currentUser) {
+                    if (isMounted) setProfileUser(currentUser);
+                } else {
+                    toast.error("Không thể tải thông tin người dùng");
+                }
             } finally {
-                setIsLoadingUser(false);
+                if (isMounted) setIsLoadingUser(false);
             }
         };
-        loadData();
-    }, [userId, fetchUserPosts]);
 
-    if (isLoadingUser) {
-        return <div className={cx('posts-container-wrapper')} style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%'}}>Loading...</div>;
+        loadUserInfo();
+        return () => { isMounted = false; };
+    }, [targetUserId, isOwnProfile, currentUser]);
+
+    // Load Posts depending on Active Tab
+    useEffect(() => {
+        if (!targetUserId || targetUserId === "undefined") return;
+
+        let isMounted = true;
+        const loadTabContent = async () => {
+            setIsLoadingPosts(true);
+            try {
+                if (activeTab === 'saved') {
+                    if (isOwnProfile) {
+                        await fetchSavedPosts();
+                    }
+                } else {
+                    await fetchUserPosts(targetUserId, activeTab);
+                }
+            } catch (err) {
+                console.error("Error loading tab content:", err);
+            } finally {
+                if (isMounted) setIsLoadingPosts(false);
+            }
+        };
+
+        loadTabContent();
+        return () => { isMounted = false; };
+    }, [targetUserId, activeTab, isOwnProfile, fetchUserPosts, fetchSavedPosts]);
+
+    // Reset scroll when switching profile user
+    useEffect(() => {
+        if (feedLayoutRef.current) {
+            feedLayoutRef.current.scrollTo({ top: 0 });
+        }
+    }, [targetUserId]);
+
+    // Open Edit Profile Modal
+    const handleOpenEditModal = () => {
+        const u = profileUser || currentUser;
+        if (!u) return;
+        setEditFormData({
+            displayName: u.displayName || '',
+            bio: u.bio || '',
+            workplace: u.workplace || '',
+            school: u.school || '',
+            location: typeof u.location === 'object' 
+                ? [u.location?.city, u.location?.country].filter(Boolean).join(', ')
+                : (u.location || ''),
+        });
+        setIsEditModalOpen(true);
+    };
+
+    // Save Profile Changes
+    const handleSaveProfile = async (e) => {
+        e.preventDefault();
+        if (!editFormData.displayName.trim()) {
+            toast.error("Tên hiển thị không được để trống!");
+            return;
+        }
+
+        setIsSavingProfile(true);
+        try {
+            const updated = await updateProfile({
+                displayName: editFormData.displayName.trim(),
+                bio: editFormData.bio.trim(),
+                workplace: editFormData.workplace.trim(),
+                school: editFormData.school.trim(),
+                location: {
+                    city: editFormData.location.trim(),
+                }
+            });
+
+            if (updated) {
+                setProfileUser(prev => ({ ...prev, ...updated }));
+            }
+            toast.success("Đã cập nhật hồ sơ thành công!");
+            setIsEditModalOpen(false);
+        } catch (err) {
+            console.error(err);
+            toast.error(err.response?.data?.message || "Lỗi khi cập nhật hồ sơ");
+        } finally {
+            setIsSavingProfile(false);
+        }
+    };
+
+    // Handle Direct Message
+    const handleMessageUser = () => {
+        const u = profileUser;
+        if (!u || !u._id) return;
+
+        const convos = useChatStore.getState().conversations || [];
+        const existingConvo = convos.find(c => 
+            !c.isGroup && Array.isArray(c.participants) && c.participants.some(p => {
+                const pId = p?._id || (typeof p?.userId === 'object' ? p?.userId?._id : p?.userId);
+                return pId && pId.toString() === u._id.toString();
+            })
+        );
+
+        if (existingConvo) {
+            useChatStore.getState().setActiveConversationId(existingConvo._id);
+            navigate(`/chat?id=${existingConvo._id}`);
+        } else {
+            const tempId = `temp_${u._id}`;
+            useChatStore.getState().setActiveConversationId(tempId);
+            navigate(`/chat?id=${tempId}`);
+        }
+    };
+
+    // Handle Add Friend
+    const handleAddFriend = async () => {
+        if (!targetUserId) return;
+        try {
+            await sendRequestAction(targetUserId);
+            toast.success("Đã gửi lời mời kết bạn!");
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Không thể gửi lời mời kết bạn");
+        }
+    };
+
+    // Format Joined Date
+    const joinedDateText = useMemo(() => {
+        const u = profileUser || currentUser;
+        if (!u?.createdAt) return '';
+        const d = new Date(u.createdAt);
+        return `Đã tham gia tháng ${d.getMonth() + 1} năm ${d.getFullYear()}`;
+    }, [profileUser?.createdAt, currentUser?.createdAt]);
+
+    // Determine current posts to display
+    const currentDisplayPosts = useMemo(() => {
+        if (activeTab === 'saved') {
+            return (savedPosts || []).filter(p => p && p._id);
+        }
+        return (userPosts || []).filter(p => p && p._id);
+    }, [activeTab, savedPosts, userPosts]);
+
+    const activeUser = profileUser || (isOwnProfile ? currentUser : null);
+
+    if (isLoadingUser && !activeUser) {
+        return (
+            <div className={cx('feed-page-layout')}>
+                <main className={cx('main-timeline-col')} style={{ justifyContent: 'center', alignItems: 'center' }}>
+                    <LoadingSpin size={34} />
+                </main>
+                <aside className={cx('feed-widgets-col')}>
+                    <div className={cx('widgets-sticky-wrapper')}>
+                        <TrendsWidget />
+                        <WhoToFollowWidget />
+                    </div>
+                </aside>
+            </div>
+        );
     }
 
-    if (!userId || userId === "undefined" || !profileUser) {
-        return <div className={cx('posts-container-wrapper')} style={{padding: '2rem', textAlign: 'center'}}>User not found</div>;
+    if (!activeUser) {
+        return (
+            <div className={cx('feed-page-layout')}>
+                <main className={cx('main-timeline-col')} style={{ padding: '60px 20px', textAlign: 'center' }}>
+                    <h3 style={{ fontSize: '1.8rem', color: '#e7e9ea', marginBottom: '8px' }}>
+                        Người dùng không tồn tại
+                    </h3>
+                    <p style={{ fontSize: '1.4rem', color: '#71767b', marginBottom: '20px' }}>
+                        Hồ sơ này có thể đã bị xóa hoặc đường dẫn không chính xác.
+                    </p>
+                    <button
+                        onClick={() => navigate('/feed')}
+                        style={{
+                            background: '#f97316',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '9999px',
+                            padding: '10px 24px',
+                            fontWeight: 700,
+                            fontSize: '1.4rem',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Quay lại Bảng tin
+                    </button>
+                </main>
+                <aside className={cx('feed-widgets-col')}>
+                    <div className={cx('widgets-sticky-wrapper')}>
+                        <TrendsWidget />
+                        <WhoToFollowWidget />
+                    </div>
+                </aside>
+            </div>
+        );
     }
 
     return (
-        <div className={cx('posts-container-wrapper')}>
-            <div className={cx('header')}>
-                 <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', marginRight: '1rem', display: 'flex', alignItems: 'center' }}>
-                    <ChevronLeft size={24} />
-                </button>
-                <h2>{profileUser.displayName}'s Wall</h2>
-            </div>
-            
-            <div className={cx('content-area')}>
-                {/* Profile Header Card */}
-                <div style={{
-                    backgroundColor: 'var(--primary-blockBackgroundColor)',
-                    padding: '2.5rem 2rem',
-                    borderRadius: '1rem',
-                    marginBottom: '2rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '2.5rem',
-                    border: '1px solid var(--primary-borderColor)',
-                    flexWrap: 'wrap'
-                }}>
-                    <img 
-                        src={profileUser.avatarURL || '/favicon.png'} 
-                        alt={profileUser.displayName} 
-                        style={{width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0}}
-                    />
-                    <div style={{ display: 'flex', flex: 1, justifyContent: 'space-between', alignItems: 'center', gap: '3rem', flexWrap: 'wrap', minWidth: '280px' }}>
-                        {/* Column 1: Info and Actions */}
-                        <div>
-                            <h1 style={{fontSize: '2rem', marginBottom: '0.5rem', fontWeight: '600'}}>{profileUser.displayName}</h1>
-                            <p style={{opacity: 0.7, fontSize: '1.1rem', marginBottom: '1.2rem'}}>@{profileUser.username}</p>
-                            
-                            {/* Profile Actions */}
-                            {Boolean(currentUser?._id && profileUser?._id && currentUser._id !== profileUser._id) && (
-                                <div style={{display: 'flex', gap: '1rem'}}>
-                                    {isFriend ? (
-                                        <>
-                                            <button 
-                                                onClick={() => {
-                                                    // Find existing conversation with this friend
-                                                    const existingConvo = (useChatStore.getState().conversations || []).find(c => 
-                                                        !c.isGroup && Array.isArray(c.participants) && c.participants.some(p => {
-                                                            const pId = p?._id || (typeof p?.userId === 'object' ? p?.userId?._id : p?.userId);
-                                                            return pId && profileUser?._id && pId.toString() === profileUser._id.toString();
-                                                        })
-                                                    );
+        <div ref={feedLayoutRef} className={cx('feed-page-layout')}>
+            {/* Center Main Column: Profile Timeline */}
+            <main className={cx('main-timeline-col')}>
+                {/* 1. Sticky Top Bar */}
+                <header className={cx('profile-top-bar')}>
+                    <button 
+                        type="button"
+                        className={cx('back-btn')}
+                        onClick={() => navigate(-1)}
+                        title="Quay lại"
+                        aria-label="Quay lại"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div className={cx('top-bar-user-info')}>
+                        <span className={cx('top-bar-name')}>{activeUser.displayName}</span>
+                        <span className={cx('top-bar-count')}>
+                            {userPosts?.length || 0} bài viết
+                        </span>
+                    </div>
+                </header>
 
-                                                    if (existingConvo) {
-                                                        useChatStore.getState().setActiveConversationId(existingConvo._id);
-                                                        navigate(`/chat?id=${existingConvo._id}`);
-                                                    } else {
-                                                        const tempId = `temp_${profileUser._id}`;
-                                                        useChatStore.getState().setActiveConversationId(tempId);
-                                                        navigate(`/chat?id=${tempId}`);
-                                                    }
-                                                }}
-                                                style={{
-                                                    padding: '0.8rem 1.6rem',
-                                                    backgroundColor: 'var(--primary-color)',
-                                                    color: 'white',
-                                                    border: 'none',
-                                                    borderRadius: '0.6rem',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.5rem',
-                                                    fontWeight: '600'
-                                                }}
-                                            >
-                                                Message
-                                            </button>
-                                            <div style={{
-                                                padding: '0.8rem 1.6rem',
-                                                backgroundColor: 'var(--surface-subtle)',
-                                                color: 'var(--primary-textColor)',
-                                                borderRadius: '0.6rem',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '0.5rem',
-                                            }}>
-                                                Friends
-                                            </div>
-                                        </>
+                {/* 2. Cover Banner */}
+                <div className={cx('profile-banner-container')}>
+                    <div className={cx('banner-glow-effect')} />
+                    <div className={cx('banner-accent-line')} />
+                </div>
+
+                {/* 3. Avatar & Profile Actions */}
+                <div className={cx('profile-meta-section')}>
+                    <div className={cx('avatar-action-row')}>
+                        <div className={cx('avatar-wrapper')}>
+                            <img
+                                src={activeUser.avatarURL || default_avt}
+                                alt={activeUser.displayName}
+                                className={cx('profile-avatar-img')}
+                                onError={(e) => { e.currentTarget.src = default_avt; }}
+                            />
+                        </div>
+
+                        <div className={cx('profile-actions')}>
+                            {isOwnProfile ? (
+                                <button
+                                    type="button"
+                                    className={cx('edit-profile-btn')}
+                                    onClick={handleOpenEditModal}
+                                >
+                                    Chỉnh sửa hồ sơ
+                                </button>
+                            ) : (
+                                <>
+                                    <button
+                                        type="button"
+                                        className={cx('message-btn')}
+                                        onClick={handleMessageUser}
+                                    >
+                                        <MessageSquare size={16} />
+                                        <span>Nhắn tin</span>
+                                    </button>
+
+                                    {isFriend ? (
+                                        <div className={cx('friend-btn')}>
+                                            <UserCheck size={16} />
+                                            <span>Bạn bè</span>
+                                        </div>
                                     ) : (
-                                        <button 
+                                        <button
+                                            type="button"
+                                            className={cx('friend-btn', 'primary')}
                                             onClick={handleAddFriend}
-                                            style={{
-                                                padding: '0.8rem 1.6rem',
-                                                backgroundColor: 'var(--primary-color)',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '0.6rem',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '0.5rem',
-                                                fontWeight: '600'
-                                            }}
                                         >
-                                            Add Friend
+                                            <UserPlus size={16} />
+                                            <span>Kết bạn</span>
                                         </button>
                                     )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 4. User Information */}
+                    <div className={cx('profile-info-block')}>
+                        <div className={cx('profile-display-name')}>{activeUser.displayName}</div>
+                        <div className={cx('profile-username')}>@{activeUser.username || 'user'}</div>
+
+                        {activeUser.bio && (
+                            <p className={cx('profile-bio')}>{activeUser.bio}</p>
+                        )}
+
+                        <div className={cx('profile-details-grid')}>
+                            {activeUser.workplace && (
+                                <div className={cx('detail-item')}>
+                                    <Briefcase size={16} className={cx('detail-icon')} />
+                                    <span>{activeUser.workplace}</span>
+                                </div>
+                            )}
+
+                            {activeUser.school && (
+                                <div className={cx('detail-item')}>
+                                    <GraduationCap size={16} className={cx('detail-icon')} />
+                                    <span>{activeUser.school}</span>
+                                </div>
+                            )}
+
+                            {activeUser.location && (
+                                <div className={cx('detail-item')}>
+                                    <MapPin size={16} className={cx('detail-icon')} />
+                                    <span>
+                                        {typeof activeUser.location === 'object' 
+                                            ? [activeUser.location.city, activeUser.location.country].filter(Boolean).join(', ')
+                                            : activeUser.location}
+                                    </span>
+                                </div>
+                            )}
+
+                            {joinedDateText && (
+                                <div className={cx('detail-item')}>
+                                    <Calendar size={16} className={cx('detail-icon')} />
+                                    <span>{joinedDateText}</span>
                                 </div>
                             )}
                         </div>
 
-                        {/* Column 2: Bio Panel */}
-                        <div style={{
-                            flex: 1,
-                            minWidth: '260px',
-                            maxWidth: '480px',
-                            height: '115px',
-                            padding: '1rem 1.4rem',
-                            backgroundColor: 'var(--surface-subtle)',
-                            borderRadius: '0.8rem',
-                            border: '1px solid var(--primary-borderColor)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            boxSizing: 'border-box'
-                        }}>
-                            <span style={{ 
-                                fontSize: '0.85rem', 
-                                textTransform: 'uppercase', 
-                                letterSpacing: '0.08em', 
-                                opacity: 0.45, 
-                                marginBottom: '0.4rem',
-                                fontWeight: '700',
-                                flexShrink: 0
-                            }}>
-                                Bio / Tiểu sử
-                            </span>
-                            <div style={{
-                                flex: 1,
-                                overflowY: 'auto',
-                                paddingRight: '0.4rem'
-                            }}>
-                                <p style={{ 
-                                    fontSize: '1.1rem', 
-                                    lineHeight: '1.5',
-                                    opacity: 0.85, 
-                                    margin: 0,
-                                    whiteSpace: 'pre-wrap', 
-                                    wordBreak: 'break-word',
-                                    fontStyle: profileUser.bio ? 'normal' : 'italic'
-                                }}>
-                                    {profileUser.bio || "Người dùng chưa cập nhật tiểu sử."}
-                                </p>
+                        <div className={cx('profile-counts-row')}>
+                            <div className={cx('count-item')}>
+                                <strong>{friends?.length || 0}</strong>
+                                <span>Bạn bè</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Posts */}
-                {(!Array.isArray(userPosts) || userPosts.length === 0) ? (
-                    <div style={{textAlign: 'center', opacity: 0.6, marginTop: '2rem'}}>
-                        <p>No posts yet.</p>
+                {/* 5. Tabs Bar */}
+                <div className={cx('profile-tabs-bar')}>
+                    {/* Tab: Bài viết */}
+                    <button
+                        type="button"
+                        className={cx('profile-tab-item', { active: activeTab === 'posts' })}
+                        onClick={() => setActiveTab('posts')}
+                    >
+                        <div className={cx('tab-label-wrap')}>
+                            <span>Bài viết</span>
+                        </div>
+                        {activeTab === 'posts' && (
+                            <Motion.div 
+                                className={cx('active-tab-indicator')} 
+                                layoutId="profileActiveTabIndicator" 
+                            />
+                        )}
+                    </button>
+
+                    {/* Tab: Đăng lại (Reposts) */}
+                    <button
+                        type="button"
+                        className={cx('profile-tab-item', { active: activeTab === 'reposts' })}
+                        onClick={() => setActiveTab('reposts')}
+                    >
+                        <div className={cx('tab-label-wrap')}>
+                            <span>Đăng lại</span>
+                        </div>
+                        {activeTab === 'reposts' && (
+                            <Motion.div 
+                                className={cx('active-tab-indicator')} 
+                                layoutId="profileActiveTabIndicator" 
+                            />
+                        )}
+                    </button>
+
+                    {/* Tab: Video */}
+                    <button
+                        type="button"
+                        className={cx('profile-tab-item', { active: activeTab === 'videos' })}
+                        onClick={() => setActiveTab('videos')}
+                    >
+                        <div className={cx('tab-label-wrap')}>
+                            <span>Video</span>
+                        </div>
+                        {activeTab === 'videos' && (
+                            <Motion.div 
+                                className={cx('active-tab-indicator')} 
+                                layoutId="profileActiveTabIndicator" 
+                            />
+                        )}
+                    </button>
+
+                    {/* Tab: Đã lưu (Saved) - CHỈ BẢN THÂN MỚI XEM ĐƯỢC */}
+                    {isOwnProfile && (
+                        <button
+                            type="button"
+                            className={cx('profile-tab-item', { active: activeTab === 'saved' })}
+                            onClick={() => setActiveTab('saved')}
+                            title="Chỉ có bạn mới nhìn thấy mục này"
+                        >
+                            <div className={cx('tab-label-wrap')}>
+                                <Lock size={13} className={cx('lock-badge')} />
+                                <span>Đã lưu</span>
+                            </div>
+                            {activeTab === 'saved' && (
+                                <Motion.div 
+                                    className={cx('active-tab-indicator')} 
+                                    layoutId="profileActiveTabIndicator" 
+                                />
+                            )}
+                        </button>
+                    )}
+                </div>
+
+                {/* 6. Posts Stream Content */}
+                <div className={cx('posts-stream')}>
+                    {isLoadingPosts ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '260px' }}>
+                            <LoadingSpin size={30} />
+                        </div>
+                    ) : currentDisplayPosts.length === 0 ? (
+                        <div className={cx('profile-empty-state')}>
+                            <div className={cx('empty-icon-wrap')}>
+                                {activeTab === 'posts' && <FileText size={26} />}
+                                {activeTab === 'reposts' && <Repeat size={26} />}
+                                {activeTab === 'videos' && <Video size={26} />}
+                                {activeTab === 'saved' && <Bookmark size={26} />}
+                            </div>
+                            <h4 className={cx('empty-title')}>
+                                {activeTab === 'posts' && "Chưa có bài viết nào"}
+                                {activeTab === 'reposts' && "Chưa có bài đăng lại nào"}
+                                {activeTab === 'videos' && "Chưa có video nào"}
+                                {activeTab === 'saved' && "Chưa có bài viết đã lưu"}
+                            </h4>
+                            <p className={cx('empty-desc')}>
+                                {activeTab === 'posts' && (
+                                    isOwnProfile 
+                                        ? "Khi bạn đăng tải bài viết mới, chúng sẽ xuất hiện tại đây."
+                                        : "Người dùng này chưa chia sẻ bài viết nào."
+                                )}
+                                {activeTab === 'reposts' && (
+                                    isOwnProfile
+                                        ? "Các bài viết bạn chia sẻ lại (Repost) sẽ xuất hiện tại đây."
+                                        : "Người dùng chưa chia sẻ lại bài viết nào."
+                                )}
+                                {activeTab === 'videos' && (
+                                    isOwnProfile
+                                        ? "Tất cả các video bạn tải lên sẽ hiển thị tại mục này."
+                                        : "Người dùng này chưa đăng video nào."
+                                )}
+                                {activeTab === 'saved' && (
+                                    "Chỉ có bạn mới nhìn thấy bài viết đã lưu. Hãy bookmark những bài viết hay để xem lại bất cứ lúc nào."
+                                )}
+                            </p>
+                        </div>
+                    ) : (
+                        currentDisplayPosts.map((post, idx) => (
+                            <PostItem
+                                key={post?._id || idx}
+                                post={post}
+                                currentUser={currentUser}
+                                onLike={likePost}
+                                onComment={addComment}
+                                onDelete={deletePost}
+                            />
+                        ))
+                    )}
+                </div>
+            </main>
+
+            {/* Right Column: Widgets Sidebar */}
+            <aside className={cx('feed-widgets-col')}>
+                <div className={cx('widgets-sticky-wrapper')}>
+                    <TrendsWidget />
+                    <WhoToFollowWidget />
+                </div>
+            </aside>
+
+            {/* 7. Edit Profile Modal */}
+            <AnimatePresence>
+                {isEditModalOpen && (
+                    <div className={cx('edit-modal-backdrop')} onClick={() => setIsEditModalOpen(false)}>
+                        <Motion.div 
+                            className={cx('edit-modal-card')}
+                            onClick={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0, scale: 0.94, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.94, y: 10 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            <form onSubmit={handleSaveProfile}>
+                                <div className={cx('edit-modal-header')}>
+                                    <div className={cx('header-left')}>
+                                        <button
+                                            type="button"
+                                            className={cx('close-modal-btn')}
+                                            onClick={() => setIsEditModalOpen(false)}
+                                        >
+                                            <X size={18} />
+                                        </button>
+                                        <h3 className={cx('modal-title')}>Chỉnh sửa hồ sơ</h3>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        className={cx('save-profile-btn')}
+                                        disabled={isSavingProfile}
+                                    >
+                                        {isSavingProfile ? "Đang lưu..." : "Lưu"}
+                                    </button>
+                                </div>
+
+                                <div className={cx('edit-modal-body')}>
+                                    <div className={cx('form-group')}>
+                                        <label>Tên hiển thị *</label>
+                                        <input
+                                            type="text"
+                                            value={editFormData.displayName}
+                                            onChange={(e) => setEditFormData({ ...editFormData, displayName: e.target.value })}
+                                            placeholder="Tên của bạn"
+                                            maxLength={50}
+                                            required
+                                        />
+                                    </div>
+
+                                    <div className={cx('form-group')}>
+                                        <label>Tiểu sử (Bio)</label>
+                                        <textarea
+                                            value={editFormData.bio}
+                                            onChange={(e) => setEditFormData({ ...editFormData, bio: e.target.value })}
+                                            placeholder="Mô tả về bản thân..."
+                                            maxLength={300}
+                                        />
+                                    </div>
+
+                                    <div className={cx('form-group')}>
+                                        <label>Nơi làm việc</label>
+                                        <input
+                                            type="text"
+                                            value={editFormData.workplace}
+                                            onChange={(e) => setEditFormData({ ...editFormData, workplace: e.target.value })}
+                                            placeholder="Công ty, tổ chức..."
+                                            maxLength={100}
+                                        />
+                                    </div>
+
+                                    <div className={cx('form-group')}>
+                                        <label>Trường học</label>
+                                        <input
+                                            type="text"
+                                            value={editFormData.school}
+                                            onChange={(e) => setEditFormData({ ...editFormData, school: e.target.value })}
+                                            placeholder="Trường đại học, cấp 3..."
+                                            maxLength={100}
+                                        />
+                                    </div>
+
+                                    <div className={cx('form-group')}>
+                                        <label>Vị trí / Nơi ở</label>
+                                        <input
+                                            type="text"
+                                            value={editFormData.location}
+                                            onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
+                                            placeholder="Ví dụ: TP. Hồ Chí Minh, Việt Nam"
+                                            maxLength={100}
+                                        />
+                                    </div>
+                                </div>
+                            </form>
+                        </Motion.div>
                     </div>
-                ) : (
-                    userPosts.map((post, idx) => (
-                        <PostItem 
-                            key={post?._id || idx} 
-                            post={post} 
-                            currentUser={currentUser}
-                            onLike={likePost}
-                            onComment={addComment}
-                            onDelete={deletePost}
-                        />
-                    ))
                 )}
-            </div>
+            </AnimatePresence>
         </div>
     );
 };
