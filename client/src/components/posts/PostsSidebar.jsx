@@ -11,7 +11,11 @@ export default function PostsSidebar({ onCloseSetting, onNavigate, onClose }) {
     const { suggestedFriends, fetchSuggestedFriends } = useChatStore();
     const navigate = useNavigate();
     useEffect(() => { fetchSuggestedFriends(); }, [fetchSuggestedFriends]);
-    const openProfile = (id) => { navigate('/feed/profile/' + id); onNavigate(); };
+    const openProfile = (id) => { 
+        if (!id) return;
+        navigate('/feed/profile/' + id); 
+        if (onNavigate) onNavigate(); 
+    };
     return (
         <aside className={styles.sidebar} aria-label="Social navigation">
             <div className={styles.brandRow}>
@@ -19,7 +23,7 @@ export default function PostsSidebar({ onCloseSetting, onNavigate, onClose }) {
                 <button className={styles.closeMenu} onClick={onClose} aria-label="Close navigation"><X size={22} /></button>
             </div>
             <AppNavigation onNavigate={onNavigate} />
-            <button className={styles.profile} onClick={() => openProfile(user?._id)}>
+            <button className={styles.profile} onClick={() => user?._id && openProfile(user._id)}>
                 <img src={user?.avatarURL || '/favicon.png'} alt="" />
                 <span><strong>{user?.displayName}</strong><small>@{user?.username}</small></span>
             </button>
@@ -34,11 +38,15 @@ export default function PostsSidebar({ onCloseSetting, onNavigate, onClose }) {
                 </nav>
                 <div className={styles.suggestions}>
                     <p className={styles.sectionTitle}>PEOPLE TO KNOW</p>
-                    {suggestedFriends.length === 0 ? <p className={styles.empty}>Suggestions will appear here.</p> : suggestedFriends.slice(0, 5).map(friend => (
-                        <button key={friend._id} className={styles.friend} onClick={() => openProfile(friend._id)}>
-                            <img src={friend.avatarURL || '/favicon.png'} alt="" /><span>{friend.displayName}</span>
-                        </button>
-                    ))}
+                    {(!suggestedFriends || suggestedFriends.length === 0) ? (
+                        <p className={styles.empty}>Suggestions will appear here.</p>
+                    ) : (
+                        (suggestedFriends || []).filter(f => f && f._id).slice(0, 5).map(friend => (
+                            <button key={friend._id} className={styles.friend} onClick={() => openProfile(friend._id)}>
+                                <img src={friend.avatarURL || '/favicon.png'} alt="" /><span>{friend.displayName}</span>
+                            </button>
+                        ))
+                    )}
                 </div>
             </div>
             <div className={styles.footer}>

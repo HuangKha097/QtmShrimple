@@ -16,6 +16,7 @@ import {
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/XNavRail.module.scss';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { useChatStore } from '../../stores/useChatStore';
 import { motion as Motion } from 'motion/react';
 import defaultAvatar from '../../../public/favicon.png';
 import { ASSET_BASE_URL } from '../../config/env';
@@ -24,9 +25,23 @@ const cx = classNames.bind(styles);
 
 export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModal }) {
     const { user, signOut } = useAuthStore();
+    const conversations = useChatStore(state => state.conversations || []);
     const navigate = useNavigate();
     const location = useLocation();
     const [showUserMenu, setShowUserMenu] = useState(false);
+
+    const hasUnreadMessages = conversations.some(c => {
+        if (!c || !c.unreadCounts) return false;
+        let count = 0;
+        if (c.unreadCounts instanceof Map) {
+            count = c.unreadCounts.get(user?._id) || 0;
+        } else if (typeof c.unreadCounts === 'object') {
+            count = c.unreadCounts[user?._id] || 0;
+        } else if (typeof c.unreadCounts === 'number') {
+            count = c.unreadCounts;
+        }
+        return count > 0;
+    });
 
     const getAvatarSrc = (url) => {
         if (!url) return defaultAvatar;
@@ -46,7 +61,7 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
         { path: '/video', icon: <Video size={24} strokeWidth={2} />, label: 'Video' },
         { path: '/feed/friends', icon: <Users size={24} strokeWidth={2} />, label: 'Bạn bè' },
         { path: '/feed/saved', icon: <Bookmark size={24} strokeWidth={2} />, label: 'Đã lưu' },
-        { path: `/feed/profile/${user?._id}`, icon: <User size={24} strokeWidth={2} />, label: 'Hồ sơ' },
+        { path: user?._id ? `/feed/profile/${user._id}` : '/feed', icon: <User size={24} strokeWidth={2} />, label: 'Hồ sơ' },
     ];
 
     const handlePostClick = () => {
@@ -99,6 +114,9 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                         >
                             <div className={cx('icon-wrapper')}>
                                 {item.icon}
+                                {item.path === '/chat' && hasUnreadMessages && (
+                                    <span className={cx('unread-red-dot')} />
+                                )}
                             </div>
                             <span className={cx('nav-label')}>{item.label}</span>
                         </NavLink>
@@ -181,7 +199,9 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                                     className={cx('popover-item')}
                                     onClick={() => {
                                         setShowUserMenu(false);
-                                        navigate(`/feed/profile/${user?._id}`);
+                                        if (user?._id) {
+                                            navigate(`/feed/profile/${user._id}`);
+                                        }
                                     }}
                                 >
                                     <User size={16} />

@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Friend from "../models/Friend.js";
 import FriendRequest from "../models/FriendRequest.js";
+import { io } from "../socket/socket.js";
 
 export const sendFriendRequest = async (req, res) => {
     try {
@@ -39,9 +40,17 @@ export const sendFriendRequest = async (req, res) => {
 
         const request = await FriendRequest.create({
             from, to, message,
-        })
+        });
 
-        return res.status(201).json({message: "Send request successfully", request});
+        const populatedRequest = await FriendRequest.findById(request._id)
+            .populate('from', '_id displayName avatarURL username')
+            .populate('to', '_id displayName avatarURL username')
+            .lean();
+
+        // Realtime notification to receiver
+        io.to(to.toString()).emit("newFriendRequest", populatedRequest);
+
+        return res.status(201).json({message: "Send request successfully", request: populatedRequest});
     } catch (err) {
         console.log("Error adding Friend ", err);
         return res.status(500).json({message: "System error"});
@@ -64,8 +73,25 @@ export const acceptFriendRequest = async (req, res) => {
             userA: request.from, userB: request.to,
         })
         await FriendRequest.findByIdAndDelete(requestId)
-        // khi co lean thi data tra ve la js thay vi mongoDocument => query se nhanh va nhe hon
-        const from = await User.findById(request.from).select('_id displayName avatarURL').lean();
+        
+        const [from, toUser] = await Promise.all([
+            User.findById(request.from).select('_id displayName avatarURL username').lean(),
+            User.findById(request.to).select('_id displayName avatarURL username').lean()
+        ]);
+
+        // Realtime notification to sender of the request
+        io.to(request.from.toString()).emit("friendRequestAccepted", {
+            requestId,
+            friend: toUser,
+            newFriend: toUser
+        });
+
+        // Realtime update to receiver (current user) in case they have multiple tabs open
+        io.to(request.to.toString()).emit("friendRequestAccepted", {
+            requestId,
+            friend: from,
+            newFriend: from
+        });
 
         return res.status(200).json({
             message: "Accept request successfully", newFriend: {
@@ -94,7 +120,10 @@ export const declineFriendRequest = async (req, res) => {
 
         await FriendRequest.findByIdAndDelete(requestId);
 
-        return res.status(204);
+        io.to(request.from.toString()).emit("friendRequestDeclined", { requestId });
+        io.to(request.to.toString()).emit("friendRequestDeclined", { requestId });
+
+        return res.status(200).json({ message: "Decline request successfully" });
 
 
     } catch (err) {
@@ -150,13 +179,17 @@ export const getAllFriends = async (req, res) => {
             .populate('userA', "_id displayName avatarURL ")
             .populate('userB', "_id displayName avatarURL ")
             .lean()
-        if (!friendships.length > 0) {
-            return res.status(200).json({friends: []})
+        if (!friendships || friendships.length === 0) {
+            return res.status(200).json({friends: []});
         }
-        const friends = friendships.map((f) =>
-            f.userA._id.toString() === userId.toString() ? f.userB : f.userA
-        )
-        return res.status(200).json({friends: friends})
+        const friends = friendships
+            .map((f) => {
+                if (!f.userA || !f.userB) return null;
+                const userAId = f.userA._id ? f.userA._id.toString() : null;
+                return userAId === userId.toString() ? f.userB : f.userA;
+            })
+            .filter(f => f && f._id);
+        return res.status(200).json({friends: friends});
     } catch (err) {
         console.log("Error, can not get all friends ", err);
         return res.status(500).json({message: "System error"});

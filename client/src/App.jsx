@@ -8,6 +8,7 @@ import { Toaster } from "sonner";
 import ProtectedRoute from "./auth/ProtectedRoute.jsx";
 import { useThemeStore } from "./stores/useThemeStore.js";
 import PostsContainer from "./components/posts/PostsContainer.jsx";
+import SearchResultsContainer from "./components/posts/SearchResultsContainer.jsx";
 import ChatContainer from "./components/chat/ChatContainer.jsx";
 import { useOutletContext } from "react-router-dom";
 import SinglePostPage from "./pages/SinglePostPage.jsx";
@@ -37,18 +38,18 @@ const App = () => {
     const { isLight } = useThemeStore();
     const { subscribeToCallEvents, unsubscribeFromCallEvents } = useCallStore();
 
-    const { user } = useAuthStore(); // Check if user is logged in to subscribe
+    const { user, socket } = useAuthStore(); // Check if user and socket are ready to subscribe
     const { setOffline } = useUIStore();
 
     // Subscribe to call events
     useEffect(() => {
-        if (user) {
+        if (socket && user) {
             subscribeToCallEvents();
         }
         return () => {
             unsubscribeFromCallEvents();
         };
-    }, [user, subscribeToCallEvents, unsubscribeFromCallEvents]);
+    }, [socket, user, subscribeToCallEvents, unsubscribeFromCallEvents]);
 
     useEffect(() => {
         const handleOnline = () => setOffline(false);
@@ -90,6 +91,7 @@ const App = () => {
                             <Route path="/" element={<Navigate to="/chat" replace />} />
                             <Route path="/chat" element={<ChatContainerWrapper />} />
                             <Route path="/feed" element={<PostsContainer />} />
+                            <Route path="/feed/search" element={<SearchResultsContainer />} />
                             <Route path="/feed/saved" element={<SavedPostsContainer />} />
                             <Route path="/feed/friends" element={<FriendsContainer />} />
                             <Route path="/feed/profile/:userId" element={<ProfileContainer />} />

@@ -3,6 +3,9 @@ import Peer from 'simple-peer';
 import { useCallStore } from '../../stores/useCallStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import { toast } from 'sonner';
+
+const defaultAvatar = '/favicon.png';
 
 const CallModal = () => {
     const { 
@@ -15,28 +18,27 @@ const CallModal = () => {
     const { user, socket } = useAuthStore();
     
     const [stream, setStream] = useState(null);
+    const [remoteStream, setRemoteStream] = useState(null);
     const [callAcceptedState, setCallAcceptedState] = useState(false);
     const [micOn, setMicOn] = useState(true);
     const [cameraOn, setCameraOn] = useState(true);
 
-    const myVideo = useRef();
-    const userVideo = useRef();
-    const connectionRef = useRef();
+    const myVideo = useRef(null);
+    const userVideo = useRef(null);
+    const connectionRef = useRef(null);
 
     // 1. Handle user media (Camera/Mic)
     useEffect(() => {
         if (isCallIncoming || isCallActive) {
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            const hasVideo = callType === 'video';
+            navigator.mediaDevices.getUserMedia({ video: hasVideo, audio: true })
                 .then((currentStream) => {
                     setStream(currentStream);
-                    if (myVideo.current) {
-                        myVideo.current.srcObject = currentStream;
-                    }
                 })
                 .catch(err => {
                     console.error("Failed to get media", err);
-                    alert("Could not access camera or microphone");
-                    setCallEnded();
+                    toast.error("Không thể truy cập camera hoặc micro");
+                    leaveCall();
                 });
         } else {
              // Stop stream if call ended
@@ -44,69 +46,141 @@ const CallModal = () => {
                  stream.getTracks().forEach(track => track.stop());
                  setStream(null);
              }
+             setRemoteStream(null);
+             setCallAcceptedState(false);
         }
-    }, [isCallIncoming, isCallActive]);
+    }, [isCallIncoming, isCallActive, callType]);
+
+    // Attach local stream to myVideo
+    useEffect(() => {
+        if (myVideo.current && stream) {
+            myVideo.current.srcObject = stream;
+        }
+    }, [stream]);
+
+    // Attach remote stream to userVideo whenever userVideo mounts or remoteStream changes
+    useEffect(() => {
+        if (userVideo.current && remoteStream) {
+            userVideo.current.srcObject = remoteStream;
+        }
+    }, [remoteStream, callAcceptedState]);
 
     // 2. Initiate Call (Caller Side)
     useEffect(() => {
-        if (isCallActive && !isCallIncoming && stream && !connectionRef.current) {
+        if (isCallActive && !isCallIncoming && stream && !connectionRef.current && socket && callerInfo?.id) {
              const peer = new Peer({ initiator: true, trickle: false, stream: stream });
 
              peer.on('signal', (data) => {
                  socket.emit('callUser', {
                      userToCall: callerInfo.id,
                      signalData: data,
-                     from: user._id, // Caller ID
-                     name: user.displayName || user.username,
+                     from: user?._id, // Caller ID
+                     name: user?.displayName || user?.username,
+                     avatar: user?.avatarURL,
                      isVideo: callType === 'video'
                  });
              });
 
              peer.on('stream', (currentStream) => {
-                 if (userVideo.current) {
-                     userVideo.current.srcObject = currentStream;
-                 }
+                 setRemoteStream(currentStream);
              });
 
-             socket.on('callAccepted', (signal) => {
+             const handleCallAccepted = (signal) => {
                  setCallAcceptedState(true);
                  peer.signal(signal);
-             });
+             };
+
+             const handleCallUserOffline = () => {
+                 toast.error("Người dùng hiện không trực tuyến");
+                 leaveCall();
+             };
+
+             socket.off('callAccepted');
+             socket.off('callUserOffline');
+             socket.on('callAccepted', handleCallAccepted);
+             socket.on('callUserOffline', handleCallUserOffline);
 
              connectionRef.current = peer;
+
+             return () => {
+                 socket.off('callAccepted', handleCallAccepted);
+                 socket.off('callUserOffline', handleCallUserOffline);
+             };
         }
-    }, [isCallActive, isCallIncoming, stream, callerInfo]);
+    }, [isCallActive, isCallIncoming, stream, callerInfo, socket, user, callType]);
 
-    // 2. Handle Incoming Call Answer
-    const answerCall = () => {
-        setCallAcceptedState(true);
-        // Notify store
-        setCallAccepted(); 
-
-        const peer = new Peer({ initiator: false, trickle: false, stream: stream });
-
-        peer.on('signal', (data) => {
-            socket.emit('answerCall', { signal: data, to: callerInfo.id });
-        });
-
-        peer.on('stream', (currentStream) => {
-            if (userVideo.current) {
-                userVideo.current.srcObject = currentStream;
+    // 3. Handle Incoming Call Answer
+    const answerCall = async () => {
+        try {
+            let activeStream = stream;
+            if (!activeStream) {
+                const hasVideo = callType === 'video';
+                activeStream = await navigator.mediaDevices.getUserMedia({ video: hasVideo, audio: true });
+                setStream(activeStream);
             }
-        });
 
-        peer.signal(callerSignal);
-        connectionRef.current = peer;
+            setCallAcceptedState(true);
+            setCallAccepted(); 
+
+            const peer = new Peer({ initiator: false, trickle: false, stream: activeStream });
+
+            peer.on('signal', (data) => {
+                socket?.emit('answerCall', { signal: data, to: callerInfo?.id });
+            });
+
+            peer.on('stream', (currentStream) => {
+                setRemoteStream(currentStream);
+            });
+
+            if (callerSignal) {
+                peer.signal(callerSignal);
+            }
+            connectionRef.current = peer;
+        } catch (err) {
+            console.error("Failed to answer call:", err);
+            toast.error("Không thể kết nối micro/camera để trả lời");
+            leaveCall();
+        }
     };
 
-    // 3. Handle Leaving Call
+    // 4. Handle Leaving Call
     const leaveCall = () => {
-        setCallEnded();
         if (connectionRef.current) {
             connectionRef.current.destroy();
+            connectionRef.current = null;
         }
-        socket.emit('endCall', { to: callerInfo?.id }); // Ensure we tell the other side
-        // window.location.reload(); // Brute force cleanup if needed, but try state first
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            setStream(null);
+        }
+        setRemoteStream(null);
+        setCallAcceptedState(false);
+        if (socket && callerInfo?.id) {
+            socket.emit('endCall', { to: callerInfo.id });
+        }
+        setCallEnded();
+    };
+
+    // Toggle Mic
+    const toggleMic = () => {
+        if (stream) {
+            const nextState = !micOn;
+            stream.getAudioTracks().forEach(track => {
+                track.enabled = nextState;
+            });
+            setMicOn(nextState);
+        }
+    };
+
+    // Toggle Camera
+    const toggleCamera = () => {
+        if (stream && callType === 'video') {
+            const nextState = !cameraOn;
+            stream.getVideoTracks().forEach(track => {
+                track.enabled = nextState;
+            });
+            setCameraOn(nextState);
+        }
     };
 
     if (!isCallIncoming && !isCallActive) return null;
@@ -118,29 +192,36 @@ const CallModal = () => {
             left: 0,
             width: '100vw',
             height: '100vh',
-            backgroundColor: 'rgba(0,0,0,0.9)',
+            backgroundColor: 'rgba(0,0,0,0.92)',
             zIndex: 9999,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white'
+            color: 'white',
+            backdropFilter: 'blur(8px)'
         }}>
             
-            <div style={{display: 'flex', gap: '2rem', marginBottom: '2rem'}}>
-                {/* My Video */}
-                {stream && (
+            <div style={{display: 'flex', gap: '2rem', marginBottom: '2rem', flexWrap: 'wrap', justifyContent: 'center'}}>
+                {/* My Video / Preview */}
+                {stream && callType === 'video' && (
                     <div style={{textAlign: 'center'}}>
-                        <video playsInline muted ref={myVideo} autoPlay style={{ width: '300px', borderRadius: '1rem', border: '2px solid #333' }} />
-                        <p>You</p>
+                        <video playsInline muted ref={myVideo} autoPlay style={{ width: '300px', height: '225px', objectFit: 'cover', borderRadius: '1rem', border: '2px solid #444', backgroundColor: '#111' }} />
+                        <p style={{ marginTop: '0.5rem', opacity: 0.8 }}>Bạn</p>
                     </div>
                 )}
                 
                 {/* Other User Video */}
                 {callAcceptedState && !isCallEnded && (
                     <div style={{textAlign: 'center'}}>
-                        <video playsInline ref={userVideo} autoPlay style={{ width: '300px', borderRadius: '1rem', border: '2px solid #333' }} />
-                        <p>{callerInfo?.name}</p>
+                        {callType === 'video' ? (
+                            <video playsInline ref={userVideo} autoPlay style={{ width: '300px', height: '225px', objectFit: 'cover', borderRadius: '1rem', border: '2px solid #444', backgroundColor: '#111' }} />
+                        ) : (
+                            <div style={{ width: '150px', height: '150px', borderRadius: '50%', backgroundColor: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', border: '3px solid #2ecc71' }}>
+                                <img src={callerInfo?.avatar || defaultAvatar} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.src = defaultAvatar; }} />
+                            </div>
+                        )}
+                        <p style={{ marginTop: '0.5rem', fontWeight: 600 }}>{callerInfo?.name || 'Người dùng'}</p>
                     </div>
                 )}
             </div>
@@ -148,31 +229,39 @@ const CallModal = () => {
             {/* Outgoing Call Prompt */}
             {!isCallIncoming && !callAcceptedState && (
                 <div style={{textAlign: 'center', marginBottom: '2rem'}}>
-                    <h2>Calling {callerInfo?.name}...</h2>
-                    <br />
-                     <button onClick={() => leaveCall()} style={{padding: '1rem', borderRadius: '50%', border: 'none', background: '#e74c3c', color: 'white'}}>
-                        <PhoneOff />
-                    </button>
+                    <div style={{ width: '100px', height: '100px', borderRadius: '50%', margin: '0 auto 1.5rem auto', overflow: 'hidden', border: '3px solid rgba(255,255,255,0.2)' }}>
+                        <img src={callerInfo?.avatar || defaultAvatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.src = defaultAvatar; }} />
+                    </div>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: 600 }}>Đang gọi cho {callerInfo?.name}...</h2>
+                    <p style={{ opacity: 0.7, marginTop: '0.5rem' }}>{callType === 'video' ? 'Cuộc gọi video' : 'Cuộc gọi thoại'}</p>
+                    <div style={{ marginTop: '2rem' }}>
+                        <button onClick={leaveCall} style={{padding: '1rem', borderRadius: '50%', border: 'none', background: '#e74c3c', color: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center'}}>
+                            <PhoneOff size={24} />
+                        </button>
+                    </div>
                 </div>
             )}
 
             {/* Incoming Call Prompt */}
             {isCallIncoming && !callAcceptedState && (
                 <div style={{textAlign: 'center', marginBottom: '2rem'}}>
-                    <img src={user.avatarURL || '/favicon.png'} style={{width: 80, height: 80, borderRadius: '50%', marginBottom: '1rem'}} />
-                    <h2>{callerInfo?.name} is calling...</h2>
-                    <div style={{display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1rem'}}>
+                    <div style={{ width: '100px', height: '100px', borderRadius: '50%', margin: '0 auto 1.5rem auto', overflow: 'hidden', border: '3px solid #2ecc71' }}>
+                        <img src={callerInfo?.avatar || defaultAvatar} alt="caller avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} onError={(e) => { e.currentTarget.src = defaultAvatar; }} />
+                    </div>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: 600 }}>{callerInfo?.name || 'Người dùng'} đang gọi...</h2>
+                    <p style={{ opacity: 0.7, marginTop: '0.5rem' }}>{callType === 'video' ? 'Cuộc gọi video đến' : 'Cuộc gọi thoại đến'}</p>
+                    <div style={{display: 'flex', gap: '1.5rem', justifyContent: 'center', marginTop: '2rem'}}>
                         <button 
                             onClick={answerCall}
-                            style={{padding: '1rem 2rem', borderRadius: '2rem', border: 'none', background: '#2ecc71', color: 'white', cursor: 'pointer', fontSize: '1.2rem'}}
+                            style={{padding: '0.9rem 2rem', borderRadius: '2rem', border: 'none', background: '#2ecc71', color: 'white', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.5rem'}}
                         >
-                            Answer
+                            <Phone size={20} /> Trả lời
                         </button>
                         <button 
                             onClick={rejectCall}
-                            style={{padding: '1rem 2rem', borderRadius: '2rem', border: 'none', background: '#e74c3c', color: 'white', cursor: 'pointer', fontSize: '1.2rem'}}
+                            style={{padding: '0.9rem 2rem', borderRadius: '2rem', border: 'none', background: '#e74c3c', color: 'white', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.5rem'}}
                         >
-                            Decline
+                            <PhoneOff size={20} /> Từ chối
                         </button>
                     </div>
                 </div>
@@ -180,16 +269,18 @@ const CallModal = () => {
 
             {/* Call Controls */}
             {callAcceptedState && !isCallEnded && (
-                <div style={{display: 'flex', gap: '1rem'}}>
-                    <button onClick={() => { setMicOn(!micOn); /* Note: Logic to toggle track needed */ }} style={{padding: '1rem', borderRadius: '50%', border: 'none', background: micOn ? '#34495e' : '#e74c3c', color: 'white'}}>
-                        {micOn ? <Mic /> : <MicOff />}
+                <div style={{display: 'flex', gap: '1.5rem', alignItems: 'center'}}>
+                    <button onClick={toggleMic} style={{padding: '1rem', borderRadius: '50%', border: 'none', background: micOn ? '#34495e' : '#e74c3c', color: 'white', cursor: 'pointer'}}>
+                        {micOn ? <Mic size={22} /> : <MicOff size={22} />}
                     </button>
-                    <button onClick={() => leaveCall()} style={{padding: '1rem', borderRadius: '50%', border: 'none', background: '#e74c3c', color: 'white'}}>
-                        <PhoneOff />
+                    <button onClick={leaveCall} style={{padding: '1rem', borderRadius: '50%', border: 'none', background: '#e74c3c', color: 'white', cursor: 'pointer'}}>
+                        <PhoneOff size={24} />
                     </button>
-                    <button onClick={() => { setCameraOn(!cameraOn); /* Logic needed */ }} style={{padding: '1rem', borderRadius: '50%', border: 'none', background: cameraOn ? '#34495e' : '#e74c3c', color: 'white'}}>
-                        {cameraOn ? <Video /> : <VideoOff />}
-                    </button>
+                    {callType === 'video' && (
+                        <button onClick={toggleCamera} style={{padding: '1rem', borderRadius: '50%', border: 'none', background: cameraOn ? '#34495e' : '#e74c3c', color: 'white', cursor: 'pointer'}}>
+                            {cameraOn ? <Video size={22} /> : <VideoOff size={22} />}
+                        </button>
+                    )}
                 </div>
             )}
         </div>

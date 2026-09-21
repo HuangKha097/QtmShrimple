@@ -16,7 +16,7 @@ export const useCallStore = create((set, get) => ({
     setCallIncoming: (data) => set({
         isCallIncoming: true,
         callerSignal: data.signal,
-        callerInfo: { id: data.from, name: data.name },
+        callerInfo: { id: data.from, name: data.name, avatar: data.avatar },
         callType: data.isVideo ? "video" : "audio"
     }),
 
@@ -41,6 +41,9 @@ export const useCallStore = create((set, get) => ({
     subscribeToCallEvents: () => {
         const { socket } = useAuthStore.getState();
         if (!socket) return;
+
+        socket.off("callUser");
+        socket.off("endCall");
 
         socket.on("callUser", (data) => {
             get().setCallIncoming(data);

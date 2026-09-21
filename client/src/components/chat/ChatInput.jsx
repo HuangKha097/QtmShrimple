@@ -12,6 +12,26 @@ import api from '../../lib/axios.js';
 
 const cx = classNames.bind(styles);
 
+const resolveRecipientId = (activeConvoId, currentConvo, currentUser) => {
+    if (!activeConvoId) return null;
+    const strId = activeConvoId.toString();
+    if (strId.startsWith('temp_')) {
+        return strId.split('temp_')[1];
+    }
+    if (currentConvo?.participants && currentUser) {
+        const currentUserIdStr = (currentUser._id || currentUser.id)?.toString();
+        const partner = currentConvo.participants.find(p => {
+            if (!p) return false;
+            const pId = (p.userId?._id || p.userId || p._id)?.toString();
+            return pId && pId !== currentUserIdStr;
+        });
+        if (partner) {
+            return (partner.userId?._id || partner.userId || partner._id)?.toString();
+        }
+    }
+    return null;
+};
+
 const ChatInput = () => {
     const isLight = useThemeStore(state => state.isLight);
     const [text, setText] = useState("");
@@ -50,13 +70,7 @@ const ChatInput = () => {
 
         if (isGroup) return { allowed: true, reason: "" };
 
-        let partnerId = null;
-        if (isTemp) {
-            partnerId = activeConversationId.split('temp_')[1];
-        } else if (currentConvo?.participants) {
-            const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
-            partnerId = partner ? partner._id : null;
-        }
+        const partnerId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
 
         if (!partnerId) return { allowed: false, reason: "Không tìm thấy người dùng" };
 
@@ -119,13 +133,7 @@ const ChatInput = () => {
             if (isGroup) {
                 await sendGroupMessage(activeConversationId, originalName, null, cloudUrl, 'file');
             } else {
-                let recipientId = null;
-                if (activeConversationId.toString().startsWith('temp_')) {
-                    recipientId = activeConversationId.split('temp_')[1];
-                } else if (currentConvo?.participants) {
-                    const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
-                    recipientId = partner ? partner._id : null;
-                }
+                const recipientId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
 
                 if (recipientId) {
                     const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;
@@ -169,13 +177,7 @@ const ChatInput = () => {
                     if (isGroup) {
                         await sendGroupMessage(activeConversationId, coords, null, null, 'location');
                     } else {
-                        let recipientId = null;
-                        if (activeConversationId.toString().startsWith('temp_')) {
-                            recipientId = activeConversationId.split('temp_')[1];
-                        } else if (currentConvo?.participants) {
-                            const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
-                            recipientId = partner ? partner._id : null;
-                        }
+                        const recipientId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
 
                         if (recipientId) {
                             const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;
@@ -258,13 +260,7 @@ const ChatInput = () => {
                     if (isGroup) {
                         await sendGroupMessage(activeConversationId, "Tin nhắn thoại", null, cloudUrl, 'audio');
                     } else {
-                        let recipientId = null;
-                        if (activeConversationId.toString().startsWith('temp_')) {
-                            recipientId = activeConversationId.split('temp_')[1];
-                        } else if (currentConvo?.participants) {
-                            const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
-                            recipientId = partner ? partner._id : null;
-                        }
+                        const recipientId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
 
                         if (recipientId) {
                             const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;
@@ -345,13 +341,7 @@ const ChatInput = () => {
             if (isGroup) {
                 await sendGroupMessage(activeConversationId, text, imageToSend, null, 'text');
             } else {
-                let recipientId = null;
-                if (activeConversationId.toString().startsWith('temp_')) {
-                    recipientId = activeConversationId.split('temp_')[1];
-                } else if (currentConvo?.participants) {
-                    const partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id);
-                    recipientId = partner ? partner._id : null;
-                }
+                const recipientId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
 
                 if (recipientId) {
                     const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;

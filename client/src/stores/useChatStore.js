@@ -711,32 +711,40 @@ export const useChatStore = create(
                 socket.off("messageReaction");
                 socket.off("messageRecalled");
                 socket.off("messagePinStatus");
+                socket.off("newFriendRequest");
+                socket.off("friendRequestAccepted");
+                socket.off("friendRequestDeclined");
 
                 socket.on("newMessage", (newMessage) => {
+                    const myId = useAuthStore.getState().user?._id?.toString();
+                    const isOwn = newMessage.senderId?.toString() === myId;
+
                     set((state) => {
                         const convoId = newMessage.conversationId;
-                        const isActive = state.activeConversationId === convoId;
+                        const isMatchingConvo = state.activeConversationId === convoId;
+                        const isTempActive = state.activeConversationId === `temp_${newMessage.senderId?.toString()}`;
+                        const isActive = isMatchingConvo || isTempActive;
 
-                        // 1. Update Messages if loaded
+                        // 1. Update Messages
                         let updatedMessagesMap = { ...state.messages };
-                        if (updatedMessagesMap[convoId]) {
-                             const existingItems = updatedMessagesMap[convoId].items || [];
-                             const isDuplicate = existingItems.some(item => item._id === newMessage._id);
-                             
-                             if (!isDuplicate) {
-                                 updatedMessagesMap[convoId] = {
-                                     ...updatedMessagesMap[convoId],
-                                     items: [...existingItems, { ...newMessage, isOwn: false }]
-                                 };
-                             }
-                        }
+                        const existingItems = updatedMessagesMap[convoId]?.items || [];
+                        const isDuplicate = existingItems.some(item => item._id === newMessage._id);
 
+                        if (!isDuplicate) {
+                            updatedMessagesMap[convoId] = {
+                                ...(updatedMessagesMap[convoId] || { hasMore: false, nextCursor: null }),
+                                items: [...existingItems, { ...newMessage, isOwn }]
+                            };
+                        }
 
                         // 2. Update Conversations List
                         const conversationIndex = state.conversations.findIndex(c => c._id === convoId);
                         let updatedConversations = [...state.conversations];
 
                         if (conversationIndex !== -1) {
+                            const currentCounts = updatedConversations[conversationIndex].unreadCounts || {};
+                            const currentVal = (typeof currentCounts === 'object' && myId) ? (currentCounts[myId] || 0) : 0;
+
                             const updatedConvo = {
                                 ...updatedConversations[conversationIndex],
                                 lastMessage: {
@@ -751,25 +759,29 @@ export const useChatStore = create(
                                 lastMessageAt: new Date().toISOString(),
                                 unreadCounts: isActive 
                                     ? updatedConversations[conversationIndex].unreadCounts 
-                                    : (() => {
-                                        // Helper to increment unread count safely
-                                        const currentCounts = updatedConversations[conversationIndex].unreadCounts || {};
-                                        const myId = useAuthStore.getState().user?._id;
-                                        const currentVal = currentCounts[myId] || 0;
-                                        return { ...currentCounts, [myId]: currentVal + 1 };
-                                    })()
+                                    : (typeof currentCounts === 'object' && myId ? { ...currentCounts, [myId]: currentVal + 1 } : currentCounts)
                             };
                             updatedConversations.splice(conversationIndex, 1);
                             updatedConversations.unshift(updatedConvo);
                         } else {
-                             setTimeout(() => get().fetchConversations(), 0);
+                            setTimeout(() => get().fetchConversations(), 0);
                         }
 
                         return {
                             messages: updatedMessagesMap,
-                            conversations: updatedConversations
+                            conversations: updatedConversations,
+                            // Nếu đang mở temp chat của đúng người này, tự động chuyển sang ID hội thoại thật
+                            activeConversationId: isTempActive ? convoId : state.activeConversationId
                         };
                     });
+
+                    // Thông báo tin nhắn mới nếu không đang mở hội thoại này
+                    const state = get();
+                    const convoId = newMessage.conversationId;
+                    const isActive = state.activeConversationId === convoId || state.activeConversationId === `temp_${newMessage.senderId?.toString()}`;
+                    if (!isOwn && !isActive) {
+                        toast.info("Tin nhắn mới: " + (newMessage.content || "Đã gửi một tệp/ảnh"));
+                    }
                 });
 
                 socket.on("messageReaction", ({ messageId, reactions, conversationId }) => {
@@ -867,6 +879,54 @@ export const useChatStore = create(
                         return { messages: updatedMessagesMap };
                     });
                 });
+
+                // --- REALTIME NOTIFICATIONS / FRIEND REQUESTS ---
+                socket.on("newFriendRequest", (request) => {
+                    if (!request) return;
+                    set((state) => {
+                        const existing = (state.friendRequests || []).filter(r => r._id !== request._id);
+                        return {
+                            friendRequests: [request, ...existing]
+                        };
+                    });
+
+                    const sender = request.from || {};
+                    const senderName = sender.displayName || sender.username || "Người dùng";
+                    toast.info(`${senderName} đã gửi cho bạn một lời mời kết bạn!`);
+                });
+
+                socket.on("friendRequestAccepted", ({ friend, newFriend, requestId }) => {
+                    const friendObj = newFriend || friend;
+                    if (friendObj) {
+                        set((state) => {
+                            const friendId = friendObj._id?.toString();
+                            const cleanRequests = (state.friendRequests || []).filter(r => 
+                                r._id !== requestId && r.from?._id?.toString() !== friendId && r.from?.toString() !== friendId
+                            );
+                            const exists = (state.friends || []).some(f => f._id?.toString() === friendId);
+                            const updatedFriends = exists ? state.friends : [friendObj, ...state.friends];
+                            return {
+                                friendRequests: cleanRequests,
+                                friends: updatedFriends
+                            };
+                        });
+
+                        setTimeout(() => {
+                            get().fetchFriends();
+                            get().fetchConversations();
+                        }, 0);
+
+                        toast.success(`${friendObj.displayName || friendObj.username || "Bạn bè"} đã chấp nhận lời mời kết bạn!`);
+                    }
+                });
+
+                socket.on("friendRequestDeclined", ({ requestId }) => {
+                    if (requestId) {
+                        set((state) => ({
+                            friendRequests: (state.friendRequests || []).filter(r => r._id !== requestId)
+                        }));
+                    }
+                });
             },
 
             unsubscribeFromMessages: () => {
@@ -876,6 +936,9 @@ export const useChatStore = create(
                     socket.off("messageReaction");
                     socket.off("messageRecalled");
                     socket.off("messagePinStatus");
+                    socket.off("newFriendRequest");
+                    socket.off("friendRequestAccepted");
+                    socket.off("friendRequestDeclined");
                 }
             },
 

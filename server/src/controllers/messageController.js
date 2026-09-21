@@ -87,9 +87,9 @@ export const sendDirectMessage = async (req, res) => {
         await conversation.save();
 
         // REALTIME SOCKET
-        const receiverSocketId = getReceiverSocketId(recipientId);
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit("newMessage", message);
+        const targetUserId = recipientId?.toString();
+        if (targetUserId) {
+            io.to(targetUserId).emit("newMessage", message);
         }
 
         return res.status(201).json({message});
@@ -142,10 +142,7 @@ export const sendGroupMessage = async (req, res) => {
                 const participantId = p.userId?._id?.toString() || p.userId?.toString();
                 
                 if (participantId && participantId !== senderId.toString()) {
-                    const socketId = getReceiverSocketId(participantId);
-                    if (socketId) {
-                        io.to(socketId).emit("newMessage", message);
-                    }
+                    io.to(participantId).emit("newMessage", message);
                 }
             });
         }
@@ -193,10 +190,8 @@ export const reactToMessage = async (req, res) => {
         if (conversation && conversation.participants) {
              conversation.participants.forEach(p => {
                 const participantId = p.userId?._id?.toString() || p.userId?.toString();
-
-                const socketId = getReceiverSocketId(participantId);
-                if (socketId) {
-                    io.to(socketId).emit("messageReaction", { messageId, reactions: populatedMessage.reactions, conversationId: message.conversationId });
+                if (participantId) {
+                    io.to(participantId).emit("messageReaction", { messageId, reactions: populatedMessage.reactions, conversationId: message.conversationId });
                 }
             });
         }
@@ -280,9 +275,8 @@ export const recallMessage = async (req, res) => {
         if (conversation && conversation.participants) {
             conversation.participants.forEach(p => {
                 const participantId = p.userId?._id?.toString() || p.userId?.toString();
-                const socketId = getReceiverSocketId(participantId);
-                if (socketId) {
-                    io.to(socketId).emit("messageRecalled", { messageId: message._id, conversationId: message.conversationId });
+                if (participantId) {
+                    io.to(participantId).emit("messageRecalled", { messageId: message._id, conversationId: message.conversationId });
                 }
             });
         }
@@ -375,9 +369,8 @@ export const togglePinMessage = async (req, res) => {
         if (conversation && conversation.participants) {
             conversation.participants.forEach(p => {
                 const participantId = p.userId?._id?.toString() || p.userId?.toString();
-                const socketId = getReceiverSocketId(participantId);
-                if (socketId) {
-                    io.to(socketId).emit("messagePinStatus", {
+                if (participantId) {
+                    io.to(participantId).emit("messagePinStatus", {
                         messageId: message._id,
                         conversationId: message.conversationId,
                         isPinned: message.isPinned,
@@ -483,10 +476,7 @@ export const forwardMessage = async (req, res) => {
             conversation.participants.forEach(p => {
                 const participantId = p.userId?._id?.toString() || p.userId?.toString();
                 if (participantId) {
-                    const socketId = getReceiverSocketId(participantId);
-                    if (socketId) {
-                        io.to(socketId).emit("newMessage", newMessage);
-                    }
+                    io.to(participantId).emit("newMessage", newMessage);
                 }
             });
 

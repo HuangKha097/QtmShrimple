@@ -3,6 +3,8 @@ import {persist} from "zustand/middleware";
 import {toast} from "sonner";
 import {authService} from "../services/authService.js";
 import {useChatStore} from "./useChatStore.js";
+import {useCallStore} from "./useCallStore.js";
+import {useNotificationStore} from "./useNotificationStore.js";
 import {useUIStore} from "./useUIStore.js";
 import { io } from "socket.io-client";
 import { SOCKET_URL } from "../config/env.js";
@@ -300,12 +302,19 @@ export const useAuthStore = create(
                     set({ onlineUsers: userIds });
                 });
                 
-                // Subscribe to chat events
+                // Subscribe to chat and notification events
                 useChatStore.getState().subscribeToMessages();
+                // Subscribe to call signaling events
+                useCallStore.getState().subscribeToCallEvents();
+                // Subscribe to like/comment/reply notification events
+                useNotificationStore.getState().subscribeToNotificationEvents();
+                useNotificationStore.getState().fetchNotifications();
             },
 
             disconnectSocket: () => {
                 useChatStore.getState().unsubscribeFromMessages();
+                useCallStore.getState().unsubscribeFromCallEvents();
+                useNotificationStore.getState().unsubscribeFromNotificationEvents();
                 if (get().socket?.connected) get().socket.disconnect();
                 set({ socket: null, onlineUsers: [] });
             },

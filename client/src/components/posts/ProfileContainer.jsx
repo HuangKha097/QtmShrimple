@@ -22,9 +22,10 @@ const ProfileContainer = () => {
     const [profileUser, setProfileUser] = useState(null);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
 
-    const isFriend = friends.some(f => f._id === userId);
+    const isFriend = Array.isArray(friends) && friends.some(f => (f?._id || f?.id) === userId);
 
     const handleAddFriend = async () => {
+        if (!userId) return;
         try {
             await sendRequestAction(userId);
             toast.success("Friend request sent!");
@@ -34,8 +35,16 @@ const ProfileContainer = () => {
     };
 
     useEffect(() => {
+        // Reset userPosts when switching profiles to avoid stale posts from previously viewed profile
+        usePostStore.setState({ userPosts: [] });
+    }, [userId]);
+
+    useEffect(() => {
         const loadData = async () => {
-            if (!userId) return;
+            if (!userId || userId === "undefined") {
+                setIsLoadingUser(false);
+                return;
+            }
             setIsLoadingUser(true);
             try {
                 // Fetch User Info
@@ -58,7 +67,7 @@ const ProfileContainer = () => {
         return <div className={cx('posts-container-wrapper')} style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%'}}>Loading...</div>;
     }
 
-    if (!profileUser) {
+    if (!userId || userId === "undefined" || !profileUser) {
         return <div className={cx('posts-container-wrapper')} style={{padding: '2rem', textAlign: 'center'}}>User not found</div>;
     }
 
@@ -96,15 +105,18 @@ const ProfileContainer = () => {
                             <p style={{opacity: 0.7, fontSize: '1.1rem', marginBottom: '1.2rem'}}>@{profileUser.username}</p>
                             
                             {/* Profile Actions */}
-                            {currentUser._id !== profileUser._id && (
+                            {Boolean(currentUser?._id && profileUser?._id && currentUser._id !== profileUser._id) && (
                                 <div style={{display: 'flex', gap: '1rem'}}>
                                     {isFriend ? (
                                         <>
                                             <button 
                                                 onClick={() => {
                                                     // Find existing conversation with this friend
-                                                    const existingConvo = useChatStore.getState().conversations.find(c => 
-                                                        !c.isGroup && c.participants.some(p => p._id === profileUser._id)
+                                                    const existingConvo = (useChatStore.getState().conversations || []).find(c => 
+                                                        !c.isGroup && Array.isArray(c.participants) && c.participants.some(p => {
+                                                            const pId = p?._id || (typeof p?.userId === 'object' ? p?.userId?._id : p?.userId);
+                                                            return pId && profileUser?._id && pId.toString() === profileUser._id.toString();
+                                                        })
                                                     );
 
                                                     if (existingConvo) {
@@ -213,14 +225,14 @@ const ProfileContainer = () => {
                 </div>
 
                 {/* Posts */}
-                {userPosts.length === 0 ? (
+                {(!Array.isArray(userPosts) || userPosts.length === 0) ? (
                     <div style={{textAlign: 'center', opacity: 0.6, marginTop: '2rem'}}>
                         <p>No posts yet.</p>
                     </div>
                 ) : (
-                    userPosts.map(post => (
+                    userPosts.map((post, idx) => (
                         <PostItem 
-                            key={post._id} 
+                            key={post?._id || idx} 
                             post={post} 
                             currentUser={currentUser}
                             onLike={likePost}

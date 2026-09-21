@@ -17,9 +17,13 @@ const FriendsContainer = () => {
     }, [fetchFriends]);
 
     const handleMessage = (friend) => {
+        if (!friend?._id) return;
         // Find existing conversation with this friend
-        const existingConvo = useChatStore.getState().conversations.find(c => 
-            !c.isGroup && c.participants.some(p => p._id === friend._id)
+        const existingConvo = (useChatStore.getState().conversations || []).find(c => 
+            !c.isGroup && Array.isArray(c.participants) && c.participants.some(p => {
+                const pId = p?._id || (typeof p?.userId === 'object' ? p?.userId?._id : p?.userId);
+                return pId && pId.toString() === friend._id.toString();
+            })
         );
 
         if (existingConvo) {
@@ -34,6 +38,7 @@ const FriendsContainer = () => {
     };
 
     const handleUnfriend = async (friend) => {
+        if (!friend?._id) return;
         if(window.confirm(`Are you sure you want to unfriend ${friend.displayName}?`)) {
             try {
                 await unfriendAction(friend._id);
@@ -43,25 +48,27 @@ const FriendsContainer = () => {
             }
         }
     }
+
+    const safeFriends = Array.isArray(friends) ? friends.filter(f => f && f._id) : [];
     
     return (
         <div className={cx('posts-container-wrapper')}>
             <div className={cx('header')}>
-                 <button onClick={() => navigate('/feed')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', marginRight: '1rem', display: 'flex', alignItems: 'center' }}>
+                 <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', marginRight: '1rem', display: 'flex', alignItems: 'center' }}>
                     <ChevronLeft size={24} />
                 </button>
-                <h2>My Friends ({friends.length})</h2>
+                <h2>Friends ({safeFriends.length})</h2>
             </div>
             
             <div className={cx('content-area')}>
-                {friends.length === 0 && (
+                {safeFriends.length === 0 && (
                     <div style={{textAlign: 'center', marginTop: '5rem', opacity: 0.6}}>
                         <p>No friends yet. Check out suggestions!</p>
                     </div>
                 )}
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1.5rem', padding: '1rem' }}>
-                    {friends.map(friend => (
+                    {safeFriends.map(friend => (
                         <div key={friend._id} style={{
                             backgroundColor: 'var(--surface-subtle)',
                             borderRadius: '1rem',

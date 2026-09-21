@@ -12,21 +12,25 @@ import {
     Flag, 
     Link as LinkIcon, 
     Repeat, 
-    Share,
-    Send,
-    Smile,
-    Globe,
-    Users,
-    Lock,
-    Check,
-    X
+    Share, 
+    Send, 
+    Smile, 
+    Globe, 
+    Users, 
+    Lock, 
+    Check, 
+    X, 
+    Pencil, 
+    Volume2, 
+    VolumeX 
 } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import default_avt from "../../../public/favicon.png";
-import PostDetailModal from './PostDetailModal';
+import MediaLightboxModal from './MediaLightboxModal';
 import PostCommentItem from './PostCommentItem';
+import formatHashtags from '../../utils/hashtagFormatter';
 
 const cx = classNames.bind(styles);
 
@@ -49,15 +53,24 @@ function formatXTime(dateString) {
 }
 
 const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
-    const { toggleSavePost, repostPost, updatePostPrivacy } = usePostStore();
+    const { toggleSavePost, repostPost, updatePostPrivacy, editPost } = usePostStore();
     const [commentText, setCommentText] = useState('');
     const [showComments, setShowComments] = useState(false);
     const [showOptions, setShowOptions] = useState(false);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
-    const [isDetailOpen, setIsDetailOpen] = useState(false);
-    const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+    const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+    const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+
+    // Edit Post state
+    const [isEditing, setIsEditing] = useState(false);
+    const [editContent, setEditContent] = useState(post.content || '');
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+    // Feed Video Sound state (default muted)
+    const [isVideoMuted, setIsVideoMuted] = useState(true);
+
     const optionsRef = useRef(null);
     const navigate = useNavigate();
 
@@ -71,6 +84,34 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
         }
         return [];
     }, [post.images, post.image]);
+
+    // Unified media list for fullscreen lightbox & feed grid
+    const allMedia = useMemo(() => {
+        const list = [];
+        if (post.video) {
+            list.push({ type: 'video', url: post.video });
+        }
+        postImages.forEach(img => {
+            list.push({ type: 'image', url: img });
+        });
+        return list;
+    }, [postImages, post.video]);
+
+    const handleSaveEdit = async () => {
+        const trimmed = editContent.trim();
+        if (!trimmed || isSavingEdit) return;
+        setIsSavingEdit(true);
+        try {
+            const res = await editPost(post._id, trimmed);
+            if (res?.success) {
+                setIsEditing(false);
+            }
+        } catch (err) {
+            console.error("Error editing post:", err);
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
 
     // Close options menu when clicking outside
     useEffect(() => {
@@ -212,6 +253,15 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
                         {authorUsername && <span className={cx('author-handle')}>{authorUsername}</span>}
                         <span className={cx('dot-divider')}>·</span>
                         <span className={cx('post-time')}>{timeAgo}</span>
+                        {post.isEdited && (
+                            <>
+                                <span className={cx('dot-divider')}>·</span>
+                                <span className={cx('edited-badge')} title={`Đã chỉnh sửa 1 lần (${new Date(post.editedAt || post.updatedAt).toLocaleString('vi-VN')})`}>
+                                    <Pencil size={11} style={{ marginRight: '3px' }} />
+                                    Đã chỉnh sửa
+                                </span>
+                            </>
+                        )}
                         <span className={cx('dot-divider')}>·</span>
                         <span className={cx('privacy-badge')} title={privacyDetails[privacy]?.label || "Công khai"}>
                             <CurrentPrivacyIcon size={12} />
@@ -233,6 +283,21 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
 
                         {showOptions && (
                             <div className={cx('options-menu')} onClick={(e) => e.stopPropagation()}>
+                                {post.author?._id === currentUser?._id && !post.isEdited && (
+                                    <button 
+                                        type="button" 
+                                        className={cx('menu-option')} 
+                                        onClick={() => {
+                                            setShowOptions(false);
+                                            setIsEditing(true);
+                                            setEditContent(post.content || '');
+                                        }}
+                                    >
+                                        <Pencil size={16} />
+                                        <span>Chỉnh sửa bài viết</span>
+                                    </button>
+                                )}
+
                                 <button type="button" className={cx('menu-option')} onClick={handleSavePost}>
                                     <Bookmark size={16} fill={isSaved ? "#f97316" : "none"} color={isSaved ? "#f97316" : "currentColor"} />
                                     <span>{isSaved ? "Bỏ lưu bài viết" : "Lưu bài viết"}</span>
@@ -278,20 +343,87 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
                     </div>
                 </div>
 
-                {/* Text Body */}
-                {post.content && (
-                    <div className={cx('post-content-body')}>
-                        {post.content}
+                {/* Text Body or Inline Edit */}
+                {isEditing ? (
+                    <div className={cx('edit-post-box')} onClick={(e) => e.stopPropagation()}>
+                        <textarea
+                            className={cx('edit-post-textarea')}
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            rows={3}
+                            placeholder="Chỉnh sửa nội dung bài viết..."
+                            autoFocus
+                        />
+                        <div className={cx('edit-post-actions')}>
+                            <button
+                                type="button"
+                                className={cx('edit-cancel-btn')}
+                                onClick={() => {
+                                    setIsEditing(false);
+                                    setEditContent(post.content || '');
+                                }}
+                                disabled={isSavingEdit}
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                className={cx('edit-save-btn')}
+                                onClick={handleSaveEdit}
+                                disabled={isSavingEdit || !editContent.trim()}
+                            >
+                                {isSavingEdit ? "Đang lưu..." : "Lưu"}
+                            </button>
+                        </div>
                     </div>
+                ) : (
+                    post.content && (
+                        <div className={cx('post-content-body')}>
+                            {formatHashtags(post.content, (tag) => {
+                                navigate(`/feed/search?q=${encodeURIComponent('#' + tag)}`);
+                            })}
+                        </div>
+                    )
                 )}
 
-                {/* Media Attachment: Multiple Images Grid */}
-                {postImages.length > 0 && (
-                    <div className={cx('post-media-grid', `grid-${Math.min(postImages.length, 4)}`)}>
-                        {postImages.slice(0, 4).map((imgUrl, idx) => {
-                            const fullSrc = imgUrl.startsWith('http') ? imgUrl : `http://localhost:5001${imgUrl}`;
-                            const isExtraFourth = idx === 3 && postImages.length > 4;
-                            const extraCount = postImages.length - 4;
+                {/* Unified Media Attachment */}
+                {allMedia.length === 1 && allMedia[0].type === 'video' ? (
+                    /* Single Standalone Video: Natural dimensions, no horizontal letterbox padding */
+                    <div className={cx('post-media-container')}>
+                        <video
+                            autoPlay
+                            loop
+                            muted={isVideoMuted}
+                            playsInline
+                            src={allMedia[0].url.startsWith('http') ? allMedia[0].url : `http://localhost:5001${allMedia[0].url}`}
+                            className={cx('post-media-video')}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedMediaIndex(0);
+                                setIsLightboxOpen(true);
+                            }}
+                        />
+                        <button
+                            type="button"
+                            className={cx('video-audio-toggle')}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsVideoMuted(!isVideoMuted);
+                            }}
+                            title={isVideoMuted ? "Bật âm thanh" : "Tắt âm thanh"}
+                        >
+                            {isVideoMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                        </button>
+                    </div>
+                ) : allMedia.length > 0 && (
+                    /* Unified Grid for 1 image or 2+ mixed media items (photos + video) */
+                    <div className={cx('post-media-grid', `grid-${Math.min(allMedia.length, 4)}`)}>
+                        {allMedia.slice(0, 4).map((item, idx) => {
+                            const rawUrl = item.url || item;
+                            const fullSrc = rawUrl.startsWith('http') ? rawUrl : `http://localhost:5001${rawUrl}`;
+                            const isExtraFourth = idx === 3 && allMedia.length > 4;
+                            const extraCount = allMedia.length - 4;
+                            const isItemVideo = item.type === 'video' || (typeof rawUrl === 'string' && (rawUrl.endsWith('.mp4') || rawUrl.endsWith('.webm') || rawUrl.includes('video/')));
 
                             return (
                                 <div 
@@ -299,16 +431,41 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
                                     className={cx('grid-image-wrapper')}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedImageIndex(idx);
-                                        setIsDetailOpen(true);
+                                        setSelectedMediaIndex(idx);
+                                        setIsLightboxOpen(true);
                                     }}
                                 >
-                                    <img
-                                        src={fullSrc}
-                                        alt={`Post media ${idx + 1}`}
-                                        className={cx('grid-image-item')}
-                                        loading="lazy"
-                                    />
+                                    {isItemVideo ? (
+                                        <>
+                                            <video
+                                                src={fullSrc}
+                                                autoPlay
+                                                loop
+                                                muted={isVideoMuted}
+                                                playsInline
+                                                className={cx('grid-image-item')}
+                                            />
+                                            <button
+                                                type="button"
+                                                className={cx('grid-audio-toggle')}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setIsVideoMuted(!isVideoMuted);
+                                                }}
+                                                title={isVideoMuted ? "Bật âm thanh" : "Tắt âm thanh"}
+                                            >
+                                                {isVideoMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <img
+                                            src={fullSrc}
+                                            alt={`Post media ${idx + 1}`}
+                                            className={cx('grid-image-item')}
+                                            loading="lazy"
+                                        />
+                                    )}
+
                                     {isExtraFourth && (
                                         <div className={cx('extra-images-overlay')}>
                                             <span>+{extraCount}</span>
@@ -317,17 +474,6 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
                                 </div>
                             );
                         })}
-                    </div>
-                )}
-
-                {/* Video Attachment */}
-                {post.video && (
-                    <div className={cx('post-media-container')}>
-                        <video
-                            controls
-                            src={post.video.startsWith('http') ? post.video : `http://localhost:5001${post.video}`}
-                            className={cx('post-media-video')}
-                        />
                     </div>
                 )}
 
@@ -460,12 +606,12 @@ const PostItem = ({ post, currentUser, onLike, onComment, onDelete }) => {
                 </AnimatePresence>
             </div>
 
-            {/* Image/Video Fullscreen Modal */}
-            <PostDetailModal 
-                open={isDetailOpen} 
-                post={post} 
-                initialIndex={selectedImageIndex}
-                onClose={() => setIsDetailOpen(false)} 
+            {/* Image/Video Fullscreen Lightbox Modal */}
+            <MediaLightboxModal 
+                isOpen={isLightboxOpen} 
+                mediaList={allMedia} 
+                initialIndex={selectedMediaIndex}
+                onClose={() => setIsLightboxOpen(false)} 
             />
 
             {/* Privacy Edit Modal */}

@@ -197,7 +197,17 @@ const ChatHeader = ({ onCloseChatInfo, chat }) => {
                         className={cx('btn')}
                         disabled={!isAllowedToCall}
                         title={!isAllowedToCall ? "You are not friends" : "Voice Call"}
-                        onClick={() => alert('Coming soon!')}
+                        onClick={() => {
+                            if (isGroup) {
+                                toast.info("Tính năng gọi nhóm đang được phát triển");
+                                return;
+                            }
+                            if (!partnerId) {
+                                toast.error("Không tìm thấy thông tin người nhận");
+                                return;
+                            }
+                            initiateCall(partnerId, false, partner);
+                        }}
                     >
                         <Phone size={20} />
                     </button>
@@ -205,7 +215,17 @@ const ChatHeader = ({ onCloseChatInfo, chat }) => {
                         className={cx('btn')}
                         disabled={!isAllowedToCall}
                         title={!isAllowedToCall ? "You are not friends" : "Video Call"}
-                        onClick={() => alert('Coming soon!')}
+                        onClick={() => {
+                            if (isGroup) {
+                                toast.info("Tính năng gọi nhóm đang được phát triển");
+                                return;
+                            }
+                            if (!partnerId) {
+                                toast.error("Không tìm thấy thông tin người nhận");
+                                return;
+                            }
+                            initiateCall(partnerId, true, partner);
+                        }}
                     >
                         <Video size={20} />
                     </button>

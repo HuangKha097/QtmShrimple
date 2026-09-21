@@ -11,6 +11,7 @@ import friendRoute from "./src/routes/friendRoute.js";
 import messageRoute from "./src/routes/messageRoute.js";
 import conversationRoute from "./src/routes/conversationRoute.js";
 import postRoute from "./src/routes/postRoute.js";
+import notificationRoute from "./src/routes/notificationRoute.js";
 
 import { app, server } from "./src/socket/socket.js";
 
@@ -42,6 +43,7 @@ app.use("/api/friends", protectedRoute, friendRoute);
 app.use("/api/messages", protectedRoute, messageRoute);
 app.use("/api/conversations", protectedRoute, conversationRoute);
 app.use("/api/posts", protectedRoute, postRoute);
+app.use("/api/notifications", protectedRoute, notificationRoute);
 
 connectDb().then(() => {
     server.listen(PORT, () => {

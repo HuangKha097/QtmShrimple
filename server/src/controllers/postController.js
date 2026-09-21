@@ -1,8 +1,66 @@
+import mongoose from "mongoose";
 import Post from "../models/Post.js";
 import Friend from "../models/Friend.js";
+import User from "../models/User.js";
+import Notification from "../models/Notification.js";
+import Hashtag from "../models/Hashtag.js";
+import { io } from "../socket/socket.js";
 import { spawn } from "child_process";
 import path from "path";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
+
+export const postPopulateOptions = [
+    { path: "author", select: "username displayName avatarURL" },
+    { path: "comments.postedBy", select: "username displayName avatarURL" },
+    { path: "comments.replies.postedBy", select: "username displayName avatarURL" },
+    { path: "comments.replies.replyToUser", select: "username displayName avatarURL" },
+    { path: "comments.replies.replies.postedBy", select: "username displayName avatarURL" },
+    { path: "comments.replies.replies.replyToUser", select: "username displayName avatarURL" },
+];
+
+export const extractHashtags = (text) => {
+    if (!text || typeof text !== "string") return [];
+    const matches = text.match(/#([A-Za-z0-9_À-ỹ]+)/gi) || [];
+    const uniqueTags = [...new Set(matches.map(tag => tag.replace(/^#/, "").trim().toLowerCase()))].filter(Boolean);
+    return uniqueTags;
+};
+
+export const syncHashtags = async (postId, content) => {
+    try {
+        const tags = extractHashtags(content);
+        if (tags.length === 0) return [];
+        for (const tag of tags) {
+            await Hashtag.findOneAndUpdate(
+                { name: tag },
+                {
+                    $addToSet: { postIds: postId },
+                    $inc: { count: 1 },
+                    $set: { lastUsedAt: new Date() }
+                },
+                { upsert: true, new: true }
+            );
+        }
+        return tags;
+    } catch (err) {
+        console.error("Error syncing hashtags:", err);
+        return [];
+    }
+};
+
+export const removePostFromHashtags = async (postId) => {
+    try {
+        await Hashtag.updateMany(
+            { postIds: postId },
+            {
+                $pull: { postIds: postId },
+                $inc: { count: -1 }
+            }
+        );
+        await Hashtag.deleteMany({ count: { $lte: 0 } });
+    } catch (err) {
+        console.error("Error removing post from hashtags:", err);
+    }
+};
 
 const checkFakeNews = (text) => {
     return new Promise((resolve, reject) => {
@@ -152,6 +210,7 @@ export const createPost = async (req, res) => {
         // ---------------------------
 
         const validPrivacy = (privacy && ["public", "friends", "private"].includes(privacy)) ? privacy : "public";
+        const tags = extractHashtags(content);
 
         const newPost = new Post({
             author: req.user._id,
@@ -160,12 +219,14 @@ export const createPost = async (req, res) => {
             images: imagesArray,
             video: videoUrl,
             privacy: validPrivacy,
+            hashtags: tags,
         });
 
         await newPost.save();
+        await syncHashtags(newPost._id, content);
         
-        // Populate author details to return immediately
-        await newPost.populate("author", "username displayName avatarURL");
+        // Populate author and comments details to return immediately
+        await newPost.populate(postPopulateOptions);
 
         res.status(201).json(newPost);
     } catch (error) {
@@ -206,9 +267,7 @@ export const getAllPosts = async (req, res) => {
         const posts = await Post.find(query)
             .sort({ createdAt: -1 })
             .limit(limit + 1) // Fetch 1 extra to check if there are more
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+            .populate(postPopulateOptions);
 
         let nextCursor = null;
         if (posts.length > limit) {
@@ -241,9 +300,7 @@ export const getVideoFeed = async (req, res) => {
         const posts = await Post.find(query)
             .sort({ createdAt: -1 })
             .limit(limit + 1)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+            .populate(postPopulateOptions);
 
         let nextCursor = null;
         if (posts.length > limit) {
@@ -262,6 +319,10 @@ export const getUserPosts = async (req, res) => {
     try {
         const { userId: targetUserId } = req.params;
         const currentUserId = req.user?._id;
+
+        if (!targetUserId || !mongoose.Types.ObjectId.isValid(targetUserId)) {
+            return res.status(200).json([]);
+        }
 
         let query = { author: targetUserId };
 
@@ -288,9 +349,7 @@ export const getUserPosts = async (req, res) => {
 
         const posts = await Post.find(query)
             .sort({ createdAt: -1 })
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+            .populate(postPopulateOptions);
 
         res.status(200).json(posts);
     } catch (error) {
@@ -321,10 +380,7 @@ export const updatePostPrivacy = async (req, res) => {
         post.privacy = privacy;
         await post.save();
 
-        const updatedPost = await Post.findById(id)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+        const updatedPost = await Post.findById(id).populate(postPopulateOptions);
 
         res.status(200).json(updatedPost);
     } catch (error) {
@@ -359,10 +415,7 @@ export const repostPost = async (req, res) => {
 
         await post.save();
 
-        const updatedPost = await Post.findById(id)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+        const updatedPost = await Post.findById(id).populate(postPopulateOptions);
 
         res.status(200).json(updatedPost);
     } catch (error) {
@@ -389,14 +442,33 @@ export const likePost = async (req, res) => {
         } else {
             // Like
             post.likes.push(userId);
+
+            // Gửi thông báo đến tác giả nếu người like khác tác giả
+            if (post.author.toString() !== userId.toString()) {
+                try {
+                    const notif = await Notification.create({
+                        recipient: post.author,
+                        sender: userId,
+                        type: "like",
+                        post: post._id,
+                        text: "đã thích bài viết của bạn.",
+                    });
+
+                    const populatedNotif = await Notification.findById(notif._id)
+                        .populate("sender", "displayName username avatarURL")
+                        .populate("post", "content image images video")
+                        .lean();
+
+                    io.to(post.author.toString()).emit("newNotification", populatedNotif);
+                } catch (notifErr) {
+                    console.error("Error creating like notification:", notifErr);
+                }
+            }
         }
 
         await post.save();
         
-        const updatedPost = await Post.findById(postId)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+        const updatedPost = await Post.findById(postId).populate(postPopulateOptions);
 
         res.status(200).json(updatedPost);
     } catch (error) {
@@ -410,8 +482,8 @@ export const addComment = async (req, res) => {
         const { text } = req.body;
         const postId = req.params.id;
 
-        if (!text) {
-            return res.status(400).json({ message: "Comment text is required" });
+        if (!text || !text.trim()) {
+            return res.status(400).json({ message: "Nội dung bình luận không được để trống" });
         }
 
         const post = await Post.findById(postId);
@@ -420,22 +492,192 @@ export const addComment = async (req, res) => {
         }
 
         const comment = {
-            text,
+            text: text.trim(),
             postedBy: req.user._id,
+            created: new Date(),
+            replies: [],
         };
 
         post.comments.push(comment);
         await post.save();
+
+        // Gửi thông báo đến tác giả bài viết
+        if (post.author.toString() !== req.user._id.toString()) {
+            try {
+                const notif = await Notification.create({
+                    recipient: post.author,
+                    sender: req.user._id,
+                    type: "comment",
+                    post: post._id,
+                    text: text.trim().slice(0, 100),
+                });
+
+                const populatedNotif = await Notification.findById(notif._id)
+                    .populate("sender", "displayName username avatarURL")
+                    .populate("post", "content image images video")
+                    .lean();
+
+                io.to(post.author.toString()).emit("newNotification", populatedNotif);
+            } catch (notifErr) {
+                console.error("Error creating comment notification:", notifErr);
+            }
+        }
         
-        // Re-fetch to populate comment user details
-        const updatedPost = await Post.findById(postId)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+        const updatedPost = await Post.findById(postId).populate(postPopulateOptions);
 
         res.status(200).json(updatedPost);
     } catch (error) {
         console.error("Error in addComment controller: ", error.message);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+export const replyComment = async (req, res) => {
+    try {
+        const { postId, commentId } = req.params;
+        const { text, replyToReplyId, replyToUserId } = req.body;
+        const userId = req.user._id;
+
+        if (!text || !text.trim()) return res.status(400).json({ message: "Nội dung phản hồi không được để trống" });
+
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ message: "Post not found" });
+
+        const comment = post.comments.id(commentId);
+        if (!comment) return res.status(404).json({ message: "Comment not found" });
+
+        let recipientId = null;
+
+        // Nếu có replyToReplyId: Người dùng đang trả lời một reply cấp 2 hoặc cấp 3
+        if (replyToReplyId) {
+            // Tìm trong reply cấp 2
+            let targetL2 = comment.replies.id(replyToReplyId);
+
+            if (targetL2) {
+                // Trả lời reply cấp 2 -> Thêm vào level 3
+                if (!Array.isArray(targetL2.replies)) targetL2.replies = [];
+                targetL2.replies.push({
+                    text: text.trim(),
+                    postedBy: userId,
+                    replyToUser: replyToUserId || targetL2.postedBy,
+                    created: new Date(),
+                });
+                recipientId = replyToUserId || targetL2.postedBy;
+            } else {
+                // Có thể replyToReplyId là một reply cấp 3 -> Tìm cấp 2 cha chứa nó
+                const parentL2 = comment.replies.find(r => r.replies && r.replies.id(replyToReplyId));
+                if (parentL2) {
+                    // Tiếp tục lưu ở cấp 3 của parentL2 (không tạo cấp 4!)
+                    parentL2.replies.push({
+                        text: text.trim(),
+                        postedBy: userId,
+                        replyToUser: replyToUserId || parentL2.postedBy,
+                        created: new Date(),
+                    });
+                    recipientId = replyToUserId || parentL2.postedBy;
+                } else {
+                    // Fallback: Thêm vào cấp 2
+                    comment.replies.push({
+                        text: text.trim(),
+                        postedBy: userId,
+                        replyToUser: replyToUserId || comment.postedBy,
+                        created: new Date(),
+                        replies: [],
+                    });
+                    recipientId = replyToUserId || comment.postedBy;
+                }
+            }
+        } else {
+            // Trả lời comment gốc (cấp 1) -> Tạo reply cấp 2
+            comment.replies.push({
+                text: text.trim(),
+                postedBy: userId,
+                replyToUser: replyToUserId || comment.postedBy,
+                created: new Date(),
+                replies: [],
+            });
+            recipientId = replyToUserId || comment.postedBy;
+        }
+
+        await post.save();
+
+        // Gửi thông báo đến người được trả lời
+        if (recipientId && recipientId.toString() !== userId.toString()) {
+            try {
+                const notif = await Notification.create({
+                    recipient: recipientId,
+                    sender: userId,
+                    type: "reply",
+                    post: post._id,
+                    commentId: comment._id,
+                    text: text.trim().slice(0, 100),
+                });
+
+                const populatedNotif = await Notification.findById(notif._id)
+                    .populate("sender", "displayName username avatarURL")
+                    .populate("post", "content image images video")
+                    .lean();
+
+                io.to(recipientId.toString()).emit("newNotification", populatedNotif);
+            } catch (notifErr) {
+                console.error("Error creating reply notification:", notifErr);
+            }
+        }
+
+        const updatedPost = await Post.findById(postId).populate(postPopulateOptions);
+
+        res.status(200).json(updatedPost);
+    } catch (error) {
+        console.error("Error in replyComment:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export const updatePost = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { content } = req.body;
+        const userId = req.user._id;
+
+        const post = await Post.findById(id);
+        if (!post) {
+            return res.status(404).json({ message: "Không tìm thấy bài viết" });
+        }
+
+        if (post.author.toString() !== userId.toString()) {
+            return res.status(403).json({ message: "Bạn không có quyền chỉnh sửa bài viết này" });
+        }
+
+        // Mỗi bài viết chỉ chỉnh sửa được 1 lần
+        if (post.isEdited || (post.editCount && post.editCount >= 1)) {
+            return res.status(400).json({ message: "Mỗi bài viết chỉ được phép chỉnh sửa 1 lần duy nhất." });
+        }
+
+        if (content !== undefined) {
+            const trimmed = content.trim();
+            if (!trimmed && (!post.images || post.images.length === 0) && !post.video) {
+                return res.status(400).json({ message: "Nội dung bài viết không được để trống" });
+            }
+
+            // Đồng bộ lại hashtags
+            await removePostFromHashtags(post._id);
+            const newTags = await syncHashtags(post._id, trimmed);
+
+            post.content = trimmed;
+            post.hashtags = newTags;
+        }
+
+        post.isEdited = true;
+        post.editCount = (post.editCount || 0) + 1;
+        post.editedAt = new Date();
+
+        await post.save();
+
+        const updatedPost = await Post.findById(id).populate(postPopulateOptions);
+
+        res.status(200).json(updatedPost);
+    } catch (error) {
+        console.error("Error in updatePost:", error);
         res.status(500).json({ message: "Internal Server Error" });
     }
 };
@@ -452,6 +694,8 @@ export const deletePost = async (req, res) => {
             return res.status(401).json({ message: "You are not authorized to delete this post" });
         }
 
+        await removePostFromHashtags(post._id);
+        await Notification.deleteMany({ post: post._id });
         await Post.findByIdAndDelete(req.params.id);
         res.status(200).json({ message: "Post deleted successfully" });
     } catch (error) {
@@ -462,10 +706,7 @@ export const deletePost = async (req, res) => {
 
 export const getPostById = async (req, res) => {
     try {
-        const post = await Post.findById(req.params.id)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+        const post = await Post.findById(req.params.id).populate(postPopulateOptions);
 
         if (!post) {
             return res.status(404).json({ message: "Post not found" });
@@ -495,10 +736,8 @@ export const reactToComment = async (req, res) => {
         if (existingReactionIndex > -1) {
             const existingReaction = comment.reactions[existingReactionIndex];
             if (existingReaction.reaction === reaction) {
-                // Toggle off if same reaction
                 comment.reactions.splice(existingReactionIndex, 1);
             } else {
-                // Change reaction
                 existingReaction.reaction = reaction;
             }
         } else {
@@ -507,48 +746,11 @@ export const reactToComment = async (req, res) => {
 
         await post.save();
 
-        const updatedPost = await Post.findById(postId)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+        const updatedPost = await Post.findById(postId).populate(postPopulateOptions);
 
         res.status(200).json(updatedPost);
     } catch (error) {
         console.error("Error in reactToComment:", error);
-        res.status(500).json({ message: "Internal server error" });
-    }
-};
-
-export const replyComment = async (req, res) => {
-    try {
-        const { postId, commentId } = req.params;
-        const { text } = req.body;
-        const userId = req.user._id;
-
-        if (!text) return res.status(400).json({ message: "Reply text is required" });
-
-        const post = await Post.findById(postId);
-        if (!post) return res.status(404).json({ message: "Post not found" });
-
-        const comment = post.comments.id(commentId);
-        if (!comment) return res.status(404).json({ message: "Comment not found" });
-
-        comment.replies.push({
-            text,
-            postedBy: userId,
-            created: new Date()
-        });
-
-        await post.save();
-
-         const updatedPost = await Post.findById(postId)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
-
-        res.status(200).json(updatedPost);
-    } catch (error) {
-        console.error("Error in replyComment:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
@@ -565,7 +767,20 @@ export const reactToReply = async (req, res) => {
         const comment = post.comments.id(commentId);
         if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-        const reply = comment.replies.id(replyId);
+        // Tìm ở cấp 2 hoặc cấp 3
+        let reply = comment.replies.id(replyId);
+        if (!reply) {
+            for (const r of comment.replies) {
+                if (r.replies) {
+                    const subR = r.replies.id(replyId);
+                    if (subR) {
+                        reply = subR;
+                        break;
+                    }
+                }
+            }
+        }
+
         if (!reply) return res.status(404).json({ message: "Reply not found" });
 
         const existingReactionIndex = reply.reactions.findIndex(r => r.userId.toString() === userId.toString());
@@ -583,10 +798,7 @@ export const reactToReply = async (req, res) => {
 
         await post.save();
 
-        const updatedPost = await Post.findById(postId)
-            .populate("author", "username displayName avatarURL")
-            .populate("comments.postedBy", "username displayName avatarURL")
-            .populate("comments.replies.postedBy", "username displayName avatarURL");
+        const updatedPost = await Post.findById(postId).populate(postPopulateOptions);
 
         res.status(200).json(updatedPost);
     } catch (error) {
@@ -594,3 +806,103 @@ export const reactToReply = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+export const getTrends = async (req, res) => {
+    try {
+        const trends = await Hashtag.find({ count: { $gt: 0 } })
+            .sort({ count: -1, lastUsedAt: -1 })
+            .limit(10)
+            .lean();
+
+        res.status(200).json(trends);
+    } catch (error) {
+        console.error("Error in getTrends:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+export const searchPosts = async (req, res) => {
+    try {
+        const rawQuery = (req.query.q || "").trim();
+        const userId = req.user?._id;
+
+        if (!rawQuery) {
+            return res.status(200).json({ posts: [], users: [], hashtag: null });
+        }
+
+        const isHashtagSearch = rawQuery.startsWith("#");
+        const cleanTag = rawQuery.replace(/^#/, "").trim().toLowerCase();
+
+        // 1. Hashtag details
+        let hashtagDoc = null;
+        if (cleanTag) {
+            hashtagDoc = await Hashtag.findOne({ name: cleanTag }).lean();
+        }
+
+        // 2. Tìm người dùng
+        const userKeyword = rawQuery.replace(/^[@#]/, "").trim();
+        let users = [];
+        if (userKeyword) {
+            users = await User.find({
+                $or: [
+                    { username: { $regex: userKeyword, $options: "i" } },
+                    { displayName: { $regex: userKeyword, $options: "i" } },
+                ]
+            })
+            .select("displayName username avatarURL bio")
+            .limit(10)
+            .lean();
+        }
+
+        // 3. Tìm bài viết
+        let friendIds = [];
+        if (userId) {
+            const friendships = await Friend.find({
+                $or: [{ userA: userId }, { userB: userId }]
+            });
+            friendIds = friendships.map(f =>
+                f.userA.toString() === userId.toString() ? f.userB : f.userA
+            );
+        }
+
+        const privacyFilter = {
+            $or: [
+                { author: userId },
+                { author: { $in: friendIds }, privacy: { $in: ["public", "friends", null, undefined] } },
+                { privacy: { $in: ["public", null, undefined] } }
+            ]
+        };
+
+        let contentFilter = {};
+        if (isHashtagSearch) {
+            contentFilter = {
+                $or: [
+                    { hashtags: cleanTag },
+                    { content: { $regex: `#${cleanTag}\\b`, $options: "i" } }
+                ]
+            };
+        } else {
+            contentFilter = {
+                $or: [
+                    { content: { $regex: rawQuery, $options: "i" } },
+                    { hashtags: cleanTag }
+                ]
+            };
+        }
+
+        const finalQuery = {
+            $and: [privacyFilter, contentFilter]
+        };
+
+        const posts = await Post.find(finalQuery)
+            .sort({ createdAt: -1 })
+            .limit(30)
+            .populate(postPopulateOptions);
+
+        res.status(200).json({ posts, users, hashtag: hashtagDoc });
+    } catch (error) {
+        console.error("Error in searchPosts:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+

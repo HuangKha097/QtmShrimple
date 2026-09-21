@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Friend from "../models/Friend.js";
 import Post from "../models/Post.js";
@@ -102,6 +103,9 @@ export const getSavedPosts = async (req, res) => {
 export const getUserById = async (req, res) => {
     try {
         const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ message: "User not found" });
+        }
         const user = await User.findById(id).select("-password");
         
         if (!user) {

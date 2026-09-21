@@ -4,6 +4,7 @@ import styles from '../../assets/css/PostsContainer.module.scss';
 import { usePostStore } from '../../stores/usePostStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useChatStore } from '../../stores/useChatStore';
+import { useNotificationStore } from '../../stores/useNotificationStore';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { 
     Image, 
@@ -18,7 +19,8 @@ import {
     X,
     Smile,
     Loader2,
-    Bell
+    Bell,
+    ArrowUp
 } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import PostItem from './PostItem';
@@ -27,6 +29,7 @@ import TrendsWidget from './TrendsWidget';
 import LoadingSpin from '../common/loading/LoadingSpin';
 import default_avt from '../../../public/favicon.png';
 import { friendService } from '../../services/friendService';
+import { toast } from 'sonner';
 
 const cx = classNames.bind(styles);
 
@@ -51,26 +54,38 @@ const PostsContainer = () => {
     // Search query for right sidebar
     const [searchQuery, setSearchQuery] = useState('');
 
+    // Chat store for realtime friend requests & notifications
+    const { 
+        friendRequests = [], 
+        fetchFriendRequests, 
+        acceptRequestAction, 
+        declineRequestAction 
+    } = useChatStore();
+
+    // Activity notifications (Likes, Comments, Replies)
+    const {
+        notifications: activityNotifications = [],
+        unreadCount: unreadActivityCount,
+        fetchNotifications,
+        markAllAsRead: markAllActivityAsRead,
+        markAsRead: markActivityAsRead
+    } = useNotificationStore();
+
     // Notifications Popover State
     const [showNotifPopover, setShowNotifPopover] = useState(false);
-    const [notifications, setNotifications] = useState([]);
-    const [unreadNotifCount, setUnreadNotifCount] = useState(0);
     const notifRef = useRef(null);
 
-    const fetchNotifications = React.useCallback(async () => {
-        try {
-            const data = await friendService.getFriendRequests();
-            const received = data?.received || [];
-            setNotifications(received);
-            setUnreadNotifCount(received.length);
-        } catch (err) {
-            console.error("Failed to load notifications", err);
-        }
-    }, []);
+    // Feed Scroll & Back-to-Top / Reload State
+    const feedLayoutRef = useRef(null);
+    const [showBackToTop, setShowBackToTop] = useState(false);
+    const [isReloading, setIsReloading] = useState(false);
 
     useEffect(() => {
+        fetchFriendRequests();
         fetchNotifications();
-    }, [fetchNotifications]);
+    }, [fetchFriendRequests, fetchNotifications]);
+
+    const totalUnreadNotifs = (friendRequests?.length || 0) + (unreadActivityCount || 0);
 
     // Close notification popover on outside click
     useEffect(() => {
@@ -85,19 +100,21 @@ const PostsContainer = () => {
 
     const handleAcceptFriend = async (requestId) => {
         try {
-            await friendService.acceptRequest(requestId);
-            fetchNotifications();
+            await acceptRequestAction(requestId);
+            toast.success("Đã chấp nhận lời mời kết bạn!");
         } catch (err) {
             console.error(err);
+            toast.error("Lỗi khi chấp nhận kết bạn");
         }
     };
 
     const handleDeclineFriend = async (requestId) => {
         try {
-            await friendService.declineRequest(requestId);
-            fetchNotifications();
+            await declineRequestAction(requestId);
+            toast.success("Đã từ chối lời mời kết bạn");
         } catch (err) {
             console.error(err);
+            toast.error("Lỗi khi từ chối kết bạn");
         }
     };
 
@@ -109,9 +126,36 @@ const PostsContainer = () => {
             if (entries[0].isIntersecting && hasMorePosts) {
                 fetchPosts(false);
             }
+        }, {
+            root: feedLayoutRef.current,
+            rootMargin: '250px'
         });
         if (node) observer.current.observe(node);
     }, [isLoading, hasMorePosts, fetchPosts]);
+
+    const handleFeedScroll = () => {
+        if (!feedLayoutRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = feedLayoutRef.current;
+        setShowBackToTop(scrollTop > 350);
+        if (scrollHeight - (scrollTop + clientHeight) < 300 && hasMorePosts && !isLoading) {
+            fetchPosts(false);
+        }
+    };
+
+    const handleScrollToTopAndReload = async () => {
+        setIsReloading(true);
+        if (feedLayoutRef.current) {
+            feedLayoutRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        try {
+            await fetchPosts(true);
+            toast.success("Đã làm mới các bài viết mới nhất!");
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsReloading(false);
+        }
+    };
 
     useEffect(() => {
         fetchPosts(true);
@@ -150,7 +194,11 @@ const PostsContainer = () => {
     }, [posts, activeTab, friends, user]);
 
     return (
-        <div className={cx('feed-page-layout')}>
+        <div 
+            className={cx('feed-page-layout')}
+            ref={feedLayoutRef}
+            onScroll={handleFeedScroll}
+        >
             {/* Center Main Column: X Timeline */}
             <main className={cx('main-timeline-col')}>
                 {/* 1. Sticky X Header with Tabs */}
@@ -209,6 +257,34 @@ const PostsContainer = () => {
                         </button>
                     </div>
                 </header>
+
+                {/* Floating Reload Pill (New Posts / Back to Top) */}
+                <AnimatePresence>
+                    {showBackToTop && (
+                        <Motion.button
+                            type="button"
+                            className={cx('floating-reload-pill')}
+                            onClick={handleScrollToTopAndReload}
+                            initial={{ opacity: 0, y: -16, scale: 0.85 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -16, scale: 0.85 }}
+                            transition={{ duration: 0.2 }}
+                            disabled={isReloading}
+                        >
+                            {isReloading ? (
+                                <>
+                                    <Loader2 size={16} className={cx('spin-loader')} />
+                                    <span>Đang làm mới...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <ArrowUp size={16} />
+                                    <span>Bài viết mới</span>
+                                </>
+                            )}
+                        </Motion.button>
+                    )}
+                </AnimatePresence>
 
                 {/* 2. X Tweet Composer */}
                 <XPostComposer
@@ -291,9 +367,9 @@ const PostsContainer = () => {
                                 aria-label="Thông báo"
                             >
                                 <Bell size={19} />
-                                {unreadNotifCount > 0 && (
+                                {totalUnreadNotifs > 0 && (
                                     <span className={cx('notif-badge')}>
-                                        {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                                        {totalUnreadNotifs > 9 ? '9+' : totalUnreadNotifs}
                                     </span>
                                 )}
                             </button>
@@ -310,11 +386,11 @@ const PostsContainer = () => {
                                     >
                                         <div className={cx('notif-popover-header')}>
                                             <div className={cx('notif-popover-title')}>Thông báo</div>
-                                            {notifications.length > 0 && (
+                                            {(activityNotifications.length > 0 || friendRequests.length > 0) && (
                                                 <button
                                                     type="button"
                                                     className={cx('notif-mark-read-btn')}
-                                                    onClick={() => setUnreadNotifCount(0)}
+                                                    onClick={() => markAllActivityAsRead()}
                                                 >
                                                     Đã đọc tất cả
                                                 </button>
@@ -322,7 +398,7 @@ const PostsContainer = () => {
                                         </div>
 
                                         <div className={cx('notif-popover-body')}>
-                                            {notifications.length === 0 ? (
+                                            {activityNotifications.length === 0 && friendRequests.length === 0 ? (
                                                 <div className={cx('notif-empty-state')}>
                                                     <Bell size={28} className={cx('notif-empty-icon')} />
                                                     <p>Chưa có thông báo mới nào</p>
@@ -330,12 +406,13 @@ const PostsContainer = () => {
                                                 </div>
                                             ) : (
                                                 <div className={cx('notif-list')}>
-                                                    {notifications.map((req) => {
+                                                    {/* 1. Lời mời kết bạn */}
+                                                    {friendRequests.map((req) => {
                                                         const sender = req.sender || req.from || {};
                                                         const senderAvatar = sender.avatarURL || default_avt;
                                                         const senderName = sender.displayName || sender.username || 'Người dùng';
                                                         return (
-                                                            <div key={req._id} className={cx('notif-item')}>
+                                                            <div key={`friend-${req._id}`} className={cx('notif-item')}>
                                                                 <img
                                                                     src={senderAvatar}
                                                                     alt={senderName}
@@ -366,6 +443,48 @@ const PostsContainer = () => {
                                                             </div>
                                                         );
                                                     })}
+
+                                                    {/* 2. Tương tác (Like, Comment, Reply) */}
+                                                    {activityNotifications.map((notif) => {
+                                                        const sender = notif.sender || {};
+                                                        const senderAvatar = sender.avatarURL || default_avt;
+                                                        const senderName = sender.displayName || sender.username || 'Ai đó';
+
+                                                        let actionDesc = "đã tương tác với bạn.";
+                                                        if (notif.type === "like") actionDesc = "đã thích bài viết của bạn.";
+                                                        if (notif.type === "comment") actionDesc = `đã bình luận: "${notif.text}"`;
+                                                        if (notif.type === "reply") actionDesc = `đã phản hồi: "${notif.text}"`;
+
+                                                        return (
+                                                            <div 
+                                                                key={`notif-${notif._id}`} 
+                                                                className={cx('notif-item', { unread: !notif.isRead })}
+                                                                style={{ cursor: 'pointer', opacity: notif.isRead ? 0.75 : 1 }}
+                                                                onClick={() => {
+                                                                    markActivityAsRead(notif._id);
+                                                                    setShowNotifPopover(false);
+                                                                    if (notif.post?._id) {
+                                                                        navigate(`/post/${notif.post._id}`);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <img
+                                                                    src={senderAvatar}
+                                                                    alt={senderName}
+                                                                    className={cx('notif-sender-avatar')}
+                                                                    onError={(e) => { e.currentTarget.src = default_avt; }}
+                                                                />
+                                                                <div className={cx('notif-content')}>
+                                                                    <div className={cx('notif-text')}>
+                                                                        <strong>{senderName}</strong> {actionDesc}
+                                                                    </div>
+                                                                    <div style={{ fontSize: '1.1rem', opacity: 0.5, marginTop: '2px' }}>
+                                                                        {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
                                         </div>
@@ -382,6 +501,11 @@ const PostsContainer = () => {
                                 placeholder="Tìm kiếm trên Shrimple..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && searchQuery.trim()) {
+                                        navigate(`/feed/search?q=${encodeURIComponent(searchQuery.trim())}`);
+                                    }
+                                }}
                                 className={cx('search-input')}
                             />
                             {searchQuery && (
@@ -474,16 +598,30 @@ const XPostComposer = ({
         const files = Array.from(e.target.files || []);
         if (files.length === 0) return;
 
-        // Can only upload images when no video is attached
-        if (video) setVideo(null);
+        const newImages = [];
+        let detectedVideo = null;
 
-        setImages(prev => {
-            const combined = [...prev, ...files];
-            if (combined.length > 4) {
-                toast.info("Tối đa 4 hình ảnh cho mỗi bài viết");
+        files.forEach(file => {
+            if (file.type.startsWith('video/')) {
+                detectedVideo = file;
+            } else if (file.type.startsWith('image/')) {
+                newImages.push(file);
             }
-            return combined.slice(0, 4);
         });
+
+        if (detectedVideo) {
+            setVideo(detectedVideo);
+        }
+
+        if (newImages.length > 0) {
+            setImages(prev => {
+                const combined = [...prev, ...newImages];
+                if (combined.length > 4) {
+                    toast.info("Tối đa 4 hình ảnh cho mỗi bài viết");
+                }
+                return combined.slice(0, 4);
+            });
+        }
 
         if (imageInputRef.current) imageInputRef.current.value = "";
     };
@@ -492,8 +630,6 @@ const XPostComposer = ({
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Clear images if video chosen
-        if (images.length > 0) setImages([]);
         setVideo(file);
 
         if (videoInputRef.current) videoInputRef.current.value = "";
@@ -638,7 +774,7 @@ const XPostComposer = ({
                             className={cx('toolbar-btn', { active: images.length > 0 })}
                             onClick={() => imageInputRef.current?.click()}
                             title="Thêm ảnh (tối đa 4 ảnh)"
-                            disabled={isCreating || !!video || images.length >= 4}
+                            disabled={isCreating || images.length >= 4}
                         >
                             <Image size={19} />
                         </button>
@@ -648,7 +784,7 @@ const XPostComposer = ({
                             className={cx('toolbar-btn', { active: !!video })}
                             onClick={() => videoInputRef.current?.click()}
                             title="Thêm video"
-                            disabled={isCreating || images.length > 0 || !!video}
+                            disabled={isCreating || !!video}
                         >
                             <Video size={19} />
                         </button>
@@ -657,7 +793,7 @@ const XPostComposer = ({
                             type="file"
                             ref={imageInputRef}
                             onChange={handleImageChange}
-                            accept="image/*"
+                            accept="image/*,video/*"
                             multiple
                             style={{ display: 'none' }}
                         />

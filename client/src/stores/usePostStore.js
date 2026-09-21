@@ -7,6 +7,9 @@ export const usePostStore = create((set, get) => ({
     userPosts: [],
     savedPosts: [],
     videoPosts: [],
+    trends: [],
+    searchResults: { posts: [], users: [], hashtag: null },
+    isSearching: false,
     postsNextCursor: null,
     hasMorePosts: true,
     
@@ -47,12 +50,17 @@ export const usePostStore = create((set, get) => ({
     },
 
     fetchUserPosts: async (userId) => {
+        if (!userId || userId === "undefined") {
+            set({ userPosts: [] });
+            return;
+        }
         set({ isLoading: true });
         try {
             const res = await api.get(`/api/posts/user/${userId}`);
-            set({ userPosts: res.data });
+            set({ userPosts: Array.isArray(res.data) ? res.data : [] });
         } catch (error) {
             console.error(error);
+            set({ userPosts: [] });
             toast.error("Failed to fetch user posts");
         } finally {
             set({ isLoading: false });
@@ -212,9 +220,13 @@ export const usePostStore = create((set, get) => ({
         }
     },
 
-    replyComment: async (postId, commentId, text) => {
+    replyComment: async (postId, commentId, text, replyToReplyId = null, replyToUserId = null) => {
         try {
-            const res = await api.post(`/api/posts/${postId}/comment/${commentId}/reply`, { text });
+            const res = await api.post(`/api/posts/${postId}/comment/${commentId}/reply`, { 
+                text,
+                replyToReplyId,
+                replyToUserId,
+            });
             const updatedPost = res.data;
             
              set(state => ({
@@ -223,10 +235,56 @@ export const usePostStore = create((set, get) => ({
                 userPosts: state.userPosts.map(p => p._id === postId ? updatedPost : p),
                 savedPosts: state.savedPosts.map(p => p._id === postId ? updatedPost : p)
             }));
-            toast.success("Reply added");
+            toast.success("Đã gửi phản hồi");
         } catch (error) {
             console.error(error);
-            toast.error("Failed to reply");
+            toast.error(error.response?.data?.message || "Failed to reply");
+        }
+    },
+
+    editPost: async (postId, content) => {
+        try {
+            const res = await api.put(`/api/posts/${postId}/edit`, { content });
+            const updatedPost = res.data;
+            set(state => ({
+                posts: state.posts.map(p => p._id === postId ? updatedPost : p),
+                videoPosts: state.videoPosts.map(p => p._id === postId ? updatedPost : p),
+                userPosts: state.userPosts.map(p => p._id === postId ? updatedPost : p),
+                savedPosts: state.savedPosts.map(p => p._id === postId ? updatedPost : p)
+            }));
+            toast.success("Chỉnh sửa bài viết thành công!");
+            return { success: true, post: updatedPost };
+        } catch (error) {
+            console.error(error);
+            const msg = error.response?.data?.message || "Không thể chỉnh sửa bài viết";
+            toast.error(msg);
+            return { success: false, message: msg };
+        }
+    },
+
+    fetchTrends: async () => {
+        try {
+            const res = await api.get("/api/posts/trends");
+            set({ trends: res.data || [] });
+            return res.data;
+        } catch (error) {
+            console.error("Failed to fetch trends:", error);
+            return [];
+        }
+    },
+
+    searchPosts: async (query) => {
+        set({ isSearching: true });
+        try {
+            const res = await api.get(`/api/posts/search?q=${encodeURIComponent(query)}`);
+            set({ searchResults: res.data || { posts: [], users: [], hashtag: null } });
+            return res.data;
+        } catch (error) {
+            console.error("Failed to search posts:", error);
+            toast.error("Tìm kiếm thất bại");
+            return { posts: [], users: [], hashtag: null };
+        } finally {
+            set({ isSearching: false });
         }
     },
 
