@@ -224,6 +224,13 @@
         object-fit: cover;
         flex-shrink: 0;
         background-color: #202327;
+        cursor: pointer;
+        transition: opacity 0.15s ease, transform 0.15s ease;
+
+        &:hover {
+          opacity: 0.85;
+          transform: scale(1.05);
+        }
       }
 
       .notif-content {
@@ -242,6 +249,13 @@
           strong {
             color: #ffffff;
             font-weight: 700;
+            cursor: pointer;
+            transition: color 0.15s ease;
+
+            &:hover {
+              text-decoration: underline;
+              color: #f97316;
+            }
           }
         }
 
