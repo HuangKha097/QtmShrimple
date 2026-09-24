@@ -7,7 +7,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  z-index: 100;
+  z-index: 9999999;
 }
 
 .notif-btn {
@@ -64,7 +64,7 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 18px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  z-index: 99999;
+  z-index: 9999999;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -72,17 +72,22 @@
   &.align-right {
     right: 0;
     left: auto;
+    width: 360px;
+    max-width: min(360px, calc(100vw - 32px));
   }
 
   &.align-left {
-    left: 0;
+    left: -50px;
     right: auto;
+    width: 360px;
+    max-width: min(360px, calc(100vw - 32px));
   }
 
   .notif-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     padding: 14px 16px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 
@@ -90,12 +95,15 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-shrink: 0;
+      white-space: nowrap;
 
       .notif-title {
         font-size: 1.6rem;
         font-weight: 800;
         color: #e7e9ea;
         margin: 0;
+        white-space: nowrap;
       }
 
       .notif-count-pill {
@@ -105,6 +113,7 @@
         color: #ef4444;
         padding: 2px 8px;
         border-radius: 9999px;
+        white-space: nowrap;
       }
     }
 
@@ -116,6 +125,8 @@
       font-weight: 600;
       cursor: pointer;
       transition: opacity 0.15s;
+      flex-shrink: 0;
+      white-space: nowrap;
 
       &:hover {
         text-decoration: underline;
