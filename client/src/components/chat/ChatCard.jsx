@@ -6,6 +6,7 @@ import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import { useNavigate } from "react-router-dom";
 import { ASSET_BASE_URL } from "../../config/env.js";
+import { Image, Mic, Video, FileText, MapPin, PhoneCall } from 'lucide-react';
 
 const cx = classNames.bind(styles);
 
@@ -57,11 +58,11 @@ const ChatCard = ({ props }) => {
     };
 
     const handleSelectConversation = async (conversationId) => {
+        if (!conversationId) return;
         setActiveConversationId(conversationId);
         navigate(`/chat?id=${conversationId}`);
 
-        const isTempId = conversationId && conversationId.toString().startsWith('temp_');
-        if (!isTempId && !messages[conversationId]) {
+        if (!messages[conversationId]) {
             await fetchMessages(conversationId);
         }
     };
@@ -87,15 +88,41 @@ const ChatCard = ({ props }) => {
 
         switch (type) {
             case 'image':
-                return `${prefix}🖼️ Hình ảnh`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {prefix}<Image size={13} className={cx('preview-icon')} /> Hình ảnh
+                    </span>
+                );
             case 'audio':
-                return `${prefix}🎙️ Tin nhắn thoại`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {prefix}<Mic size={13} className={cx('preview-icon')} /> Tin nhắn thoại
+                    </span>
+                );
             case 'video':
-                return `${prefix}🎬 Video`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {prefix}<Video size={13} className={cx('preview-icon')} /> Video
+                    </span>
+                );
             case 'file':
-                return `${prefix}📁 Tập tin`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {prefix}<FileText size={13} className={cx('preview-icon')} /> Tập tin
+                    </span>
+                );
             case 'location':
-                return `${prefix}📍 Vị trí`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {prefix}<MapPin size={13} className={cx('preview-icon')} /> Vị trí
+                    </span>
+                );
+            case 'group_call':
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {prefix}<PhoneCall size={13} className={cx('preview-icon')} /> Cuộc gọi nhóm
+                    </span>
+                );
             case 'text':
             default:
                 return `${prefix}${lastMsg.content || ""}`;

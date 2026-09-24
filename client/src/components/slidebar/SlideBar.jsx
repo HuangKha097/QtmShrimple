@@ -3,7 +3,8 @@ import classNames from 'classnames/bind';
 import { useTranslation } from 'react-i18next';
 import styles from '../../assets/css/SlideBar.module.scss';
 import SlidebarBody from './SlidebarBody.jsx';
-import { Settings, SquarePen, Users, ArrowLeft } from 'lucide-react';
+import NotificationDropdown from '../common/NotificationDropdown.jsx';
+import { SquarePen, Users, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const cx = classNames.bind(styles);
@@ -14,7 +15,7 @@ const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPop
 
     return (
         <div className={cx('messages-column-wrapper')}>
-            {/* X-Style Top Header: 53px, back button + title on left, settings & compose on right */}
+            {/* X-Style Top Header: 53px, back button + title on left, compose on right */}
             <div className={cx('messages-header')}>
                 <div className={cx('header-title-row')}>
                     <div className={cx('header-title-group')}>
@@ -31,15 +32,7 @@ const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPop
                     </div>
 
                     <div className={cx('header-actions')}>
-                        <button 
-                            type="button" 
-                            className={cx('header-action-btn')} 
-                            onClick={() => navigate('/setting')}
-                            title={t('nav.settings')}
-                            aria-label={t('nav.settings')}
-                        >
-                            <Settings size={20} />
-                        </button>
+                        <NotificationDropdown align="right" />
                         <button 
                             type="button" 
                             className={cx('header-action-btn')} 

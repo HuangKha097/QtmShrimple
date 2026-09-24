@@ -18,9 +18,12 @@ import ProfileContainer from "./components/posts/ProfileContainer.jsx";
 import VideoFeed from "./pages/VideoFeed.jsx";
 import CompleteProfile from "./pages/CompleteProfile.jsx";
 import SettingContainer from "./components/setting/SettingContainer.jsx";
-
 import CallModal from "./components/chat/CallModal.jsx";
+import GroupCallModal from "./components/chat/GroupCallModal.jsx";
+import GroupCallFloatingBar from "./components/chat/GroupCallFloatingBar.jsx";
 import { useCallStore } from "./stores/useCallStore.js";
+import { useGroupCallStore } from "./stores/useGroupCallStore.js";
+import { useNotificationStore } from "./stores/useNotificationStore.js";
 import { useAuthStore } from "./stores/useAuthStore.js";
 import { useUIStore } from "./stores/useUIStore.js";
 // import LoadingSpin from "./components/common/loading/LoadingSpin.jsx"; // Removed from here
@@ -41,6 +44,8 @@ const App = () => {
     const { i18n } = useTranslation();
     const { isLight } = useThemeStore();
     const { subscribeToCallEvents, unsubscribeFromCallEvents } = useCallStore();
+    const { subscribeToGroupCallEvents, unsubscribeFromGroupCallEvents } = useGroupCallStore();
+    const { subscribeToNotificationEvents, unsubscribeFromNotificationEvents } = useNotificationStore();
 
     const { user, socket } = useAuthStore(); // Check if user and socket are ready to subscribe
     const { setOffline } = useUIStore();
@@ -49,15 +54,19 @@ const App = () => {
         document.documentElement.lang = i18n.language || 'vi';
     }, [i18n.language]);
 
-    // Subscribe to call events
+    // Subscribe to call & notification events (1-1, Group Voice Room, and Feed/Chat Notifications)
     useEffect(() => {
         if (socket && user) {
             subscribeToCallEvents();
+            subscribeToGroupCallEvents();
+            subscribeToNotificationEvents();
         }
         return () => {
             unsubscribeFromCallEvents();
+            unsubscribeFromGroupCallEvents();
+            unsubscribeFromNotificationEvents();
         };
-    }, [socket, user, subscribeToCallEvents, unsubscribeFromCallEvents]);
+    }, [socket, user, subscribeToCallEvents, unsubscribeFromCallEvents, subscribeToGroupCallEvents, unsubscribeFromGroupCallEvents, subscribeToNotificationEvents, unsubscribeFromNotificationEvents]);
 
     useEffect(() => {
         const handleOnline = () => setOffline(false);
@@ -83,6 +92,8 @@ const App = () => {
             />
 
             <CallModal />
+            <GroupCallModal />
+            <GroupCallFloatingBar />
 
             <BrowserRouter>
                 <Routes>

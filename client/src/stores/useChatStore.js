@@ -27,7 +27,7 @@ export const useChatStore = create(
 
             setActiveConversationId: (id) => {
                 set({activeConversationId: id});
-                if (id && !id.startsWith('temp_')) {
+                if (id) {
                     get().markAsReadAction(id);
                 }
             },
@@ -164,12 +164,43 @@ export const useChatStore = create(
                     friendRequests: state.friendRequests.filter((req) => req._id !== requestId)
                 }));
             },
+            getOrCreateConversation: async (partnerId) => {
+                if (!partnerId) return null;
+                const { conversations } = get();
+                const existing = (conversations || []).find(c =>
+                    !c.isGroup && Array.isArray(c.participants) && c.participants.some(p => {
+                        const pId = p?._id || (typeof p?.userId === 'object' ? p?.userId?._id : p?.userId);
+                        return pId && pId.toString() === partnerId.toString();
+                    })
+                );
+                if (existing) {
+                    return existing;
+                }
+
+                try {
+                    const res = await chatService.createConversation(false, null, [partnerId], partnerId);
+                    const newConvo = res.conversation || res;
+                    if (newConvo && newConvo._id) {
+                        set((state) => {
+                            const exists = state.conversations.some(c => c._id === newConvo._id);
+                            return {
+                                conversations: exists ? state.conversations : [newConvo, ...state.conversations]
+                            };
+                        });
+                    }
+                    return newConvo;
+                } catch (err) {
+                    console.error("Error in getOrCreateConversation:", err);
+                    throw err;
+                }
+            },
+
             fetchMessages: async (conversationId) => {
                 const {activeConversationId, messages} = get();
-                const {user} = useAuthStore.getState()
+                const {user} = useAuthStore.getState();
 
                 const convoId = conversationId ?? activeConversationId;
-                if (!convoId || convoId.startsWith('temp_')) return;
+                if (!convoId) return;
 
                 const current = messages?.[convoId];
                 const nextCursor = current?.nextCursor === undefined ? "" : current?.nextCursor;
@@ -184,7 +215,7 @@ export const useChatStore = create(
                     const processed = fetched.map((m) => ({
                         ...m,
                         isOwn: m.senderId === user?._id,
-                    }))
+                    }));
 
                     set((state) => {
                         const prevItems = state.messages[convoId]?.items ?? [];
@@ -205,8 +236,8 @@ export const useChatStore = create(
                                     nextCursor: cursor ?? null,
                                 }
                             }
-                        }
-                    })
+                        };
+                    });
                 } catch (error) {
                     console.error("Error fetching messages:", error);
                 } finally {
@@ -218,12 +249,7 @@ export const useChatStore = create(
                 const { user } = useAuthStore.getState();
                 const { activeConversationId } = get();
 
-                // Xác định conversationId gửi đi (ưu tiên tham số truyền vào, sau đó đến activeId)
-                // Lưu ý: Nếu activeId là "temp_...", ta gửi conversationId = null lên server
-                let targetConvoId = conversationId || activeConversationId;
-                if (targetConvoId && targetConvoId.toString().startsWith('temp_')) {
-                    targetConvoId = null;
-                }
+                const targetConvoId = conversationId || activeConversationId;
 
                 try {
                     // 1. Gọi API
@@ -237,7 +263,7 @@ export const useChatStore = create(
                     const processedMessage = {
                         ...newMessage,
                         isOwn: true,
-                        senderId: user?._id // Đảm bảo có senderId để render avatar nếu cần
+                        senderId: user?._id
                     };
 
                     set((state) => {
@@ -250,23 +276,20 @@ export const useChatStore = create(
                         const convoIndex = updatedConversations.findIndex(c => c._id === realConversationId);
 
                         if (convoIndex !== -1) {
-                            // Trường hợp 1: Cuộc trò chuyện ĐÃ CÓ trong danh sách
-                            // -> Cập nhật lastMessage và đưa lên đầu
                             const updatedConvo = {
                                 ...updatedConversations[convoIndex],
                                 lastMessage: {
                                     _id: processedMessage._id,
                                     content: processedMessage.content,
                                     createdAt: processedMessage.createdAt,
-                                    senderId: user?._id, // Hoặc object user nếu schema yêu cầu
+                                    senderId: user?._id,
                                     messageType: processedMessage.messageType,
                                     isRecalled: processedMessage.isRecalled || false
                                 },
-                                updatedAt: new Date().toISOString(), // Để sort
+                                updatedAt: new Date().toISOString(),
                                 lastMessageAt: new Date().toISOString()
                             };
 
-                            // Xoá vị trí cũ, thêm vào đầu
                             updatedConversations.splice(convoIndex, 1);
                             updatedConversations.unshift(updatedConvo);
 
@@ -278,57 +301,39 @@ export const useChatStore = create(
                                         items: updatedMessages
                                     }
                                 },
-                                conversations: updatedConversations
+                                conversations: updatedConversations,
+                                activeConversationId: realConversationId
                             };
                         } else {
-                            // Trường hợp 2: Cuộc trò chuyện MỚI (chưa có trong list conversations)
-                            // -> Đây chính là lúc gây ra lỗi duplicate nếu không xử lý kỹ.
-                            // -> Cách an toàn nhất: Gọi fetchConversations để lấy full data (avatar, name partner...)
-                            // -> Cập nhật messages trước để hiện tin nhắn ngay
-
-                            // Trigger fetch lại conversation ngầm
                             get().fetchConversations();
-
-                            // Nếu trước đó đang ở state 'temp_', cần chuyển activeConversationId sang ID thật
-                            if (activeConversationId && activeConversationId.toString().startsWith('temp_')) {
-                                return {
-                                    activeConversationId: realConversationId, // Chuyển sang ID thật
-                                    messages: {
-                                        ...state.messages,
-                                        [realConversationId]: { items: [processedMessage], hasMore: false, nextCursor: null }
-                                    }
-                                };
-                            }
 
                             return {
                                 messages: {
                                     ...state.messages,
-                                    [realConversationId]: { items: updatedMessages, hasMore: false, nextCursor: null }
-                                }
+                                    [realConversationId]: { items: [processedMessage], hasMore: false, nextCursor: null }
+                                },
+                                activeConversationId: realConversationId
                             };
                         }
                     });
 
+                    return newMessage;
                 } catch (error) {
                     console.error("Failed to send message:", error);
-                    // Có thể thêm toast error ở đây
                     throw error;
                 }
             },
-            createConversation: async (isGroup, name, memberIds) => {
+            createConversation: async (isGroup, name, memberIds, recipientId) => {
                 set({ isCreatingGroup: true });
                 try {
-                    // Gọi API từ chatService
-                    const response = await chatService.createConversation(isGroup, name, memberIds);
+                    const response = await chatService.createConversation(isGroup, name, memberIds, recipientId);
                     const newConversation = response.conversation || response;
 
                     set((state) => ({
-                        // Thêm cuộc trò chuyện mới vào đầu danh sách (tránh duplicate)
                         conversations: [
                             newConversation,
                             ...state.conversations.filter(c => c._id !== newConversation._id)
                         ],
-                        // Tự động chuyển sang cuộc trò chuyện mới vừa tạo
                         activeConversationId: newConversation._id,
                         isCreatingGroup: false
                     }));
@@ -337,7 +342,7 @@ export const useChatStore = create(
                 } catch (error) {
                     console.error("Error creating conversation:", error);
                     set({ isCreatingGroup: false });
-                    throw error; // Ném lỗi để UI (CreateGroupPopup) bắt và hiện Toast
+                    throw error;
                 }
             },
             sendGroupMessage: async (conversationId, content, image, file, type) => {
@@ -561,7 +566,7 @@ export const useChatStore = create(
 
             fetchPinnedMessages: async (conversationId) => {
                 const convoId = conversationId ?? get().activeConversationId;
-                if (!convoId || convoId.startsWith('temp_')) return;
+                if (!convoId) return;
 
                 set({ pinnedMessagesLoading: true });
                 try {
@@ -740,9 +745,7 @@ export const useChatStore = create(
 
                     set((state) => {
                         const convoId = newMessage.conversationId;
-                        const isMatchingConvo = state.activeConversationId === convoId;
-                        const isTempActive = state.activeConversationId === `temp_${newMessage.senderId?.toString()}`;
-                        const isActive = isMatchingConvo || isTempActive;
+                        const isActive = state.activeConversationId === convoId;
 
                         // 1. Update Messages
                         let updatedMessagesMap = { ...state.messages };
@@ -789,15 +792,14 @@ export const useChatStore = create(
                         return {
                             messages: updatedMessagesMap,
                             conversations: updatedConversations,
-                            // Nếu đang mở temp chat của đúng người này, tự động chuyển sang ID hội thoại thật
-                            activeConversationId: isTempActive ? convoId : state.activeConversationId
+                            activeConversationId: state.activeConversationId
                         };
                     });
 
                     // Thông báo tin nhắn mới nếu không đang mở hội thoại này
                     const state = get();
                     const convoId = newMessage.conversationId;
-                    const isActive = state.activeConversationId === convoId || state.activeConversationId === `temp_${newMessage.senderId?.toString()}`;
+                    const isActive = state.activeConversationId === convoId;
                     if (!isOwn && !isActive) {
                         toast.info("Tin nhắn mới: " + (newMessage.content || "Đã gửi một tệp/ảnh"));
                     }

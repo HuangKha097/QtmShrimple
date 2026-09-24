@@ -28,6 +28,7 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
     const { t } = useTranslation();
     const { user, signOut } = useAuthStore();
     const conversations = useChatStore(state => state.conversations || []);
+    const friendRequests = useChatStore(state => state.friendRequests || []);
     const navigate = useNavigate();
     const location = useLocation();
     const [showUserMenu, setShowUserMenu] = useState(false);
@@ -116,6 +117,9 @@ export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModa
                             <div className={cx('icon-wrapper')}>
                                 {item.icon}
                                 {item.path === '/chat' && hasUnreadMessages && (
+                                    <span className={cx('unread-red-dot')} />
+                                )}
+                                {item.path === '/feed/friends' && (friendRequests || []).length > 0 && (
                                     <span className={cx('unread-red-dot')} />
                                 )}
                             </div>

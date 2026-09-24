@@ -133,22 +133,17 @@ const FriendsContainer = () => {
         navigate(`/feed/profile/${userId}`);
     };
 
-    const handleMessage = (targetUser) => {
+    const handleMessage = async (targetUser) => {
         if (!targetUser?._id) return;
-        const existingConvo = (useChatStore.getState().conversations || []).find(c => 
-            !c.isGroup && Array.isArray(c.participants) && c.participants.some(p => {
-                const pId = p?._id || (typeof p?.userId === 'object' ? p?.userId?._id : p?.userId);
-                return pId && pId.toString() === targetUser._id.toString();
-            })
-        );
-
-        if (existingConvo) {
-            useChatStore.getState().setActiveConversationId(existingConvo._id);
-            navigate(`/chat?id=${existingConvo._id}`);
-        } else {
-            const tempId = `temp_${targetUser._id}`;
-            useChatStore.getState().setActiveConversationId(tempId);
-            navigate(`/chat?id=${tempId}`);
+        try {
+            const convo = await useChatStore.getState().getOrCreateConversation(targetUser._id);
+            if (convo?._id) {
+                useChatStore.getState().setActiveConversationId(convo._id);
+                navigate(`/chat?id=${convo._id}`);
+            }
+        } catch (error) {
+            console.error("Failed to open chat:", error);
+            toast.error("Không thể mở cuộc trò chuyện");
         }
     };
 

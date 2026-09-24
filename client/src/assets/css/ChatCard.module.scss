@@ -170,6 +170,18 @@
         font-style: italic;
         color: #71767b;
       }
+
+      .msg-preview-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        vertical-align: middle;
+
+        .preview-icon {
+          flex-shrink: 0;
+          color: #f97316;
+        }
+      }
     }
 
     .unread-badge {

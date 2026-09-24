@@ -10,7 +10,7 @@ Shrimple là ứng dụng mạng xã hội full-stack kết hợp nhắn tin th�
 - **Cuộc gọi:** gọi thoại/video ngang hàng bằng WebRTC; server chuyển tiếp tín hiệu thiết lập cuộc gọi qua Socket.IO.
 - **Nội dung xã hội:** bài đăng, bảng tin, bình luận, reaction, nội dung đã lưu và bảng tin video ngắn.
 - **Cá nhân hóa:** giao diện sáng/tối và các thiết lập người dùng.
-- **Anti-Peep (DEMO):** hỗ trợ phát hiện khuôn mặt và khóa PIN để giảm nguy cơ người khác nhìn trộm nội dung.
+- **Anti-Peep:** ghi nhớ chủ nhân bằng 5 embedding, quét camera ở nhịp thấp và chỉ khóa khi cùng một người lạ nhìn vào màn hình liên tục 3 giây. Camera tự dừng khi tab bị ẩn.
 - **Phân loại tin tiếng Việt tùy chọn:** mô hình TF-IDF/Random Forest đưa ra dự đoán mang tính heuristic. Kết quả không phải bằng chứng khẳng định một nội dung đúng hay sai và không thay thế việc kiểm chứng nguồn tin.
 
 ## Kiến trúc tổng quan
@@ -39,7 +39,7 @@ Client gọi REST để xử lý dữ liệu nghiệp vụ và dùng Socket.IO c
 | Client | React 19, Vite 7, React Router, Zustand, Axios, Socket.IO Client, simple-peer |
 | Giao diện | Sass, Framer Motion, Lucide, Sonner |
 | Form và xác thực client | React Hook Form, Zod, <code>@react-oauth/google</code> |
-| Anti-Peep | <code>@vladmandic/face-api</code> |
+| Anti-Peep | <code>@vladmandic/human</code> (BlazeFace, FaceMesh, Iris, FaceRes) |
 | Server | Node.js ESM, Express 5, Socket.IO 4 |
 | Dữ liệu và media | Mongoose 8, MongoDB, Multer, Cloudinary |
 | Xác thực và email | JWT, bcrypt, cookie-parser, Google Auth Library, Nodemailer |
@@ -153,6 +153,7 @@ Các tệp env thật được Git bỏ qua. Hai tệp <code>.env.example</code>
 | <code>npm run dev</code> | Chạy Vite development server |
 | <code>npm run build</code> | Tạo production build |
 | <code>npm run lint</code> | Chạy ESLint |
+| <code>npm test</code> | Chạy unit test cho bộ theo dõi Anti-Peep |
 | <code>npm run preview</code> | Xem thử production build cục bộ |
 
 ### Server
@@ -162,7 +163,7 @@ Các tệp env thật được Git bỏ qua. Hai tệp <code>.env.example</code>
 | <code>npm run dev</code> | Chạy backend ở chế độ phát triển |
 | <code>npm start</code> | Khởi động backend bằng Node.js |
 
-Hiện tại cả client và server chưa khai báo npm script cho kiểm thử tự động.
+Server hiện chưa khai báo npm script cho kiểm thử tự động.
 
 ## Cấu trúc chính
 
@@ -207,6 +208,14 @@ Backend tổ chức REST API theo các nhóm sau:
 
 Các nhóm nghiệp vụ được bảo vệ bằng xác thực; nhóm auth là điểm vào công khai. Chi tiết payload và response nên được đối chiếu trực tiếp với route/controller tương ứng khi tích hợp.
 
+## Anti-Peep
+
+Anti-Peep chạy suy luận ngay trong trình duyệt bằng `@vladmandic/human`; khung hình camera không được gửi lên server. Khi thiết lập, ứng dụng lấy 5 embedding khuôn mặt của chủ nhân và lưu các mảng số này cùng phiên bản model trong hồ sơ người dùng. Người dùng có dữ liệu `face-api` cũ phải quét lại vì hai loại embedding không tương thích.
+
+Khi bảo vệ được bật và tab đang hiển thị, camera dùng độ phân giải mục tiêu 320×240, khoảng 6 FPS và tối đa 10 FPS. Vòng quét nhẹ chỉ đếm khuôn mặt mỗi 1,5 giây. FaceMesh, Iris và FaceRes chỉ chạy khi phát hiện ít nhất hai khuôn mặt; cùng một khuôn mặt không phải chủ nhân phải vừa hướng mặt vừa nhìn về camera liên tục 3 giây mới khóa màn hình. Nhìn sang hướng khác đặt lại bộ đếm; mất nhận diện dưới 500 ms được bỏ qua để tránh khóa sai do một frame lỗi.
+
+Camera dừng khi tắt bảo vệ, chuyển sang tab ẩn hoặc component bị hủy, rồi tự khởi động lại khi người dùng quay lại tab nếu Anti-Peep vẫn bật. Các model cần thiết được lưu tại `client/public/models/human/` và được tải từ cùng origin của frontend.
+
 ## ML tiếng Việt tùy chọn
 
 Model nằm tại <code>server/src/algorithms/TF-IDF_RandomForest/</code>. Node.js gọi lệnh <code>python</code> từ <code>PATH</code>, vì vậy cần kiểm tra Python có thể được gọi bằng đúng tên này trong terminal chạy server.
@@ -223,6 +232,7 @@ Kiểm tra frontend trước khi phát hành:
 
 ~~~powershell
 Set-Location .\client
+npm test
 npm run lint
 npm run build
 ~~~

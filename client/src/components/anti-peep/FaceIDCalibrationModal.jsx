@@ -1,11 +1,18 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import classNames from 'classnames/bind';
+import { motion as Motion, AnimatePresence } from 'motion/react';
 import styles from '../../assets/css/AntiPeep.module.scss';
 import { 
     X, 
     Delete, 
-    Loader2
+    CheckCircle2,
+    RefreshCw,
+    ScanFace,
+    Shield,
+    KeyRound,
+    Sparkles
 } from 'lucide-react';
+import XButton from '../ui/animate/XButton';
 
 const cx = classNames.bind(styles);
 
@@ -14,10 +21,14 @@ const FaceIDCalibrationModal = ({
     stream,
     step, // 'face' | 'pin'
     guidanceText,
-    onCaptureFace,
+    isAligned,
+    alignmentStatus, // 'aligned' | 'no_face' | 'multiple_faces' | 'too_far' | 'too_close' | 'uncentered' | 'poor_quality' | 'loading'
     isCapturing,
+    captureProgress = 0,
+    captureTarget = 5,
     tempPin,
     setTempPin,
+    onResetCapture,
     onSave,
     onClose,
     landmarksData
@@ -33,36 +44,12 @@ const FaceIDCalibrationModal = ({
         }
     }, [stream, isOpen, step]);
 
-    // Check if face is well aligned
-    const isAligned = useMemo(() => {
-        if (!guidanceText) return false;
-        const text = guidanceText.toLowerCase();
-        return text.includes('perfect') || text.includes('hoàn hảo') || text.includes('hold still');
-    }, [guidanceText]);
+    // Calculate percentage progress for circular SVG ring
+    const progressPercent = Math.min(Math.round((captureProgress / captureTarget) * 100), 100);
+    const circumference = 2 * Math.PI * 118; // r = 118 => 741.4
+    const strokeDashoffset = circumference - (circumference * progressPercent) / 100;
 
-    const isWarning = useMemo(() => {
-        if (!guidanceText) return false;
-        const text = guidanceText.toLowerCase();
-        return text.includes('no face') || text.includes('multiple');
-    }, [guidanceText]);
-
-    // Clean Vietnamese guidance translations
-    const translatedGuidance = useMemo(() => {
-        if (!guidanceText) return 'Đang khởi động camera...';
-        const t = guidanceText.toLowerCase();
-        if (t.includes('no face')) return 'Không tìm thấy khuôn mặt. Hãy nhìn thẳng vào camera.';
-        if (t.includes('multiple')) return 'Phát hiện nhiều người. Hãy đảm bảo bạn ở một mình.';
-        if (t.includes('too far')) return 'Đưa khuôn mặt lại gần hơn';
-        if (t.includes('too close')) return 'Lùi khuôn mặt lại một chút';
-        if (t.includes('move left')) return 'Di chuyển sang trái ->';
-        if (t.includes('move right')) return '<- Di chuyển sang phải';
-        if (t.includes('move down')) return 'Hạ mặt xuống một chút';
-        if (t.includes('move up')) return 'Nâng mặt lên một chút';
-        if (t.includes('perfect') || t.includes('hold still')) return 'Khuôn mặt đã căn chỉnh hoàn hảo. Giữ yên để quét.';
-        return guidanceText;
-    }, [guidanceText]);
-
-    // Draw Minimal Apple 3D Face Wireframe & Landmark Mesh
+    // Draw Minimal Modern 3D Face Wireframe & Landmark Mesh
     useEffect(() => {
         if (step !== 'face') return;
         const canvas = canvasRef.current;
@@ -71,12 +58,12 @@ const FaceIDCalibrationModal = ({
         let angle = 0;
 
         const render = () => {
-            const width = canvas.width = 230;
-            const height = canvas.height = 230;
+            const width = canvas.width = 240;
+            const height = canvas.height = 240;
             ctx.clearRect(0, 0, width, height);
 
             if (landmarksData && landmarksData.positions && landmarksData.positions.length > 0) {
-                // Real-time Facial Landmark Overlay in Clean Monochromatic White
+                // Real-time Facial Landmark Overlay in Clean Monochromatic White/Cyan
                 const points = landmarksData.positions;
                 const scaleX = width / (landmarksData.videoWidth || 320);
                 const scaleY = height / (landmarksData.videoHeight || 240);
@@ -86,8 +73,8 @@ const FaceIDCalibrationModal = ({
                     y: points[idx].y * scaleY
                 });
 
-                ctx.strokeStyle = isAligned ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.55)';
-                ctx.lineWidth = 1.2;
+                ctx.strokeStyle = isAligned ? 'rgba(56, 189, 248, 0.85)' : 'rgba(255, 255, 255, 0.45)';
+                ctx.lineWidth = isAligned ? 1.4 : 1.1;
 
                 const drawChain = (indices, closed = false) => {
                     ctx.beginPath();
@@ -111,24 +98,24 @@ const FaceIDCalibrationModal = ({
                 drawChain([48, 50, 52, 54, 56, 58], true); // Lips
 
                 // Key anchor points
-                ctx.fillStyle = '#ffffff';
+                ctx.fillStyle = isAligned ? '#38bdf8' : '#ffffff';
                 [8, 27, 30, 33, 36, 39, 42, 45, 48, 54].forEach(idx => {
                     const pt = getPt(idx);
                     ctx.beginPath();
-                    ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
+                    ctx.arc(pt.x, pt.y, isAligned ? 2.5 : 2, 0, Math.PI * 2);
                     ctx.fill();
                 });
             } else {
-                // Apple 3D Wireframe Head Hologram Guide
+                // Futuristic Holographic Scanner Wireframe
                 angle += 0.025;
                 const centerX = width / 2;
                 const centerY = height / 2;
-                const radius = 64;
+                const radius = 68;
 
                 ctx.save();
                 ctx.translate(centerX, centerY);
 
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
                 ctx.lineWidth = 1.2;
 
                 // Head oval
@@ -142,13 +129,13 @@ const FaceIDCalibrationModal = ({
                 ctx.stroke();
 
                 // Subtle latitude lines
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
                 ctx.beginPath();
                 ctx.ellipse(0, -10, radius * 0.75, 14, 0, 0, Math.PI * 2);
                 ctx.stroke();
 
                 // Eye guide marks
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
                 ctx.fillRect(-20, -12, 4, 2);
                 ctx.fillRect(16, -12, 4, 2);
 
@@ -182,147 +169,275 @@ const FaceIDCalibrationModal = ({
         }
     };
 
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape' && !isCapturing) {
+                onClose();
+            } else if (step === 'pin') {
+                if (event.key >= '0' && event.key <= '9') {
+                    handleKeyClick(event.key);
+                } else if (event.key === 'Backspace') {
+                    handleDeleteKey();
+                } else if (event.key === 'Enter' && tempPin.length === 4) {
+                    onSave();
+                }
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isCapturing, isOpen, onClose, step, tempPin, onSave]);
+
     if (!isOpen) return null;
 
     return (
-        <div className={cx('face-id-modal-backdrop')}>
-            <div className={cx('face-id-card-modal')}>
-                {/* Close Button */}
-                <button
-                    type="button"
-                    className={cx('modal-close-btn')}
-                    onClick={onClose}
-                    title="Đóng"
-                    aria-label="Đóng"
+        <AnimatePresence>
+            <Motion.div
+                className={cx('face-id-modal-backdrop')}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.22 }}
+            >
+                <Motion.div
+                    className={cx('face-id-card-modal')}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="face-id-dialog-title"
+                    initial={{ opacity: 0, scale: 0.93, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    transition={{ type: 'spring', damping: 28, stiffness: 360 }}
                 >
-                    <X size={16} />
-                </button>
+                    {/* Close Button */}
+                    <button
+                        type="button"
+                        className={cx('modal-close-btn')}
+                        onClick={onClose}
+                        title="Đóng"
+                        aria-label="Đóng"
+                    >
+                        <X size={18} />
+                    </button>
 
-                {step === 'face' ? (
-                    <>
-                        <div className={cx('modal-title-group')}>
-                            <h3>Face ID</h3>
-                            <p>Định vị khuôn mặt của bạn bên trong khung hình tròn.</p>
+                    {/* Step indicator header */}
+                    <div className={cx('step-indicator-bar')}>
+                        <div className={cx('step-item', { active: step === 'face', done: step === 'pin' })}>
+                            <div className={cx('step-badge')}>1</div>
+                            <span>Khuôn mặt</span>
                         </div>
-
-                        {/* Circular Apple Face ID Scanner */}
-                        <div className={cx('apple-face-id-scanner')}>
-                            <svg className={cx('tick-ring-svg', { aligned: isAligned })} viewBox="0 0 258 258">
-                                <circle cx="129" cy="129" r="118" />
-                            </svg>
-
-                            <div className={cx('camera-viewport', { aligned: isAligned })}>
-                                <video
-                                    ref={videoRef}
-                                    autoPlay
-                                    muted
-                                    playsInline
-                                />
-                                <canvas ref={canvasRef} />
-                            </div>
-                        </div>
-
-                        {/* Minimal Guidance Pill */}
-                        <div className={cx('guidance-pill', { ready: isAligned, error: isWarning })}>
-                            <span className={cx('guidance-dot')} />
-                            <span>{translatedGuidance}</span>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className={cx('modal-actions')}>
-                            <button
-                                type="button"
-                                className={cx('primary-apple-btn')}
-                                onClick={onCaptureFace}
-                                disabled={isCapturing}
-                            >
-                                {isCapturing ? (
-                                    <>
-                                        <Loader2 size={16} className="animate-spin" />
-                                        <span>Đang quét...</span>
-                                    </>
-                                ) : (
-                                    <span>Bắt đầu quét Face ID</span>
-                                )}
-                            </button>
-                            <button
-                                type="button"
-                                className={cx('cancel-apple-btn')}
-                                onClick={onClose}
-                            >
-                                Hủy
-                            </button>
-                        </div>
-                    </>
-                ) : (
-                    /* Step 2: Apple Passcode PIN Setup */
-                    <div className={cx('pin-setup-container')}>
-                        <div className={cx('modal-title-group')}>
-                            <h3>Tạo mã PIN</h3>
-                            <p>Nhập mã PIN 4 chữ số để mở khóa khi không thể dùng camera.</p>
-                        </div>
-
-                        {/* 4 Pin Dots */}
-                        <div className={cx('pin-dots-row')}>
-                            {[0, 1, 2, 3].map((index) => (
-                                <div
-                                    key={index}
-                                    className={cx('pin-dot', { filled: tempPin.length > index })}
-                                />
-                            ))}
-                        </div>
-
-                        {/* Clean iOS Keypad */}
-                        <div className={cx('keypad-grid')}>
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                                <button
-                                    key={num}
-                                    type="button"
-                                    className={cx('key-btn')}
-                                    onClick={() => handleKeyClick(String(num))}
-                                >
-                                    {num}
-                                </button>
-                            ))}
-                            <div className={cx('key-btn', 'empty')} />
-                            <button
-                                type="button"
-                                className={cx('key-btn')}
-                                onClick={() => handleKeyClick('0')}
-                            >
-                                0
-                            </button>
-                            <button
-                                type="button"
-                                className={cx('key-btn')}
-                                onClick={handleDeleteKey}
-                                aria-label="Xóa"
-                            >
-                                <Delete size={18} />
-                            </button>
-                        </div>
-
-                        <div className={cx('modal-actions')}>
-                            <button
-                                type="button"
-                                className={cx('primary-apple-btn')}
-                                onClick={onSave}
-                                disabled={tempPin.length < 4}
-                            >
-                                Hoàn tất & Bật bảo vệ
-                            </button>
-                            <button
-                                type="button"
-                                className={cx('cancel-apple-btn')}
-                                onClick={onClose}
-                            >
-                                Hủy
-                            </button>
+                        <div className={cx('step-divider', { active: step === 'pin' })} />
+                        <div className={cx('step-item', { active: step === 'pin' })}>
+                            <div className={cx('step-badge')}>2</div>
+                            <span>Mã PIN dự phòng</span>
                         </div>
                     </div>
-                )}
-            </div>
-        </div>
+
+                    {step === 'face' ? (
+                        <div className={cx('step-face-container')}>
+                            <div className={cx('modal-title-group')}>
+                                <h3 id="face-id-dialog-title">Thiết lập Face ID</h3>
+                                <p>Căn chỉnh khuôn mặt vào giữa khung tròn. Hệ thống sẽ tự động quét và lưu mẫu nhận diện.</p>
+                            </div>
+
+                            {/* Circular Auto-Scanning Viewport with SVG Progress */}
+                            <div className={cx('apple-face-id-scanner')}>
+                                {/* Dynamic SVG Progress Ring */}
+                                <svg className={cx('progress-ring-svg')} viewBox="0 0 258 258">
+                                    {/* Background track circle */}
+                                    <circle
+                                        className={cx('progress-ring-bg')}
+                                        cx="129"
+                                        cy="129"
+                                        r="118"
+                                    />
+                                    {/* Animated Progress circle */}
+                                    <circle
+                                        className={cx('progress-ring-fill', { active: isAligned })}
+                                        cx="129"
+                                        cy="129"
+                                        r="118"
+                                        style={{
+                                            strokeDasharray: circumference,
+                                            strokeDashoffset: strokeDashoffset,
+                                        }}
+                                    />
+                                </svg>
+
+                                {/* Radar scanning sweep effect when aligned */}
+                                {isAligned && (
+                                    <div className={cx('radar-sweep')} aria-hidden="true" />
+                                )}
+
+                                {/* Camera Viewport */}
+                                <div className={cx('camera-viewport', { aligned: isAligned })}>
+                                    <video
+                                        ref={videoRef}
+                                        autoPlay
+                                        muted
+                                        playsInline
+                                    />
+                                    <canvas ref={canvasRef} />
+
+                                    {/* Corner Crosshairs */}
+                                    <div className={cx('corner-bracket', 'top-left')} />
+                                    <div className={cx('corner-bracket', 'top-right')} />
+                                    <div className={cx('corner-bracket', 'bottom-left')} />
+                                    <div className={cx('corner-bracket', 'bottom-right')} />
+                                </div>
+                            </div>
+
+                            {/* Live Guidance Pill with Auto Status */}
+                            <Motion.div
+                                className={cx('guidance-pill', {
+                                    ready: isAligned,
+                                    warning: !isAligned && alignmentStatus !== 'loading',
+                                    success: captureProgress >= captureTarget
+                                })}
+                                aria-live="polite"
+                                animate={isAligned ? { scale: [1, 1.02, 1] } : { scale: 1 }}
+                                transition={{ duration: 1.5, repeat: isAligned ? Infinity : 0 }}
+                            >
+                                <span className={cx('guidance-dot')} />
+                                <span className={cx('guidance-msg')}>{guidanceText}</span>
+                            </Motion.div>
+
+                            {/* 5-Sample Progress Dots */}
+                            <div className={cx('sample-progress-row')}>
+                                {[...Array(captureTarget)].map((_, idx) => {
+                                    const isDone = captureProgress > idx;
+                                    const isCurrent = captureProgress === idx && isAligned;
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={cx('sample-dot-item', {
+                                                done: isDone,
+                                                current: isCurrent,
+                                            })}
+                                        >
+                                            {isDone ? (
+                                                <CheckCircle2 size={13} className={cx('check-icon')} />
+                                            ) : (
+                                                <span>{idx + 1}</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Footer control actions */}
+                            <div className={cx('modal-actions')}>
+                                {captureProgress > 0 && captureProgress < captureTarget && (
+                                    <button
+                                        type="button"
+                                        className={cx('x-secondary-btn')}
+                                        onClick={onResetCapture}
+                                    >
+                                        <RefreshCw size={14} />
+                                        <span>Quét lại từ đầu</span>
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    className={cx('cancel-apple-btn')}
+                                    onClick={onClose}
+                                >
+                                    Hủy
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        /* Step 2: Passcode PIN Setup (X / Cyber Aesthetic) */
+                        <Motion.div
+                            className={cx('pin-setup-container')}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.25 }}
+                        >
+                            <div className={cx('modal-title-group')}>
+                                <div className={cx('pin-header-icon')}>
+                                    <KeyRound size={22} />
+                                </div>
+                                <h3>Tạo mã PIN dự phòng</h3>
+                                <p>Mã PIN 4 số sẽ dùng để mở khóa khi camera bị che hoặc thiếu sáng.</p>
+                            </div>
+
+                            {/* 4 Pin Slots with modern glow */}
+                            <div className={cx('pin-dots-row')}>
+                                {[0, 1, 2, 3].map((index) => (
+                                    <div
+                                        key={index}
+                                        className={cx('pin-dot', { filled: tempPin.length > index })}
+                                    />
+                                ))}
+                            </div>
+
+                            {/* Clean X-style Keypad */}
+                            <div className={cx('keypad-grid')}>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                                    <Motion.button
+                                        key={num}
+                                        type="button"
+                                        className={cx('key-btn')}
+                                        onClick={() => handleKeyClick(String(num))}
+                                        whileHover={{ scale: 1.06, backgroundColor: 'rgba(255, 255, 255, 0.14)' }}
+                                        whileTap={{ scale: 0.94, backgroundColor: 'rgba(255, 255, 255, 0.25)' }}
+                                        transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                                    >
+                                        {num}
+                                    </Motion.button>
+                                ))}
+                                <div className={cx('key-btn', 'empty')} />
+                                <Motion.button
+                                    type="button"
+                                    className={cx('key-btn')}
+                                    onClick={() => handleKeyClick('0')}
+                                    whileHover={{ scale: 1.06, backgroundColor: 'rgba(255, 255, 255, 0.14)' }}
+                                    whileTap={{ scale: 0.94, backgroundColor: 'rgba(255, 255, 255, 0.25)' }}
+                                    transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                                >
+                                    0
+                                </Motion.button>
+                                <Motion.button
+                                    type="button"
+                                    className={cx('key-btn')}
+                                    onClick={handleDeleteKey}
+                                    whileHover={{ scale: 1.06, backgroundColor: 'rgba(255, 255, 255, 0.14)' }}
+                                    whileTap={{ scale: 0.94, backgroundColor: 'rgba(255, 255, 255, 0.25)' }}
+                                    transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                                    aria-label="Xóa"
+                                >
+                                    <Delete size={18} />
+                                </Motion.button>
+                            </div>
+
+                            <div className={cx('modal-actions')}>
+                                <XButton
+                                    variant="primary"
+                                    size="lg"
+                                    fullWidth
+                                    disabled={tempPin.length < 4}
+                                    onClick={onSave}
+                                >
+                                    <span className={cx('save-btn-content')}>
+                                        <Sparkles size={16} />
+                                        <span>Hoàn tất & Bật bảo vệ</span>
+                                    </span>
+                                </XButton>
+                                <button
+                                    type="button"
+                                    className={cx('cancel-apple-btn')}
+                                    onClick={onClose}
+                                >
+                                    Hủy
+                                </button>
+                            </div>
+                        </Motion.div>
+                    )}
+                </Motion.div>
+            </Motion.div>
+        </AnimatePresence>
     );
 };
 

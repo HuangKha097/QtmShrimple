@@ -27,6 +27,7 @@ import PostItem from './PostItem';
 import WhoToFollowWidget from './WhoToFollowWidget';
 import TrendsWidget from './TrendsWidget';
 import LoadingSpin from '../common/loading/LoadingSpin';
+import NotificationDropdown from '../common/NotificationDropdown';
 import { useTranslation } from 'react-i18next';
 import default_avt from '../../../public/favicon.png';
 import { friendService } from '../../services/friendService';
@@ -56,69 +57,10 @@ const PostsContainer = () => {
     // Search query for right sidebar
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Chat store for realtime friend requests & notifications
-    const { 
-        friendRequests = [], 
-        fetchFriendRequests, 
-        acceptRequestAction, 
-        declineRequestAction 
-    } = useChatStore();
-
-    // Activity notifications (Likes, Comments, Replies)
-    const {
-        notifications: activityNotifications = [],
-        unreadCount: unreadActivityCount,
-        fetchNotifications,
-        markAllAsRead: markAllActivityAsRead,
-        markAsRead: markActivityAsRead
-    } = useNotificationStore();
-
-    // Notifications Popover State
-    const [showNotifPopover, setShowNotifPopover] = useState(false);
-    const notifRef = useRef(null);
-
     // Feed Scroll & Back-to-Top / Reload State
     const feedLayoutRef = useRef(null);
     const [showBackToTop, setShowBackToTop] = useState(false);
     const [isReloading, setIsReloading] = useState(false);
-
-    useEffect(() => {
-        fetchFriendRequests();
-        fetchNotifications();
-    }, [fetchFriendRequests, fetchNotifications]);
-
-    const totalUnreadNotifs = (friendRequests?.length || 0) + (unreadActivityCount || 0);
-
-    // Close notification popover on outside click
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (notifRef.current && !notifRef.current.contains(e.target)) {
-                setShowNotifPopover(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const handleAcceptFriend = async (requestId) => {
-        try {
-            await acceptRequestAction(requestId);
-            toast.success("Đã chấp nhận lời mời kết bạn!");
-        } catch (err) {
-            console.error(err);
-            toast.error("Lỗi khi chấp nhận kết bạn");
-        }
-    };
-
-    const handleDeclineFriend = async (requestId) => {
-        try {
-            await declineRequestAction(requestId);
-            toast.success("Đã từ chối lời mời kết bạn");
-        } catch (err) {
-            console.error(err);
-            toast.error("Lỗi khi từ chối kết bạn");
-        }
-    };
 
     const observer = useRef(null);
     const lastPostElementRef = React.useCallback(node => {
@@ -360,140 +302,7 @@ const PostsContainer = () => {
                 <div className={cx('widgets-sticky-wrapper')}>
                     {/* Top Row: Notifications Button (nằm bên trái) + Search Bar */}
                     <div className={cx('widgets-top-row')}>
-                        <div className={cx('notif-wrapper')} ref={notifRef}>
-                            <button
-                                type="button"
-                                className={cx('widgets-notif-btn', { active: showNotifPopover })}
-                                onClick={() => setShowNotifPopover(!showNotifPopover)}
-                                title={t('feed.notifications')}
-                                aria-label={t('feed.notifications')}
-                            >
-                                <Bell size={19} />
-                                {totalUnreadNotifs > 0 && (
-                                    <span className={cx('notif-badge')}>
-                                        {totalUnreadNotifs > 9 ? '9+' : totalUnreadNotifs}
-                                    </span>
-                                )}
-                            </button>
-
-                            {/* Notifications Popover */}
-                            <AnimatePresence>
-                                {showNotifPopover && (
-                                    <Motion.div 
-                                        className={cx('widgets-notif-popover')}
-                                        initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                                        transition={{ duration: 0.15 }}
-                                    >
-                                        <div className={cx('notif-popover-header')}>
-                                            <div className={cx('notif-popover-title')}>{t('feed.notifications')}</div>
-                                            {(activityNotifications.length > 0 || friendRequests.length > 0) && (
-                                                <button
-                                                    type="button"
-                                                    className={cx('notif-mark-read-btn')}
-                                                    onClick={() => markAllActivityAsRead()}
-                                                >
-                                                    {t('feed.markAllRead')}
-                                                </button>
-                                            )}
-                                        </div>
-
-                                        <div className={cx('notif-popover-body')}>
-                                            {activityNotifications.length === 0 && friendRequests.length === 0 ? (
-                                                <div className={cx('notif-empty-state')}>
-                                                    <Bell size={28} className={cx('notif-empty-icon')} />
-                                                    <p>Chưa có thông báo mới nào</p>
-                                                    <small>Khi có tương tác hoặc lời mời kết bạn, bạn sẽ thấy ở đây.</small>
-                                                </div>
-                                            ) : (
-                                                <div className={cx('notif-list')}>
-                                                    {/* 1. Lời mời kết bạn */}
-                                                    {friendRequests.map((req) => {
-                                                        const sender = req.sender || req.from || {};
-                                                        const senderAvatar = sender.avatarURL || default_avt;
-                                                        const senderName = sender.displayName || sender.username || 'Người dùng';
-                                                        return (
-                                                            <div key={`friend-${req._id}`} className={cx('notif-item')}>
-                                                                <img
-                                                                    src={senderAvatar}
-                                                                    alt={senderName}
-                                                                    className={cx('notif-sender-avatar')}
-                                                                    onError={(e) => { e.currentTarget.src = default_avt; }}
-                                                                />
-                                                                <div className={cx('notif-content')}>
-                                                                    <div className={cx('notif-text')}>
-                                                                        <strong>{senderName}</strong> đã gửi cho bạn một lời mời kết bạn.
-                                                                    </div>
-                                                                    <div className={cx('notif-actions')}>
-                                                                        <button
-                                                                            type="button"
-                                                                            className={cx('notif-accept-btn')}
-                                                                            onClick={() => handleAcceptFriend(req._id)}
-                                                                        >
-                                                                            Chấp nhận
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            className={cx('notif-decline-btn')}
-                                                                            onClick={() => handleDeclineFriend(req._id)}
-                                                                        >
-                                                                            Từ chối
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-
-                                                    {/* 2. Tương tác (Like, Comment, Reply) */}
-                                                    {activityNotifications.map((notif) => {
-                                                        const sender = notif.sender || {};
-                                                        const senderAvatar = sender.avatarURL || default_avt;
-                                                        const senderName = sender.displayName || sender.username || 'Ai đó';
-
-                                                        let actionDesc = "đã tương tác với bạn.";
-                                                        if (notif.type === "like") actionDesc = "đã thích bài viết của bạn.";
-                                                        if (notif.type === "comment") actionDesc = `đã bình luận: "${notif.text}"`;
-                                                        if (notif.type === "reply") actionDesc = `đã phản hồi: "${notif.text}"`;
-
-                                                        return (
-                                                            <div 
-                                                                key={`notif-${notif._id}`} 
-                                                                className={cx('notif-item', { unread: !notif.isRead })}
-                                                                style={{ cursor: 'pointer', opacity: notif.isRead ? 0.75 : 1 }}
-                                                                onClick={() => {
-                                                                    markActivityAsRead(notif._id);
-                                                                    setShowNotifPopover(false);
-                                                                    if (notif.post?._id) {
-                                                                        navigate(`/post/${notif.post._id}`);
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <img
-                                                                    src={senderAvatar}
-                                                                    alt={senderName}
-                                                                    className={cx('notif-sender-avatar')}
-                                                                    onError={(e) => { e.currentTarget.src = default_avt; }}
-                                                                />
-                                                                <div className={cx('notif-content')}>
-                                                                    <div className={cx('notif-text')}>
-                                                                        <strong>{senderName}</strong> {actionDesc}
-                                                                    </div>
-                                                                    <div style={{ fontSize: '1.1rem', opacity: 0.5, marginTop: '2px' }}>
-                                                                        {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </Motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
+                        <NotificationDropdown align="left" />
 
                         {/* Search Bar Capsule */}
                         <div className={cx('widgets-search-box')}>

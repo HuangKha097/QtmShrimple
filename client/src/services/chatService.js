@@ -31,10 +31,10 @@ export const chatService = {
         });
         return res.data;
     } ,
-    async createConversation(isGroup, name, memberIds) {
+    async createConversation(isGroup, name, memberIds, recipientId) {
         const res = await api.post(`/api/conversations/`, {
-            isGroup, name, memberIds
-        })
+            isGroup, name, memberIds, recipientId
+        });
         return res.data;
     },
     async reactToMessage(messageId, reaction) {

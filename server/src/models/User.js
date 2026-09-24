@@ -110,9 +110,11 @@ const userSchema = new mongoose.Schema(
             default: []
         }],
         antiPeepData: {
-            isEnabled: { type: Boolean, default: false },
-            faceDescriptor: { type: [Number], default: [] },
-            pin: { type: String, default: "" }
+            isEnabled: { type: Boolean, default: false, select: false },
+            faceDescriptor: { type: [Number], default: [], select: false },
+            faceDescriptors: { type: [[Number]], default: [], select: false },
+            modelVersion: { type: String, default: "", select: false },
+            pin: { type: String, default: "", select: false }
         },
         settings: {
             soundEnabled: { type: Boolean, default: true },

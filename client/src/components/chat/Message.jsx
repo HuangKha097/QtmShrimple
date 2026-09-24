@@ -3,9 +3,10 @@ import classNames from 'classnames/bind';
 import { motion as Motion } from 'motion/react';
 import styles from '../../assets/css/Message.module.scss';
 import profilePic_test from "../../../public/favicon.png";
-import { X, MapPin, ExternalLink, File, Download, Pin, CornerUpRight, RotateCcw, Trash2, MoreHorizontal, PinOff, Check, CheckCheck } from 'lucide-react';
+import { X, MapPin, ExternalLink, File, Download, Pin, CornerUpRight, RotateCcw, Trash2, MoreHorizontal, PinOff, Check, CheckCheck, PhoneCall, Radio } from 'lucide-react';
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
+import { useGroupCallStore } from "../../stores/useGroupCallStore.js";
 import CustomAudioPlayer from './CustomAudioPlayer.jsx';
 import ForwardModal from './ForwardModal.jsx';
 import { toast } from 'sonner';
@@ -44,8 +45,39 @@ const Message = ({
         deleteMessageForMeAction, 
         togglePinMessageAction,
         activeReactionMessageId,
-        setActiveReactionMessageId
+        setActiveReactionMessageId,
+        activeConversationId,
+        conversations
     } = useChatStore();
+
+    const { 
+        activeGroupCalls, 
+        isInCall, 
+        currentConversationId, 
+        joinGroupCall, 
+        setModalOpen 
+    } = useGroupCallStore();
+
+    const currentConvo = (conversations || []).find(c => c && c._id === activeConversationId);
+    const activeCall = activeConversationId ? activeGroupCalls[activeConversationId] : null;
+    const isCallActive = Boolean(activeCall?.isActive);
+    const isCurrentInThisCall = isInCall && currentConversationId === activeConversationId;
+    const participantsCount = activeCall?.participants?.length || 0;
+
+    const handleGroupCallAction = () => {
+        if (!activeConversationId) return;
+        if (isCurrentInThisCall) {
+            setModalOpen(true);
+        } else {
+            const groupInfo = {
+                _id: currentConvo?._id,
+                name: currentConvo?.name || currentConvo?.group?.name || 'Nhóm',
+                avatarURL: currentConvo?.avatarURL || currentConvo?.group?.avatarURL,
+                participantsCount: currentConvo?.participants?.length || 0,
+            };
+            joinGroupCall(activeConversationId, groupInfo);
+        }
+    };
 
     const isPickerOpen = !isRecalled && activeReactionMessageId === messageId;
 
@@ -336,6 +368,44 @@ const Message = ({
                             ) : messageType === 'audio' ? (
                                 <div className={cx('audio-bubble')}>
                                     <CustomAudioPlayer src={fileUrl} />
+                                </div>
+                            ) : messageType === 'group_call' ? (
+                                <div className={cx('group-call-bubble', { 'active-call': isCallActive })}>
+                                    <div className={cx('group-call-header')}>
+                                        <div className={cx('group-call-icon-box', { active: isCallActive })}>
+                                            {isCallActive ? <Radio size={20} /> : <PhoneCall size={20} />}
+                                        </div>
+                                        <div className={cx('group-call-meta')}>
+                                            <span className={cx('group-call-title')}>Cuộc gọi thoại nhóm</span>
+                                            <span className={cx('group-call-status')}>
+                                                {isCallActive ? (
+                                                    <>
+                                                        <span className={cx('live-dot')} />
+                                                        <span>Đang diễn ra • {participantsCount} người tham gia</span>
+                                                    </>
+                                                ) : (
+                                                    <span>Cuộc gọi đã kết thúc</span>
+                                                )}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        className={cx('group-call-btn', {
+                                            'in-call': isCurrentInThisCall
+                                        })}
+                                        onClick={handleGroupCallAction}
+                                    >
+                                        <PhoneCall size={16} />
+                                        <span>
+                                            {isCurrentInThisCall
+                                                ? 'Mở phòng thoại'
+                                                : isCallActive
+                                                ? 'Tham gia cuộc gọi'
+                                                : 'Bắt đầu cuộc gọi'}
+                                        </span>
+                                    </button>
                                 </div>
                             ) : (
                                 (!image || text) && (

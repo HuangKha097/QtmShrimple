@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Friend from "../models/Friend.js";
 import FriendRequest from "../models/FriendRequest.js";
+import Conversation from "../models/Conversation.js";
 import { io } from "../socket/socket.js";
 
 export const sendFriendRequest = async (req, res) => {
@@ -71,8 +72,26 @@ export const acceptFriendRequest = async (req, res) => {
 
         const friend = await Friend.create({
             userA: request.from, userB: request.to,
-        })
-        await FriendRequest.findByIdAndDelete(requestId)
+        });
+        await FriendRequest.findByIdAndDelete(requestId);
+
+        // Auto-create 1-on-1 Conversation in DB
+        let conversation = await Conversation.findOne({
+            isGroup: false,
+            "participants.userId": { $all: [request.from, request.to] }
+        });
+
+        if (!conversation) {
+            conversation = await Conversation.create({
+                isGroup: false,
+                participants: [
+                    { userId: request.from, joinedAt: new Date() },
+                    { userId: request.to, joinedAt: new Date() }
+                ],
+                lastMessageAt: new Date(0),
+                unreadCounts: new Map()
+            });
+        }
         
         const [from, toUser] = await Promise.all([
             User.findById(request.from).select('_id displayName avatarURL username').lean(),
@@ -92,6 +111,19 @@ export const acceptFriendRequest = async (req, res) => {
             friend: from,
             newFriend: from
         });
+
+        // Emit newConversation to both
+        try {
+            const formattedForSender = {
+                ...conversation.toObject(),
+                unreadCounts: conversation.unreadCounts || {},
+                participants: [from, toUser]
+            };
+            io.to(request.from.toString()).emit("newConversation", formattedForSender);
+            io.to(request.to.toString()).emit("newConversation", formattedForSender);
+        } catch (convoErr) {
+            console.error("Error emitting newConversation on friend accept:", convoErr);
+        }
 
         return res.status(200).json({
             message: "Accept request successfully", newFriend: {

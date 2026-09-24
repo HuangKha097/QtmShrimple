@@ -6,6 +6,7 @@ import default_avt from "../../../public/favicon.png";
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import { ASSET_BASE_URL } from "../../config/env.js";
+import { Image, Mic, Video, FileText, MapPin, PhoneCall } from 'lucide-react';
 
 const cx = classNames.bind(styles);
 
@@ -122,15 +123,41 @@ const GroupChatCard = ({ props }) => {
 
         switch (type) {
             case 'image':
-                return `${senderName}: 🖼️ Hình ảnh`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {senderName}: <Image size={13} className={cx('preview-icon')} /> Hình ảnh
+                    </span>
+                );
             case 'audio':
-                return `${senderName}: 🎙️ Tin nhắn thoại`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {senderName}: <Mic size={13} className={cx('preview-icon')} /> Tin nhắn thoại
+                    </span>
+                );
             case 'video':
-                return `${senderName}: 🎬 Video`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {senderName}: <Video size={13} className={cx('preview-icon')} /> Video
+                    </span>
+                );
             case 'file':
-                return `${senderName}: 📁 Tập tin`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {senderName}: <FileText size={13} className={cx('preview-icon')} /> Tập tin
+                    </span>
+                );
             case 'location':
-                return `${senderName}: 📍 Vị trí`;
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {senderName}: <MapPin size={13} className={cx('preview-icon')} /> Vị trí
+                    </span>
+                );
+            case 'group_call':
+                return (
+                    <span className={cx('msg-preview-inline')}>
+                        {senderName}: <PhoneCall size={13} className={cx('preview-icon')} /> Cuộc gọi nhóm
+                    </span>
+                );
             case 'text':
             default:
                 return `${senderName}: ${lastMsg.content || ""}`;

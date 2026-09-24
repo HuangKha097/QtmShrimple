@@ -2,10 +2,11 @@ import React, { useMemo, useEffect, useState } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/ChatHeader.module.scss';
 import defaultAvatar from "../../../public/favicon.png";
-import { Info, Phone, Video, ChevronLeft, MoreVertical, Pin, PinOff, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Info, Phone, Video, ChevronLeft, MoreVertical, Pin, PinOff, ChevronDown, ChevronUp, X, PhoneCall } from 'lucide-react';
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useCallStore } from '../../stores/useCallStore';
+import { useGroupCallStore } from '../../stores/useGroupCallStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ASSET_BASE_URL } from '../../config/env.js';
@@ -16,12 +17,13 @@ const ChatHeader = ({ onCloseChatInfo, chat }) => {
     const { user: currentUser, onlineUsers } = useAuthStore();
     const { friends, setActiveConversationId, pinnedMessages, fetchPinnedMessages, togglePinMessageAction } = useChatStore();
     const { initiateCall } = useCallStore();
+    const { activeGroupCalls, isInCall, currentConversationId, joinGroupCall, setModalOpen } = useGroupCallStore();
     const navigate = useNavigate();
     const [showMenu, setShowMenu] = useState(false);
     const [showAllPins, setShowAllPins] = useState(false);
 
     useEffect(() => {
-        if (chat && chat._id && !chat._id.startsWith('temp_')) {
+        if (chat && chat._id) {
             fetchPinnedMessages(chat._id);
         }
     }, [chat?._id]);
@@ -29,6 +31,8 @@ const ChatHeader = ({ onCloseChatInfo, chat }) => {
     if (!chat) return null;
 
     const isGroup = chat.isGroup;
+    const hasActiveGroupCall = Boolean(activeGroupCalls[chat._id]?.isActive);
+    const isCurrentInThisCall = isInCall && currentConversationId === chat._id;
     let displayName = "Unknown";
     let statusText = "Offline";
     let isOnline = false;
@@ -130,13 +134,15 @@ const ChatHeader = ({ onCloseChatInfo, chat }) => {
             case 'text':
                 return pin.content;
             case 'image':
-                return "🖼️ [Hình ảnh]";
+                return "[Hình ảnh]";
             case 'audio':
-                return "🎙️ [Tin nhắn thoại]";
+                return "[Tin nhắn thoại]";
             case 'file':
-                return `📁 [Tập tin] ${pin.content || ""}`;
+                return `[Tập tin] ${pin.content || ""}`;
             case 'location':
-                return "📍 [Vị trí chia sẻ]";
+                return "[Vị trí chia sẻ]";
+            case 'group_call':
+                return "[Cuộc gọi nhóm]";
             default:
                 return "Tin nhắn ghim";
         }
@@ -193,42 +199,63 @@ const ChatHeader = ({ onCloseChatInfo, chat }) => {
                 </div>
 
                 <div className={cx('action-buttons')}>
-                    <button
-                        className={cx('btn')}
-                        disabled={!isAllowedToCall}
-                        title={!isAllowedToCall ? "You are not friends" : "Voice Call"}
-                        onClick={() => {
-                            if (isGroup) {
-                                toast.info("Tính năng gọi nhóm đang được phát triển");
-                                return;
+                    {isGroup ? (
+                        <button
+                            className={cx('btn', { 'active-call': hasActiveGroupCall })}
+                            title={
+                                hasActiveGroupCall
+                                    ? isCurrentInThisCall
+                                        ? 'Đang trong cuộc gọi nhóm · Nhấn để mở phòng'
+                                        : 'Tham gia cuộc gọi nhóm đang diễn ra'
+                                    : 'Bắt đầu cuộc gọi nhóm'
                             }
-                            if (!partnerId) {
-                                toast.error("Không tìm thấy thông tin người nhận");
-                                return;
-                            }
-                            initiateCall(partnerId, false, partner);
-                        }}
-                    >
-                        <Phone size={20} />
-                    </button>
-                    <button
-                        className={cx('btn')}
-                        disabled={!isAllowedToCall}
-                        title={!isAllowedToCall ? "You are not friends" : "Video Call"}
-                        onClick={() => {
-                            if (isGroup) {
-                                toast.info("Tính năng gọi nhóm đang được phát triển");
-                                return;
-                            }
-                            if (!partnerId) {
-                                toast.error("Không tìm thấy thông tin người nhận");
-                                return;
-                            }
-                            initiateCall(partnerId, true, partner);
-                        }}
-                    >
-                        <Video size={20} />
-                    </button>
+                            onClick={() => {
+                                if (isCurrentInThisCall) {
+                                    setModalOpen(true);
+                                } else {
+                                    joinGroupCall(chat._id, {
+                                        _id: chat._id,
+                                        name: displayName,
+                                        avatarURL: chat.avatarURL || groupInfo?.avatarURL,
+                                        participantsCount: participants.length,
+                                    });
+                                }
+                            }}
+                        >
+                            <Phone size={20} />
+                        </button>
+                    ) : (
+                        <>
+                            <button
+                                className={cx('btn')}
+                                disabled={!isAllowedToCall}
+                                title={!isAllowedToCall ? 'You are not friends' : 'Voice Call'}
+                                onClick={() => {
+                                    if (!partnerId) {
+                                        toast.error('Không tìm thấy thông tin người nhận');
+                                        return;
+                                    }
+                                    initiateCall(partnerId, false, partner);
+                                }}
+                            >
+                                <Phone size={20} />
+                            </button>
+                            <button
+                                className={cx('btn')}
+                                disabled={!isAllowedToCall}
+                                title={!isAllowedToCall ? 'You are not friends' : 'Video Call'}
+                                onClick={() => {
+                                    if (!partnerId) {
+                                        toast.error('Không tìm thấy thông tin người nhận');
+                                        return;
+                                    }
+                                    initiateCall(partnerId, true, partner);
+                                }}
+                            >
+                                <Video size={20} />
+                            </button>
+                        </>
+                    )}
 
                     <div className={cx('more-menu-container')}>
                         <button

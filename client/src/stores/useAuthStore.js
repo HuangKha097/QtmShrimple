@@ -4,6 +4,7 @@ import {toast} from "sonner";
 import {authService} from "../services/authService.js";
 import {useChatStore} from "./useChatStore.js";
 import {useCallStore} from "./useCallStore.js";
+import {useGroupCallStore} from "./useGroupCallStore.js";
 import {useNotificationStore} from "./useNotificationStore.js";
 import {useUIStore} from "./useUIStore.js";
 import { io } from "socket.io-client";
@@ -289,10 +290,6 @@ export const useAuthStore = create(
                 useChatStore.getState().reset()
             },
             setAccessToken: (accessToken) => set({accessToken}),
-            updateUser: (newData) => {
-                set((state) => ({ user: { ...state.user, ...newData } }));
-            },
-
             connectSocket: () => {
                 const { user, socket } = get();
                 if (!user || socket?.connected) return;
@@ -318,8 +315,12 @@ export const useAuthStore = create(
                 
                 // Subscribe to chat and notification events
                 useChatStore.getState().subscribeToMessages();
+                useChatStore.getState().fetchConversations();
+                useChatStore.getState().fetchFriendRequests();
+                useChatStore.getState().fetchFriends();
                 // Subscribe to call signaling events
                 useCallStore.getState().subscribeToCallEvents();
+                useGroupCallStore.getState().subscribeToGroupCallEvents();
                 // Subscribe to like/comment/reply notification events
                 useNotificationStore.getState().subscribeToNotificationEvents();
                 useNotificationStore.getState().fetchNotifications();
@@ -395,7 +396,9 @@ export const useAuthStore = create(
         {
             name: "auth-storage",
             partialize: (state) => ({
-                user: state.user,
+                user: state.user
+                    ? { ...state.user, antiPeepData: undefined }
+                    : null,
                 accessToken: state.accessToken,
             }),
         }

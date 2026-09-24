@@ -9,11 +9,12 @@ import ChatInput from "./ChatInput.jsx";
 import ChatInfo from "./ChatInfo.jsx";
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useSearchParams, useOutletContext } from 'react-router-dom';
+import api from '../../lib/axios.js';
 
 const cx = classNames.bind(styles);
 
 const ChatContainer = ({ onCloseChatInfo, isShowChatInfo }) => {
-    const { activeConversationId, setActiveConversationId, conversations, friends } = useChatStore();
+    const { activeConversationId, setActiveConversationId, conversations, fetchConversations } = useChatStore();
     const [searchParams] = useSearchParams();
 
     // Đồng bộ URL -> Store
@@ -26,26 +27,17 @@ const ChatContainer = ({ onCloseChatInfo, isShowChatInfo }) => {
         } else if (activeConversationId) {
             setActiveConversationId(null);
         }
-    }, [searchParams]);
+    }, [searchParams, activeConversationId, setActiveConversationId]);
 
-    // Logic tìm conversation (null-safe)
-    let selectedConvo = (conversations || []).find(conversation => conversation && conversation._id === activeConversationId);
-
-    // Nếu là ID tạm, tạo object conversation giả
-    if (!selectedConvo && activeConversationId?.startsWith('temp_')) {
-        const friendId = activeConversationId.replace('temp_', '');
-        const friend = (friends || []).find(f => f && f._id === friendId);
-
-        if (friend) {
-            selectedConvo = {
-                _id: activeConversationId,
-                isGroup: false,
-                participants: [friend],
-                updatedAt: new Date().toISOString(),
-                unreadCounts: 0
-            };
+    // Nếu có activeConversationId nhưng chưa có trong conversations (vd: reload trang), fetch conversations
+    React.useEffect(() => {
+        if (activeConversationId && (!conversations || conversations.length === 0)) {
+            if (fetchConversations) fetchConversations();
         }
-    }
+    }, [activeConversationId, conversations, fetchConversations]);
+
+    // Logic tìm conversation
+    const selectedConvo = (conversations || []).find(conversation => conversation && conversation._id === activeConversationId);
 
     // X-Style Empty State: "Select a message"
     if (!selectedConvo) {

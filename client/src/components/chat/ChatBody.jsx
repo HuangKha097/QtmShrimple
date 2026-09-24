@@ -6,6 +6,7 @@ import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import defaultAvatar from "../../../public/favicon.png";
 import LoadingSpin from "../common/loading/LoadingSpin.jsx";
+import GroupCallBanner from "./GroupCallBanner.jsx";
 import { useNavigate } from 'react-router-dom';
 import { Calendar, GraduationCap } from 'lucide-react';
 import { ASSET_BASE_URL } from '../../config/env.js';
@@ -42,11 +43,6 @@ const ChatBody = () => {
     }, [activeConversationId]);
 
     React.useLayoutEffect(() => {
-        if (activeConversationId?.startsWith('temp_')) {
-            setTimeout(() => setIsReady(true), 250);
-            return;
-        }
-
         if (messageLoading && messageList.length === 0) {
             setIsReady(false);
             return;
@@ -125,9 +121,6 @@ const ChatBody = () => {
 
     if (!isGroup && currentConvo?.participants) {
         partner = currentConvo.participants.find(p => p && p._id && currentUser && p._id !== currentUser._id) || currentConvo.participants[0];
-    } else if (activeConversationId?.startsWith('temp_')) {
-        const friendId = activeConversationId.replace('temp_', '');
-        partner = (friends || []).find(f => f && f._id === friendId);
     }
 
     if (partner && partner._id && Array.isArray(friends) && friends.length > 0) {
@@ -196,6 +189,19 @@ const ChatBody = () => {
                 </div>
             ) : (
                 <div className={cx('messages-inner-container')}>
+                    {/* Active Group Call Live Banner */}
+                    {isGroup && activeConversationId && (
+                        <GroupCallBanner
+                            conversationId={activeConversationId}
+                            groupInfo={{
+                                _id: currentConvo?._id,
+                                name: currentConvo?.name || currentConvo?.group?.name || 'Nhóm',
+                                avatarURL: currentConvo?.avatarURL || currentConvo?.group?.avatarURL,
+                                participantsCount: currentConvo?.participants?.length || 0,
+                            }}
+                        />
+                    )}
+
                     {/* Older messages loading */}
                     {messageLoading && messageList.length > 0 && (
                         <div style={{ textAlign: 'center', padding: '1.2rem', display: 'flex', justifyContent: 'center' }}>

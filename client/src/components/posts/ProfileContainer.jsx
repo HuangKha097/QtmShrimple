@@ -153,25 +153,19 @@ const ProfileContainer = () => {
 
 
     // Handle Direct Message
-    const handleMessageUser = () => {
+    const handleMessageUser = async () => {
         const u = profileUser;
         if (!u || !u._id) return;
 
-        const convos = useChatStore.getState().conversations || [];
-        const existingConvo = convos.find(c => 
-            !c.isGroup && Array.isArray(c.participants) && c.participants.some(p => {
-                const pId = p?._id || (typeof p?.userId === 'object' ? p?.userId?._id : p?.userId);
-                return pId && pId.toString() === u._id.toString();
-            })
-        );
-
-        if (existingConvo) {
-            useChatStore.getState().setActiveConversationId(existingConvo._id);
-            navigate(`/chat?id=${existingConvo._id}`);
-        } else {
-            const tempId = `temp_${u._id}`;
-            useChatStore.getState().setActiveConversationId(tempId);
-            navigate(`/chat?id=${tempId}`);
+        try {
+            const convo = await useChatStore.getState().getOrCreateConversation(u._id);
+            if (convo?._id) {
+                useChatStore.getState().setActiveConversationId(convo._id);
+                navigate(`/chat?id=${convo._id}`);
+            }
+        } catch (error) {
+            console.error("Failed to open chat:", error);
+            toast.error("Không thể mở cuộc trò chuyện");
         }
     };
 

@@ -5,49 +5,66 @@ const pair = (a, b) => (a < b ? [a, b] : [b, a])
 
 export const checkFriendship = async (req, res, next) => {
     try {
-
         const me = req.user._id.toString();
         const recipientId = req.body?.recipientId ?? null;
-        // if friend can create group
         const memberIds = req.body?.memberIds ?? [];
+        const isGroup = req.body?.isGroup ?? false;
 
-        if (!recipientId && memberIds.length === 0) {
-            return res.status(400).json({message: "No recipient ID or memberIds"});
-        }
+        if (isGroup) {
+            const cleanMemberIds = memberIds
+                .map(id => (id?._id || id)?.toString())
+                .filter(id => id && id !== me);
 
-        if (recipientId) {
-            const [userA, userB] = pair(me, recipientId);
+            if (cleanMemberIds.length < 2) {
+                return res.status(400).json({ message: "Nhóm cần tối thiểu 2 thành viên khác bạn" });
+            }
 
-            const isFriend = await Friend.findOne({userA, userB});
-            if (!isFriend) {
-                return res.status(403).json({message: "You are not friend"});
+            const friendCheck = cleanMemberIds.map(async (memberId) => {
+                const friend = await Friend.findOne({
+                    $or: [
+                        { userA: me, userB: memberId },
+                        { userA: memberId, userB: me }
+                    ]
+                });
+                return friend ? null : memberId;
+            });
+
+            const results = await Promise.all(friendCheck);
+            const notFriends = results.filter(Boolean);
+
+            if (notFriends.length > 0) {
+                return res.status(403).json({ message: "Chỉ bạn bè mới có thể tham gia cuộc trò chuyện", notFriends });
             }
             return next();
         }
-        // todo chat group
-        const cleanMemberIds = memberIds
-            .map(id => id?.toString())
-            .filter(id => id && id !== me);
 
-        const friendCheck = cleanMemberIds.map(async (memberId) => {
-            const [userA, userB] = pair(me, memberId);
-            const friend = await Friend.findOne({userA, userB});
-            return friend ? null : memberId;
+        // Direct 1-on-1 chat
+        const targetUserId = recipientId || (memberIds.length > 0 ? (memberIds[0]?._id || memberIds[0])?.toString() : null);
+        if (!targetUserId) {
+            return res.status(400).json({ message: "Thiếu thông tin người nhận" });
+        }
+
+        if (targetUserId === me) {
+            return res.status(400).json({ message: "Không thể tạo cuộc trò chuyện với chính mình" });
+        }
+
+        const isFriend = await Friend.findOne({
+            $or: [
+                { userA: me, userB: targetUserId },
+                { userA: targetUserId, userB: me }
+            ]
         });
 
-        const results = await Promise.all(friendCheck);
-        const notFriends = results.filter(Boolean);
-
-        if (notFriends.length > 0) {
-            return res.status(403).json({message: "Only friends can join the conversation", notFriends});
+        if (!isFriend) {
+            return res.status(403).json({ message: "Bạn chưa kết bạn với người này" });
         }
-        next()
 
+        return next();
     } catch (err) {
         console.error("Failed during checkFriendship", err);
-        return res.status(403).json({message: "System error"});
+        return res.status(500).json({ message: "System error" });
     }
-}
+};
 
 export const checkGroupMembership = async (req, res, next) => {
     try {

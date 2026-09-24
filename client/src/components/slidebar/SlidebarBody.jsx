@@ -14,17 +14,19 @@ const cx = classNames.bind(styles);
 
 const SlidebarBody = () => {
     const { t } = useTranslation();
-    const { conversations = [], friendRequests = [], friends = [], fetchFriends } = useChatStore();
+    const { conversations = [], friendRequests = [], fetchConversations, fetchFriends, fetchFriendRequests } = useChatStore();
     const { user } = useAuthStore();
     const [activeTab, setActiveTab] = useState('friends');
     const [searchText, setSearchText] = useState('');
 
     useEffect(() => {
+        if (fetchConversations) fetchConversations();
         if (fetchFriends) fetchFriends();
-    }, [fetchFriends]);
+        if (fetchFriendRequests) fetchFriendRequests();
+    }, [fetchConversations, fetchFriends, fetchFriendRequests]);
 
     // LOGIC LỌC TRÙNG LẶP & NULL-SAFE
-    const combinedList = useMemo(() => {
+    const directConversations = useMemo(() => {
         if (!user) return [];
 
         const processedPartnerIds = new Set();
@@ -55,30 +57,18 @@ const SlidebarBody = () => {
             }
         });
 
-        // 3. Gộp thêm những người bạn CHƯA từng chat (Fix triệt để Cannot read properties of null '_id')
-        const safeFriends = Array.isArray(friends) ? friends : [];
-        const friendsNoChat = safeFriends
-            .filter(friend => friend && friend._id && !processedPartnerIds.has(friend._id))
-            .map(friend => ({
-                _id: `virtual_${friend._id}`,
-                isVirtual: true,
-                participants: [user, friend],
-                lastMessage: null,
-                updatedAt: new Date(0)
-            }));
-
-        return [...uniqueConversations, ...friendsNoChat];
-    }, [conversations, friends, user]);
+        return uniqueConversations;
+    }, [conversations, user]);
 
     // Lọc theo search input
     const filteredFriends = useMemo(() => {
-        if (!searchText.trim()) return combinedList;
-        return combinedList.filter(c => {
+        if (!searchText.trim()) return directConversations;
+        return directConversations.filter(c => {
             const partner = c.participants?.find(p => p && p._id && user && p._id !== user._id);
             const name = partner?.displayName || partner?.username || '';
             return name.toLowerCase().includes(searchText.toLowerCase());
         });
-    }, [combinedList, searchText, user]);
+    }, [directConversations, searchText, user]);
 
     // Nhóm chat
     const groupConversations = useMemo(() => {
@@ -88,16 +78,30 @@ const SlidebarBody = () => {
     const filteredGroups = useMemo(() => {
         if (!searchText.trim()) return groupConversations;
         return groupConversations.filter(c => 
-            (c.groupName || '').toLowerCase().includes(searchText.toLowerCase())
+            (c.groupName || c.name || c.group?.name || '').toLowerCase().includes(searchText.toLowerCase())
         );
     }, [groupConversations, searchText]);
 
-    const countGroups = groupConversations.length;
+    // Helper calculate unread count for current user
+    const getConvoUnread = (convo) => {
+        if (!convo || !convo.unreadCounts || !user?._id) return 0;
+        if (convo.unreadCounts instanceof Map) {
+            return convo.unreadCounts.get(user._id) || 0;
+        } else if (typeof convo.unreadCounts === 'object') {
+            return convo.unreadCounts[user._id] || 0;
+        } else if (typeof convo.unreadCounts === 'number') {
+            return convo.unreadCounts;
+        }
+        return 0;
+    };
+
+    const unreadDirectCount = directConversations.reduce((sum, c) => sum + getConvoUnread(c), 0);
+    const unreadGroupCount = groupConversations.reduce((sum, c) => sum + getConvoUnread(c), 0);
     const countFriendRequest = (friendRequests || []).length;
 
     const tabs = [
-        { key: 'friends', label: t('chat.directMessages'), count: 0 },
-        { key: 'groups', label: t('chat.groups'), count: countGroups },
+        { key: 'friends', label: t('chat.directMessages'), count: unreadDirectCount },
+        { key: 'groups', label: t('chat.groups'), count: unreadGroupCount },
         { key: 'requests', label: t('chat.requests'), count: countFriendRequest }
     ];
 
@@ -110,7 +114,7 @@ const SlidebarBody = () => {
             case 'requests':
                 return <BodyRequests friendRequests={friendRequests || []} />;
             default:
-                return <BodyFriendsChat convo={combinedList} />;
+                return <BodyFriendsChat convo={directConversations} />;
         }
     };
 

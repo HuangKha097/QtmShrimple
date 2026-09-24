@@ -12,21 +12,16 @@ import api from '../../lib/axios.js';
 
 const cx = classNames.bind(styles);
 
-const resolveRecipientId = (activeConvoId, currentConvo, currentUser) => {
-    if (!activeConvoId) return null;
-    const strId = activeConvoId.toString();
-    if (strId.startsWith('temp_')) {
-        return strId.split('temp_')[1];
-    }
+const resolveRecipientId = (currentConvo, currentUser) => {
     if (currentConvo?.participants && currentUser) {
         const currentUserIdStr = (currentUser._id || currentUser.id)?.toString();
         const partner = currentConvo.participants.find(p => {
             if (!p) return false;
-            const pId = (p.userId?._id || p.userId || p._id)?.toString();
+            const pId = (p._id || p.userId?._id || p.userId)?.toString();
             return pId && pId !== currentUserIdStr;
         });
         if (partner) {
-            return (partner.userId?._id || partner.userId || partner._id)?.toString();
+            return (partner._id || partner.userId?._id || partner.userId)?.toString();
         }
     }
     return null;
@@ -63,14 +58,11 @@ const ChatInput = () => {
     const chatStatus = useMemo(() => {
         const safeConvos = Array.isArray(conversations) ? conversations : [];
         const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
-        if (!activeConversationId) return { allowed: false, reason: "Chưa chọn cuộc trò chuyện" };
+        if (!activeConversationId || !currentConvo) return { allowed: false, reason: "Chưa chọn cuộc trò chuyện" };
 
-        const isTemp = activeConversationId.toString().startsWith('temp_');
-        const isGroup = currentConvo?.isGroup && !isTemp;
+        if (currentConvo.isGroup) return { allowed: true, reason: "" };
 
-        if (isGroup) return { allowed: true, reason: "" };
-
-        const partnerId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
+        const partnerId = resolveRecipientId(currentConvo, currentUser);
 
         if (!partnerId) return { allowed: false, reason: "Không tìm thấy người dùng" };
 
@@ -128,16 +120,15 @@ const ChatInput = () => {
 
             const safeConvos = Array.isArray(conversations) ? conversations : [];
             const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
-            const isGroup = currentConvo?.isGroup && !activeConversationId.toString().startsWith('temp_');
+            const isGroup = currentConvo?.isGroup;
 
             if (isGroup) {
                 await sendGroupMessage(activeConversationId, originalName, null, cloudUrl, 'file');
             } else {
-                const recipientId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
+                const recipientId = resolveRecipientId(currentConvo, currentUser);
 
                 if (recipientId) {
-                    const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;
-                    await sendDirectMessage(recipientId, originalName, convoIdToSend, null, cloudUrl, 'file');
+                    await sendDirectMessage(recipientId, originalName, activeConversationId, null, cloudUrl, 'file');
                 }
             }
             toast.success("Đã gửi tệp thành công!", { id: toastId });
@@ -172,16 +163,15 @@ const ChatInput = () => {
                 try {
                     const safeConvos = Array.isArray(conversations) ? conversations : [];
                     const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
-                    const isGroup = currentConvo?.isGroup && !activeConversationId.toString().startsWith('temp_');
+                    const isGroup = currentConvo?.isGroup;
 
                     if (isGroup) {
                         await sendGroupMessage(activeConversationId, coords, null, null, 'location');
                     } else {
-                        const recipientId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
+                        const recipientId = resolveRecipientId(currentConvo, currentUser);
 
                         if (recipientId) {
-                            const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;
-                            await sendDirectMessage(recipientId, coords, convoIdToSend, null, null, 'location');
+                            await sendDirectMessage(recipientId, coords, activeConversationId, null, null, 'location');
                         }
                     }
                     toast.success("Đã chia sẻ vị trí thành công!", { id: toastId });
@@ -255,16 +245,15 @@ const ChatInput = () => {
 
                     const safeConvos = Array.isArray(conversations) ? conversations : [];
                     const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
-                    const isGroup = currentConvo?.isGroup && !activeConversationId.toString().startsWith('temp_');
+                    const isGroup = currentConvo?.isGroup;
 
                     if (isGroup) {
                         await sendGroupMessage(activeConversationId, "Tin nhắn thoại", null, cloudUrl, 'audio');
                     } else {
-                        const recipientId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
+                        const recipientId = resolveRecipientId(currentConvo, currentUser);
 
                         if (recipientId) {
-                            const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;
-                            await sendDirectMessage(recipientId, "Tin nhắn thoại", convoIdToSend, null, cloudUrl, 'audio');
+                            await sendDirectMessage(recipientId, "Tin nhắn thoại", activeConversationId, null, cloudUrl, 'audio');
                         }
                     }
                     toast.success("Đã gửi tin nhắn thoại!", { id: toastId });
@@ -334,18 +323,17 @@ const ChatInput = () => {
         setIsSending(true);
         const safeConvos = Array.isArray(conversations) ? conversations : [];
         const currentConvo = safeConvos.find(c => c && c._id === activeConversationId);
-        const isGroup = currentConvo?.isGroup && !activeConversationId.toString().startsWith('temp_');
+        const isGroup = currentConvo?.isGroup;
         const imageToSend = previewUrl;
 
         try {
             if (isGroup) {
                 await sendGroupMessage(activeConversationId, text, imageToSend, null, 'text');
             } else {
-                const recipientId = resolveRecipientId(activeConversationId, currentConvo, currentUser);
+                const recipientId = resolveRecipientId(currentConvo, currentUser);
 
                 if (recipientId) {
-                    const convoIdToSend = activeConversationId.toString().startsWith('temp_') ? null : activeConversationId;
-                    await sendDirectMessage(recipientId, text, convoIdToSend, imageToSend, null, 'text');
+                    await sendDirectMessage(recipientId, text, activeConversationId, imageToSend, null, 'text');
                 }
             }
             setText("");
