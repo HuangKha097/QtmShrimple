@@ -2,11 +2,12 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import classNames from 'classnames/bind';
 import { motion as Motion } from 'motion/react';
 import styles from '../../assets/css/ChatInput.module.scss';
-import { Image as ImageIcon, Smile, Mic, Plus, Send, X, File, MapPin } from 'lucide-react';
+import { Image as ImageIcon, Smile, Mic, Plus, Send, X, File, MapPin, BarChart2 } from 'lucide-react';
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import EmojiPicker from 'emoji-picker-react';
 import { useThemeStore } from '../../stores/useThemeStore';
+import CreatePollModal from './CreatePollModal.jsx';
 import { toast } from 'sonner';
 import api from '../../lib/axios.js';
 
@@ -32,6 +33,7 @@ const ChatInput = () => {
     const [text, setText] = useState("");
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [showActionsMenu, setShowActionsMenu] = useState(false);
+    const [showPollModal, setShowPollModal] = useState(false);
     const [image, setImage] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
 
@@ -481,6 +483,16 @@ const ChatInput = () => {
                                     >
                                         <MapPin size={18} />
                                     </button>
+                                    {Boolean((conversations || []).find(c => c && c._id === activeConversationId)?.isGroup) && (
+                                        <button
+                                            type="button"
+                                            className={cx('action-menu-btn')}
+                                            onClick={() => { setShowPollModal(true); setShowActionsMenu(false); }}
+                                            title="Tạo cuộc bình chọn"
+                                        >
+                                            <BarChart2 size={18} />
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -511,6 +523,13 @@ const ChatInput = () => {
                     </>
                 )}
             </div>
+
+            {showPollModal && (
+                <CreatePollModal 
+                    conversationId={activeConversationId} 
+                    onClose={() => setShowPollModal(false)} 
+                />
+            )}
         </div>
     );
 };

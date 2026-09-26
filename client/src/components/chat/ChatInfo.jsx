@@ -9,6 +9,8 @@ import { useChatStore } from "../../stores/useChatStore.js";
 import { chatService } from "../../services/chatService.js";
 import { userSettingsService } from "../../services/userSettingsService.js";
 import { ASSET_BASE_URL } from "../../config/env.js";
+import AddMemberModal from "./AddMemberModal.jsx";
+import TreeQRCodeModal from "../common/TreeQRCodeModal.jsx";
 import { 
     X, 
     Image as ImageIcon, 
@@ -22,7 +24,18 @@ import {
     Download, 
     Crown,
     Check,
-    Loader2
+    Loader2,
+    Shield,
+    ShieldAlert,
+    ShieldCheck,
+    UserMinus,
+    MoreVertical,
+    UserPlus,
+    LogOut,
+    Trash2,
+    Pin,
+    PinOff,
+    QrCode
 } from "lucide-react";
 import { toast } from 'sonner';
 
@@ -31,18 +44,32 @@ const cx = classNames.bind(styles);
 const ChatInfo = ({ chat, onClose }) => {
     const navigate = useNavigate();
     const { user: currentUser, onlineUsers } = useAuthStore();
-    const { friends } = useChatStore();
+    const { 
+        friends, 
+        pinnedMessages, 
+        fetchPinnedMessages, 
+        togglePinMessageAction,
+        removeMemberAction,
+        updateMemberRoleAction,
+        leaveGroupAction,
+        disbandGroupAction 
+    } = useChatStore();
 
-    const [activeTab, setActiveTab] = useState('media'); // 'media' | 'files' | 'members'
+    const [activeTab, setActiveTab] = useState('media'); // 'media' | 'files' | 'members' | 'pins'
     const [media, setMedia] = useState({ images: [], files: [] });
     const [loadingMedia, setLoadingMedia] = useState(false);
     const [isBlocked, setIsBlocked] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [selectedImage, setSelectedImage] = useState(null);
+    const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+    const [showQRModal, setShowQRModal] = useState(false);
+    const [groupInviteCode, setGroupInviteCode] = useState('');
+    const [activeMemberMenu, setActiveMemberMenu] = useState(null);
 
     const isGroup = !!chat?.isGroup;
     const participants = chat?.participants || [];
 
+    // Fetch media and pinned messages
     useEffect(() => {
         if (chat?._id) {
             setLoadingMedia(true);
@@ -50,8 +77,27 @@ const ChatInfo = ({ chat, onClose }) => {
                 .then(data => setMedia(data || { images: [], files: [] }))
                 .catch(err => console.error("Failed to fetch media", err))
                 .finally(() => setLoadingMedia(false));
+
+            fetchPinnedMessages(chat._id);
+
+            if (isGroup) {
+                chatService.getGroupInvite(chat._id)
+                    .then(data => {
+                        if (data?.inviteCode) {
+                            setGroupInviteCode(data.inviteCode);
+                        }
+                    })
+                    .catch(err => console.error("Failed to fetch group invite", err));
+            }
         }
-    }, [chat?._id]);
+    }, [chat?._id, isGroup]);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setActiveMemberMenu(null);
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, []);
 
     const sortedParticipants = useMemo(() => {
         return [...(chat?.participants || [])].sort((a, b) => {
@@ -86,7 +132,35 @@ const ChatInfo = ({ chat, onClose }) => {
         ? `${participants.length} thành viên` 
         : (isOnline ? "Đang hoạt động" : "Ngoại tuyến");
 
-    const groupCreatorId = chat?.group?.createdBy?.toString();
+    const groupCreatorId = chat?.group?.createdBy?._id?.toString() || chat?.group?.createdBy?.toString();
+    const currentMember = participants.find(p => (p?._id?.toString() || p?.toString()) === currentUser?._id?.toString());
+    const isCurrentUserCreator = groupCreatorId === currentUser?._id?.toString();
+    const isCurrentUserAdmin = isGroup && (isCurrentUserCreator || currentMember?.role === 'admin');
+
+    const pins = pinnedMessages[chat._id] || [];
+
+    const getPinPreviewText = (pin) => {
+        if (!pin) return "";
+        if (pin.isRecalled) return "Tin nhắn đã bị thu hồi";
+        switch (pin.messageType) {
+            case 'text':
+                return pin.content;
+            case 'image':
+                return "[Hình ảnh]";
+            case 'audio':
+                return "[Tin nhắn thoại]";
+            case 'file':
+                return `[Tập tin] ${pin.content || ""}`;
+            case 'location':
+                return "[Vị trí chia sẻ]";
+            case 'poll':
+                return `[Bình chọn] ${pin.poll?.question || ""}`;
+            case 'group_call':
+                return "[Cuộc gọi nhóm]";
+            default:
+                return pin.content || "Tin nhắn đã ghim";
+        }
+    };
 
     const getAvatarSrc = (url) => {
         if (!url) return defaultAvatar;
@@ -124,7 +198,80 @@ const ChatInfo = ({ chat, onClose }) => {
 
     const handleViewProfile = (uid) => {
         if (uid) {
-            navigate(`/profile/${uid}`);
+            navigate(`/feed/profile/${uid}`);
+        }
+    };
+
+    const handleScrollToMessage = (messageId) => {
+        const element = document.getElementById(`msg-${messageId}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('glow-highlight');
+            setTimeout(() => element.classList.remove('glow-highlight'), 2000);
+        } else {
+            toast.info("Tin nhắn chưa tải trong đoạn chat hiện tại");
+        }
+    };
+
+    const handleUnpin = async (messageId) => {
+        try {
+            await togglePinMessageAction(messageId);
+            toast.success("Đã bỏ ghim tin nhắn!");
+        } catch (err) {
+            console.error("Unpin failed:", err);
+            toast.error("Không thể bỏ ghim");
+        }
+    };
+
+    const handleUpdateRole = async (targetUserId, newRole) => {
+        setActiveMemberMenu(null);
+        try {
+            await updateMemberRoleAction(chat._id, targetUserId, newRole);
+            toast.success(newRole === 'admin' ? "Đã bổ nhiệm Quản trị viên!" : "Đã gỡ quyền Quản trị viên!");
+        } catch (err) {
+            console.error("Update role failed:", err);
+            toast.error(err.response?.data?.message || "Không thể cập nhật quyền");
+        }
+    };
+
+    const handleRemoveMember = async (targetUserId, memberName) => {
+        setActiveMemberMenu(null);
+        if (window.confirm(`Bạn có chắc chắn muốn xóa ${memberName || "thành viên này"} khỏi nhóm?`)) {
+            try {
+                await removeMemberAction(chat._id, targetUserId);
+                toast.success("Đã xóa thành viên khỏi nhóm!");
+            } catch (err) {
+                console.error("Remove member failed:", err);
+                toast.error(err.response?.data?.message || "Không thể xóa thành viên");
+            }
+        }
+    };
+
+    const handleLeaveGroup = async () => {
+        if (window.confirm("Bạn có chắc chắn muốn rời khỏi nhóm này không?")) {
+            try {
+                await leaveGroupAction(chat._id);
+                toast.success("Đã rời nhóm thành công");
+                if (onClose) onClose();
+                navigate('/chat', { replace: true });
+            } catch (err) {
+                console.error("Leave group failed:", err);
+                toast.error(err.response?.data?.message || "Không thể rời nhóm");
+            }
+        }
+    };
+
+    const handleDisbandGroup = async () => {
+        if (window.confirm("CẢNH BÁO: Bạn có chắc chắn muốn giải tán nhóm này không? Toàn bộ tin nhắn và nhóm sẽ bị giải tán vĩnh viễn!")) {
+            try {
+                await disbandGroupAction(chat._id);
+                toast.success("Đã giải tán nhóm thành công!");
+                if (onClose) onClose();
+                navigate('/chat', { replace: true });
+            } catch (err) {
+                console.error("Disband group failed:", err);
+                toast.error(err.response?.data?.message || "Không thể giải tán nhóm");
+            }
         }
     };
 
@@ -225,6 +372,17 @@ const ChatInfo = ({ chat, onClose }) => {
                             <span>{isMuted ? "Đã tắt" : "Tắt báo"}</span>
                         </Motion.button>
 
+                        {/* Tree QR Code Action Pill */}
+                        <Motion.button 
+                            className={cx('action-pill')}
+                            whileTap={{ scale: 0.94 }}
+                            onClick={() => setShowQRModal(true)}
+                            title={isGroup ? "Mã QR nhóm" : "Mã QR kết bạn"}
+                        >
+                            <QrCode size={18} />
+                            <span>Mã QR</span>
+                        </Motion.button>
+
                         {isGroup ? (
                             <Motion.button 
                                 className={cx('action-pill')}
@@ -255,9 +413,11 @@ const ChatInfo = ({ chat, onClose }) => {
                 <button 
                     className={cx('tab-btn', { active: activeTab === 'media' })}
                     onClick={() => setActiveTab('media')}
+                    title="Ảnh đã chia sẻ"
                 >
-                    <ImageIcon size={16} />
-                    <span>Ảnh ({media.images.length})</span>
+                    <ImageIcon size={15} />
+                    <span className={cx('tab-label')}>Ảnh</span>
+                    {media.images.length > 0 && <span className={cx('tab-count')}>{media.images.length}</span>}
                     {activeTab === 'media' && (
                         <Motion.div 
                             className={cx('tab-indicator')} 
@@ -270,10 +430,29 @@ const ChatInfo = ({ chat, onClose }) => {
                 <button 
                     className={cx('tab-btn', { active: activeTab === 'files' })}
                     onClick={() => setActiveTab('files')}
+                    title="Tệp đã chia sẻ"
                 >
-                    <FileText size={16} />
-                    <span>Tệp ({media.files.length})</span>
+                    <FileText size={15} />
+                    <span className={cx('tab-label')}>Tệp</span>
+                    {media.files.length > 0 && <span className={cx('tab-count')}>{media.files.length}</span>}
                     {activeTab === 'files' && (
+                        <Motion.div 
+                            className={cx('tab-indicator')} 
+                            layoutId="activeChatInfoTab" 
+                            transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                        />
+                    )}
+                </button>
+
+                <button 
+                    className={cx('tab-btn', { active: activeTab === 'pins' })}
+                    onClick={() => setActiveTab('pins')}
+                    title="Tin nhắn đã ghim"
+                >
+                    <Pin size={15} />
+                    <span className={cx('tab-label')}>Ghim</span>
+                    {pins.length > 0 && <span className={cx('tab-count')}>{pins.length}</span>}
+                    {activeTab === 'pins' && (
                         <Motion.div 
                             className={cx('tab-indicator')} 
                             layoutId="activeChatInfoTab" 
@@ -286,9 +465,11 @@ const ChatInfo = ({ chat, onClose }) => {
                     <button 
                         className={cx('tab-btn', { active: activeTab === 'members' })}
                         onClick={() => setActiveTab('members')}
+                        title="Thành viên nhóm"
                     >
-                        <Users size={16} />
-                        <span>Thành viên ({participants.length})</span>
+                        <Users size={15} />
+                        <span className={cx('tab-label')}>T.viên</span>
+                        <span className={cx('tab-count')}>{participants.length}</span>
                         {activeTab === 'members' && (
                             <Motion.div 
                                 className={cx('tab-indicator')} 
@@ -384,6 +565,63 @@ const ChatInfo = ({ chat, onClose }) => {
                         </Motion.div>
                     )}
 
+                    {activeTab === 'pins' && (
+                        <Motion.div 
+                            key="tab-pins"
+                            className={cx('tab-pane')}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.18 }}
+                        >
+                            {pins.length > 0 ? (
+                                <div className={cx('pins-list')}>
+                                    {pins.map((pin) => (
+                                        <div key={pin._id} className={cx('pin-card')}>
+                                            <div className={cx('pin-card-top')}>
+                                                <div className={cx('pin-sender-box')}>
+                                                    <img 
+                                                        src={getAvatarSrc(pin.senderId?.avatarURL)} 
+                                                        alt="" 
+                                                        className={cx('pin-sender-avatar')}
+                                                        onError={(e) => { e.target.src = defaultAvatar; }}
+                                                    />
+                                                    <div className={cx('pin-sender-info')}>
+                                                        <span className={cx('pin-sender-name')}>
+                                                            {pin.senderId?.displayName || pin.senderId?.username || "Người gửi"}
+                                                        </span>
+                                                        <span className={cx('pin-date')}>
+                                                            {pin.createdAt ? new Date(pin.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    className={cx('pin-unpin-action-btn')}
+                                                    onClick={() => handleUnpin(pin._id)}
+                                                    title="Bỏ ghim tin nhắn"
+                                                >
+                                                    <PinOff size={15} />
+                                                </button>
+                                            </div>
+                                            <div 
+                                                className={cx('pin-card-body')} 
+                                                onClick={() => handleScrollToMessage(pin._id)}
+                                                title="Nhấn để cuộn đến tin nhắn"
+                                            >
+                                                <p className={cx('pin-text')}>{getPinPreviewText(pin)}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className={cx('empty-state')}>
+                                    <Pin size={36} className={cx('empty-icon')} />
+                                    <p className={cx('empty-text')}>Chưa có tin nhắn nào được ghim</p>
+                                </div>
+                            )}
+                        </Motion.div>
+                    )}
+
                     {activeTab === 'members' && isGroup && (
                         <Motion.div 
                             key="tab-members"
@@ -393,47 +631,135 @@ const ChatInfo = ({ chat, onClose }) => {
                             exit={{ opacity: 0, y: -8 }}
                             transition={{ duration: 0.18 }}
                         >
+                            {isCurrentUserAdmin && (
+                                <div className={cx('members-actions-bar')}>
+                                    <button 
+                                        type="button"
+                                        className={cx('add-member-header-btn')}
+                                        onClick={() => setShowAddMemberModal(true)}
+                                    >
+                                        <UserPlus size={16} />
+                                        <span>Thêm thành viên</span>
+                                    </button>
+                                </div>
+                            )}
+
                             <div className={cx('members-list')}>
                                 {sortedParticipants.map((member) => {
-                                    const isMe = member._id?.toString() === currentUser?._id?.toString();
-                                    const isCreator = groupCreatorId && member._id?.toString() === groupCreatorId;
-                                    const memberOnline = Array.isArray(onlineUsers) && onlineUsers.includes(member._id?.toString());
+                                    const memberIdStr = member._id?.toString();
+                                    const isMe = memberIdStr === currentUser?._id?.toString();
+                                    const isThisCreator = groupCreatorId && memberIdStr === groupCreatorId;
+                                    const isThisAdmin = isThisCreator || member.role === 'admin';
+                                    const memberOnline = Array.isArray(onlineUsers) && onlineUsers.includes(memberIdStr);
+                                    const canManageThisMember = isCurrentUserAdmin && !isMe && !isThisCreator;
 
                                     return (
                                         <div 
                                             key={member._id} 
                                             className={cx('member-row')}
-                                            onClick={() => !isMe && handleViewProfile(member._id)}
                                         >
-                                            <div className={cx('member-avatar-box')}>
-                                                <img 
-                                                    src={getAvatarSrc(member.avatarURL)} 
-                                                    className={cx('member-avatar')} 
-                                                    alt="" 
-                                                    onError={(e) => { e.target.src = defaultAvatar; }}
-                                                />
-                                                {memberOnline && <span className={cx('member-online-dot')} />}
-                                            </div>
-                                            
-                                            <div className={cx('member-info')}>
-                                                <div className={cx('name-line')}>
-                                                    <span className={cx('member-name')}>
-                                                        {isMe ? `${member.displayName || "Bạn"} (Bạn)` : (member.displayName || member.username || "Thành viên")}
-                                                    </span>
-                                                    {isCreator && (
-                                                        <span className={cx('creator-badge')} title="Trưởng nhóm">
-                                                            <Crown size={12} />
-                                                            <span>Trưởng nhóm</span>
+                                            <div 
+                                                className={cx('member-main-click')}
+                                                onClick={() => !isMe && handleViewProfile(member._id)}
+                                            >
+                                                <div className={cx('member-avatar-box')}>
+                                                    <img 
+                                                        src={getAvatarSrc(member.avatarURL)} 
+                                                        className={cx('member-avatar')} 
+                                                        alt="" 
+                                                        onError={(e) => { e.target.src = defaultAvatar; }}
+                                                    />
+                                                    {memberOnline && <span className={cx('member-online-dot')} />}
+                                                </div>
+                                                
+                                                <div className={cx('member-info')}>
+                                                    <div className={cx('name-line')}>
+                                                        <span className={cx('member-name')}>
+                                                            {isMe ? `${member.displayName || "Bạn"} (Bạn)` : (member.displayName || member.username || "Thành viên")}
                                                         </span>
+                                                        {isThisCreator ? (
+                                                            <span className={cx('creator-badge')} title="Trưởng nhóm">
+                                                                <Crown size={12} />
+                                                                <span>Trưởng nhóm</span>
+                                                            </span>
+                                                        ) : isThisAdmin ? (
+                                                            <span className={cx('admin-badge')} title="Quản trị viên">
+                                                                <Shield size={12} />
+                                                                <span>Quản trị viên</span>
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                    {member.username && (
+                                                        <span className={cx('member-username')}>@{member.username}</span>
                                                     )}
                                                 </div>
-                                                {member.username && (
-                                                    <span className={cx('member-username')}>@{member.username}</span>
-                                                )}
                                             </div>
+
+                                            {canManageThisMember && (
+                                                <div className={cx('member-row-menu-container')} onClick={(e) => e.stopPropagation()}>
+                                                    <button 
+                                                        className={cx('member-menu-trigger')}
+                                                        onClick={() => setActiveMemberMenu(activeMemberMenu === memberIdStr ? null : memberIdStr)}
+                                                        title="Tùy chọn thành viên"
+                                                    >
+                                                        <MoreVertical size={16} />
+                                                    </button>
+
+                                                    {activeMemberMenu === memberIdStr && (
+                                                        <div className={cx('member-menu-popover')}>
+                                                            {member.role === 'admin' ? (
+                                                                <button 
+                                                                    className={cx('menu-opt')}
+                                                                    onClick={() => handleUpdateRole(member._id, 'member')}
+                                                                >
+                                                                    <ShieldAlert size={15} />
+                                                                    <span>Gỡ quyền Quản trị viên</span>
+                                                                </button>
+                                                            ) : (
+                                                                <button 
+                                                                    className={cx('menu-opt')}
+                                                                    onClick={() => handleUpdateRole(member._id, 'admin')}
+                                                                >
+                                                                    <ShieldCheck size={15} />
+                                                                    <span>Bổ nhiệm Quản trị viên</span>
+                                                                </button>
+                                                            )}
+                                                            <button 
+                                                                className={cx('menu-opt', 'danger')}
+                                                                onClick={() => handleRemoveMember(member._id, member.displayName || member.username)}
+                                                            >
+                                                                <UserMinus size={15} />
+                                                                <span>Xóa khỏi nhóm</span>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}
+                            </div>
+
+                            {/* Group Danger Actions */}
+                            <div className={cx('group-danger-section')}>
+                                <button 
+                                    type="button" 
+                                    className={cx('group-action-btn', 'leave')}
+                                    onClick={handleLeaveGroup}
+                                >
+                                    <LogOut size={16} />
+                                    <span>Rời khỏi nhóm</span>
+                                </button>
+                                {isCurrentUserAdmin && (
+                                    <button 
+                                        type="button" 
+                                        className={cx('group-action-btn', 'disband')}
+                                        onClick={handleDisbandGroup}
+                                    >
+                                        <Trash2 size={16} />
+                                        <span>Giải tán nhóm</span>
+                                    </button>
+                                )}
                             </div>
                         </Motion.div>
                     )}
@@ -469,6 +795,31 @@ const ChatInfo = ({ chat, onClose }) => {
                     </Motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Add Member Modal */}
+            {showAddMemberModal && (
+                <AddMemberModal 
+                    conversationId={chat._id}
+                    existingParticipantIds={participants.map(p => p._id)}
+                    onClose={() => setShowAddMemberModal(false)}
+                />
+            )}
+
+            {/* Tree QR Code Modal */}
+            <TreeQRCodeModal 
+                isOpen={showQRModal}
+                onClose={() => setShowQRModal(false)}
+                type={isGroup ? 'group' : 'user'}
+                title={isGroup ? `Mã QR nhóm ${displayName}` : `Mã QR của ${displayName}`}
+                dataValue={
+                    isGroup 
+                        ? `${window.location.origin}/chat?joinGroup=true&invite=${groupInviteCode}` 
+                        : `${window.location.origin}/feed/profile/${partnerId}?action=add_friend`
+                }
+                name={displayName}
+                subText={isGroup ? `${participants.length} thành viên` : (partner?.username ? `@${partner.username}` : "Quét để kết nối")}
+                avatarUrl={isGroup ? (chat.avatarURL || chat.group?.avatarURL) : partner?.avatarURL}
+            />
         </Motion.div>
     );
 };

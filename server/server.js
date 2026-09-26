@@ -12,6 +12,7 @@ import messageRoute from "./src/routes/messageRoute.js";
 import conversationRoute from "./src/routes/conversationRoute.js";
 import postRoute from "./src/routes/postRoute.js";
 import notificationRoute from "./src/routes/notificationRoute.js";
+import translationRoute from "./src/routes/translationRoute.js";
 
 import { app, server } from "./src/socket/socket.js";
 
@@ -44,6 +45,7 @@ app.use("/api/messages", protectedRoute, messageRoute);
 app.use("/api/conversations", protectedRoute, conversationRoute);
 app.use("/api/posts", protectedRoute, postRoute);
 app.use("/api/notifications", protectedRoute, notificationRoute);
+app.use("/api/translation", protectedRoute, translationRoute);
 
 connectDb().then(() => {
     server.listen(PORT, () => {

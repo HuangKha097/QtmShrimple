@@ -303,6 +303,10 @@ const ChatBody = () => {
                                     isForwarded={message.isForwarded}
                                     messageId={message._id}
                                     createdAt={message.createdAt}
+                                    callId={message.callId}
+                                    callStatus={message.callStatus}
+                                    callDuration={message.callDuration}
+                                    poll={message.poll}
                                 />
                             </React.Fragment>
                         );

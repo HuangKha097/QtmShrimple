@@ -9,6 +9,7 @@ import {
     Video,
     VideoOff,
     ScreenShare,
+    Phone,
     PhoneOff,
     Minus,
     Maximize2,
@@ -16,14 +17,15 @@ import {
     Tv,
     Radio
 } from 'lucide-react';
-import defaultAvatar from '../../../public/favicon.png';
+
+const defaultAvatar = '/favicon.png';
 import { ASSET_BASE_URL } from '../../config/env';
+import TranslationNotes from './TranslationNotes.jsx';
 
 const cx = classNames.bind(styles);
 
 // Sub-component for individual participant tile
 const ParticipantTile = ({
-    user,
     stream,
     isLocal = false,
     isMuted = false,
@@ -42,12 +44,19 @@ const ParticipantTile = ({
         return `${ASSET_BASE_URL}${avatar}`;
     }, [avatar]);
 
+        const hasVideoTrack = Boolean(
+        stream &&
+        typeof stream.getVideoTracks === 'function' &&
+        stream.getVideoTracks().some((track) => track.readyState === 'live' && track.enabled)
+    );
+    const hasActiveVideo = (isCameraOn || isScreenSharing) && hasVideoTrack;
+
     // Attach stream to video tag if camera or screen sharing is active
     useEffect(() => {
-        if (videoRef.current && stream) {
+        if (videoRef.current && stream && hasActiveVideo) {
             videoRef.current.srcObject = stream;
         }
-    }, [stream, isCameraOn, isScreenSharing]);
+    }, [stream, hasActiveVideo]);
 
     // Attach remote stream to audio element (unmuted for remote, muted for local)
     useEffect(() => {
@@ -55,8 +64,6 @@ const ParticipantTile = ({
             audioRef.current.srcObject = stream;
         }
     }, [stream, isLocal]);
-
-    const hasActiveVideo = (isCameraOn || isScreenSharing) && Boolean(stream);
 
     return (
         <div className={cx('participant-card', { speaking: isSpeaking && !isMuted })}>
@@ -87,16 +94,25 @@ const ParticipantTile = ({
 
             {/* Top Right Status Badges */}
             <div className={cx('status-badges')}>
-                {isMuted && (
-                    <div className={cx('badge-icon', 'muted')} title="Đã tắt micro">
-                        <MicOff size={14} />
-                    </div>
-                )}
                 {isScreenSharing && (
                     <div className={cx('badge-icon', 'live')} title="Đang chia sẻ màn hình">
                         <Tv size={14} />
                     </div>
                 )}
+                {/* Camera Status Badge */}
+                <div
+                    className={cx('badge-icon', isCameraOn ? 'cam-on' : 'cam-off')}
+                    title={isCameraOn ? 'Camera: Bật' : 'Camera: Tắt'}
+                >
+                    {isCameraOn ? <Video size={14} /> : <VideoOff size={14} />}
+                </div>
+                {/* Microphone Status Badge */}
+                <div
+                    className={cx('badge-icon', isMuted ? 'muted' : 'unmuted', { speaking: isSpeaking && !isMuted })}
+                    title={isMuted ? 'Micro: Tắt' : (isSpeaking ? 'Đang nói...' : 'Micro: Bật')}
+                >
+                    {isMuted ? <MicOff size={14} /> : <Mic size={14} />}
+                </div>
             </div>
 
             {/* Bottom Left Name Tag */}
@@ -113,6 +129,7 @@ const GroupCallModal = () => {
         isInCall,
         isModalOpen,
         groupInfo,
+        currentConversationId,
         localStream,
         screenStream,
         isMuted,
@@ -125,12 +142,22 @@ const GroupCallModal = () => {
         toggleScreenShare,
         leaveGroupCall,
         toggleMinimize,
-        setModalOpen,
+        incomingCall,
+        acceptIncomingCall,
+        declineIncomingCall,
     } = useGroupCallStore();
 
     const { user: currentUser } = useAuthStore();
     const [callDuration, setCallDuration] = useState(0);
     const screenVideoRef = useRef(null);
+    const translationSources = useMemo(() => [
+        { id: currentUser?._id, stream: localStream, muted: isMuted },
+        ...Object.values(peers).map(peer => ({
+            id: peer.user?._id || peer.user?.userId,
+            stream: peer.stream,
+            muted: peer.isMuted,
+        })),
+    ], [currentUser?._id, localStream, isMuted, peers]);
 
     // Call duration timer
     useEffect(() => {
@@ -146,12 +173,120 @@ const GroupCallModal = () => {
         };
     }, [isInCall]);
 
-    // Attach local screen stream to theater view if sharing screen
+    const peerList = Object.values(peers);
+    const totalCount = peerList.length + 1;
+    const remoteScreenSharer = peerList.find((p) => p.isScreenSharing && p.stream);
+    const hasScreenShareActive = isScreenSharing || Boolean(remoteScreenSharer);
+
+    // Attach screen stream to theater view (local or remote)
     useEffect(() => {
-        if (screenVideoRef.current && screenStream) {
-            screenVideoRef.current.srcObject = screenStream;
+        if (screenVideoRef.current) {
+            const streamToDisplay = isScreenSharing ? screenStream : remoteScreenSharer?.stream;
+            if (streamToDisplay) {
+                screenVideoRef.current.srcObject = streamToDisplay;
+            }
         }
-    }, [screenStream, isScreenSharing]);
+    }, [screenStream, isScreenSharing, remoteScreenSharer?.stream]);
+
+    // Render Incoming Group Call Dialog if receiver is invited
+    if (incomingCall && !isInCall) {
+        const callerName = incomingCall.caller?.name || 'Thành viên';
+        const groupName = incomingCall.groupInfo?.name || 'Cuộc gọi nhóm';
+        const callerAvatar = incomingCall.caller?.avatar || defaultAvatar;
+        const avatarSrc = callerAvatar.startsWith('http') || callerAvatar.startsWith('data:')
+            ? callerAvatar
+            : `${ASSET_BASE_URL}${callerAvatar}`;
+
+        return (
+            <div className={cx('group-call-backdrop')}>
+                <div
+                    style={{
+                        background: '#18191c',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '20px',
+                        padding: '32px 40px',
+                        textAlign: 'center',
+                        maxWidth: '420px',
+                        width: '90%',
+                        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.8)',
+                        color: '#ffffff',
+                        animation: 'fadeIn 0.25s ease-out',
+                    }}
+                >
+                    <div
+                        style={{
+                            width: '88px',
+                            height: '88px',
+                            borderRadius: '50%',
+                            margin: '0 auto 16px auto',
+                            overflow: 'hidden',
+                            border: '3px solid #22c55e',
+                            boxShadow: '0 0 20px rgba(34, 197, 94, 0.35)',
+                        }}
+                    >
+                        <img
+                            src={avatarSrc}
+                            alt={callerName}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => { e.currentTarget.src = defaultAvatar; }}
+                        />
+                    </div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 6px 0', color: '#ffffff' }}>
+                        {groupName}
+                    </h3>
+                    <p style={{ fontSize: '0.95rem', color: '#949ba4', margin: '0 0 28px 0' }}>
+                        <strong>{callerName}</strong> đang bắt đầu cuộc gọi nhóm...
+                    </p>
+                    <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                        <button
+                            type="button"
+                            onClick={acceptIncomingCall}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '12px',
+                                border: 'none',
+                                background: '#22c55e',
+                                color: '#ffffff',
+                                fontWeight: 600,
+                                fontSize: '0.95rem',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
+                                transition: 'background 0.2s',
+                            }}
+                        >
+                            <Phone size={18} />
+                            Tham gia
+                        </button>
+                        <button
+                            type="button"
+                            onClick={declineIncomingCall}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '12px',
+                                border: 'none',
+                                background: '#ef4444',
+                                color: '#ffffff',
+                                fontWeight: 600,
+                                fontSize: '0.95rem',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                                transition: 'background 0.2s',
+                            }}
+                        >
+                            <PhoneOff size={18} />
+                            Từ chối
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (!isInCall || !isModalOpen) return null;
 
@@ -161,12 +296,7 @@ const GroupCallModal = () => {
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const peerList = Object.values(peers);
-    const totalCount = peerList.length + 1;
 
-    // Check if anyone (including self) is sharing screen
-    const remoteScreenSharer = peerList.find((p) => p.isScreenSharing && p.stream);
-    const hasScreenShareActive = isScreenSharing || Boolean(remoteScreenSharer);
 
     const getGridClass = () => {
         if (totalCount === 1) return 'grid-1';
@@ -248,7 +378,6 @@ const GroupCallModal = () => {
                                 {peerList.map((p) => (
                                     <ParticipantTile
                                         key={p.socketId}
-                                        user={p.user}
                                         stream={p.stream}
                                         isMuted={p.isMuted}
                                         isCameraOn={p.isCameraOn}
@@ -286,7 +415,6 @@ const GroupCallModal = () => {
                             {peerList.map((p) => (
                                 <ParticipantTile
                                     key={p.socketId}
-                                    user={p.user}
                                     stream={p.stream}
                                     isMuted={p.isMuted}
                                     isCameraOn={p.isCameraOn}
@@ -336,6 +464,9 @@ const GroupCallModal = () => {
                     >
                         <ScreenShare size={22} />
                     </button>
+
+                    <TranslationNotes active={isInCall} kind="group"
+                        sessionId={currentConversationId} sources={translationSources} />
 
                     {/* Leave / Disconnect Button */}
                     <button

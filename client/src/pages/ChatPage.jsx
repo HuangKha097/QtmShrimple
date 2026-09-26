@@ -12,6 +12,7 @@ import { useChatStore } from "../stores/useChatStore.js";
 import { toast } from "sonner";
 import AddFriendPopUp from "../components/slidebar/AddFriendPopUp.jsx";
 import CreateGroupPopUp from "../components/slidebar/CreateGroupPopUp.jsx";
+import TreeQRCodeModal from "../components/common/TreeQRCodeModal.jsx";
 import PostsSidebar from "../components/posts/PostsSidebar.jsx";
 import GlobalLoadingOverlay from "../components/common/GlobalLoadingOverlay.jsx";
 
@@ -23,7 +24,8 @@ const ChatPage = () => {
     const [isShowChatInfo, setIsShowChatInfo] = useState(false);
     const [isShowAddFriendPopup, setIsShowAddFriendPopup] = useState(false);
     const [isShowCreateGroupPopup, setIsShowCreateGroupPopup] = useState(false);
-    const signOut = useAuthStore((state) => state.signOut);
+    const [isShowQRModal, setIsShowQRModal] = useState(false);
+    const { signOut, user: currentUser } = useAuthStore();
     const location = useLocation();
     const navigate = useNavigate();
     const shellRef = useRef(null);
@@ -93,6 +95,7 @@ const ChatPage = () => {
                                 onCloseSetting={onCloseSetting}
                                 onCloseAddFriendPopup={onCloseAddFriendPopup}
                                 onCloseCreateGroupPopup={onCloseCreateGroupPopup}
+                                onOpenQRModal={() => setIsShowQRModal(true)}
                             />
                         </div>
                     </div>
@@ -139,6 +142,18 @@ const ChatPage = () => {
             >
                 <CreateGroupPopUp onCloseCreateGroupPopup={onCloseCreateGroupPopup} />
             </MotionPresence>
+
+            {/* Personal Tree QR Code Modal */}
+            <TreeQRCodeModal 
+                isOpen={isShowQRModal}
+                onClose={() => setIsShowQRModal(false)}
+                type="user"
+                title="Mã QR kết bạn của tôi"
+                dataValue={`${window.location.origin}/feed/profile/${currentUser?._id}?action=add_friend`}
+                name={currentUser?.displayName || currentUser?.username}
+                subText={currentUser?.username ? `@${currentUser.username}` : "Quét để kết bạn"}
+                avatarUrl={currentUser?.avatarURL}
+            />
         </div>
     );
 };

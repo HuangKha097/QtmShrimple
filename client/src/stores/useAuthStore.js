@@ -295,6 +295,7 @@ export const useAuthStore = create(
                 if (!user || socket?.connected) return;
 
                 const newSocket = io(SOCKET_URL, {
+                    auth: (callback) => callback({ token: get().accessToken }),
                     query: {
                         userId: user._id,
                         showOnlineStatus: user?.privacy?.showOnlineStatus !== false ? "true" : "false",

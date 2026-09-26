@@ -7,7 +7,10 @@ import {
     recallMessage,
     deleteMessageForMe,
     togglePinMessage,
-    forwardMessage
+    forwardMessage,
+    createPoll,
+    votePoll,
+    closePoll
 } from "../controllers/messageController.js";
 import {checkFriendship, checkGroupMembership} from "../middlewares/friendMiddleware.js";
 import {chatUpload} from "../middlewares/uploadMiddleware.js";
@@ -23,5 +26,10 @@ router.put("/:id/recall", recallMessage);
 router.put("/:id/delete-for-me", deleteMessageForMe);
 router.put("/:id/pin", togglePinMessage);
 router.post("/:id/forward", forwardMessage);
+
+// Poll / Vote
+router.post("/poll", checkGroupMembership, createPoll);
+router.post("/:id/vote", votePoll);
+router.put("/:id/poll/close", closePoll);
 
 export default router;

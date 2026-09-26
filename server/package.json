@@ -4,7 +4,9 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/translationSession.test.js",
+    "test:ai": "node tests/translationSmoke.js"
   },
   "type": "module",
   "keywords": [],
@@ -27,6 +29,7 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "socket.io-client": "^4.8.1"
   }
 }

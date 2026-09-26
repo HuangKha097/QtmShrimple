@@ -6,6 +6,11 @@ const participantSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
+    role: {
+        type: String,
+        enum: ['admin', 'member'],
+        default: 'member',
+    },
     joinAt: {
         type: Date,
         default: Date.now,
@@ -33,6 +38,10 @@ const groupSchema = new mongoose.Schema({
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
+    },
+    inviteCode: {
+        type: String,
+        default: "",
     }
 }, {
     _id: false // khong tao ra _id moi

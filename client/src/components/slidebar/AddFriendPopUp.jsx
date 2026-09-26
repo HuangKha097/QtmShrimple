@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/AddFriendPopUp.module.scss';
-import { Search, UserPlus, X, Check, UserCheck, Loader2, Sparkles, Users } from 'lucide-react';
+import { Search, UserPlus, X, Check, UserCheck, Loader2, Sparkles, Users, QrCode } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import default_avt from "../../../public/favicon.png";
+import TreeQRCodeModal from "../common/TreeQRCodeModal.jsx";
 
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
@@ -21,6 +22,7 @@ const AddFriendPopUp = ({ onCloseAddFriendPopup }) => {
     const [isLoadingSearch, setIsLoadingSearch] = useState(false);
     const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
+    const [showQRModal, setShowQRModal] = useState(false);
 
     // State lưu trạng thái gửi lời mời
     const [sentRequests, setSentRequests] = useState({});
@@ -139,6 +141,15 @@ const AddFriendPopUp = ({ onCloseAddFriendPopup }) => {
                     </button>
                     <h3 className={cx('title')}>Thêm bạn bè</h3>
                 </div>
+                <button 
+                    type="button"
+                    className={cx('qr-action-btn')}
+                    onClick={() => setShowQRModal(true)}
+                    title="Mã QR cá nhân & Quét mã"
+                >
+                    <QrCode size={16} />
+                    <span>Mã QR</span>
+                </button>
             </div>
 
             {/* Search Bar X Style */}
@@ -241,6 +252,17 @@ const AddFriendPopUp = ({ onCloseAddFriendPopup }) => {
                     </div>
                 )}
             </div>
+
+            <TreeQRCodeModal 
+                isOpen={showQRModal}
+                onClose={() => setShowQRModal(false)}
+                type="user"
+                title="Mã QR kết bạn của tôi"
+                dataValue={`${window.location.origin}/feed/profile/${currentUser?._id}?action=add_friend`}
+                name={currentUser?.displayName || currentUser?.username}
+                subText={currentUser?.username ? `@${currentUser.username}` : "Quét để kết bạn"}
+                avatarUrl={currentUser?.avatarURL}
+            />
         </Motion.div>
     );
 

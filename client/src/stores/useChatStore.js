@@ -714,16 +714,81 @@ export const useChatStore = create(
                 }
             },
 
+            addMembersAction: async (conversationId, memberIds) => {
+                const data = await chatService.addMembers(conversationId, memberIds);
+                if (data.conversation) {
+                    set((state) => ({
+                        conversations: state.conversations.map(c => c._id === conversationId ? data.conversation : c)
+                    }));
+                }
+                return data;
+            },
+
+            removeMemberAction: async (conversationId, memberId) => {
+                const data = await chatService.removeMember(conversationId, memberId);
+                if (data.conversation) {
+                    set((state) => ({
+                        conversations: state.conversations.map(c => c._id === conversationId ? data.conversation : c)
+                    }));
+                }
+                return data;
+            },
+
+            updateMemberRoleAction: async (conversationId, memberId, role) => {
+                const data = await chatService.updateMemberRole(conversationId, memberId, role);
+                if (data.conversation) {
+                    set((state) => ({
+                        conversations: state.conversations.map(c => c._id === conversationId ? data.conversation : c)
+                    }));
+                }
+                return data;
+            },
+
+            leaveGroupAction: async (conversationId) => {
+                await chatService.leaveGroup(conversationId);
+                set((state) => ({
+                    conversations: state.conversations.filter(c => c._id !== conversationId),
+                    activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId
+                }));
+            },
+
+            disbandGroupAction: async (conversationId) => {
+                await chatService.disbandGroup(conversationId);
+                set((state) => ({
+                    conversations: state.conversations.filter(c => c._id !== conversationId),
+                    activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId
+                }));
+            },
+
+            createPollAction: async (conversationId, question, options, allowMultiple) => {
+                const data = await chatService.createPoll(conversationId, question, options, allowMultiple);
+                return data;
+            },
+
+            votePollAction: async (messageId, optionId) => {
+                const data = await chatService.votePoll(messageId, optionId);
+                return data;
+            },
+
+            closePollAction: async (messageId) => {
+                const data = await chatService.closePoll(messageId);
+                return data;
+            },
+
             subscribeToMessages: () => {
                 const { socket } = useAuthStore.getState();
                 if (!socket) return;
 
                 // Prevent duplicate listeners
                 socket.off("newMessage");
+                socket.off("messageUpdated");
                 socket.off("messageReaction");
                 socket.off("messageRecalled");
                 socket.off("messagePinStatus");
                 socket.off("newConversation");
+                socket.off("conversationUpdated");
+                socket.off("conversationRemoved");
+                socket.off("groupDisbanded");
                 socket.off("newFriendRequest");
                 socket.off("friendRequestAccepted");
                 socket.off("friendRequestDeclined");
@@ -741,7 +806,8 @@ export const useChatStore = create(
 
                 socket.on("newMessage", (newMessage) => {
                     const myId = useAuthStore.getState().user?._id?.toString();
-                    const isOwn = newMessage.senderId?.toString() === myId;
+                    const senderIdStr = (newMessage.senderId?._id || newMessage.senderId)?.toString();
+                    const isOwn = senderIdStr === myId;
 
                     set((state) => {
                         const convoId = newMessage.conversationId;
@@ -803,6 +869,72 @@ export const useChatStore = create(
                     if (!isOwn && !isActive) {
                         toast.info("Tin nhắn mới: " + (newMessage.content || "Đã gửi một tệp/ảnh"));
                     }
+                });
+
+                socket.on("messageUpdated", (updatedMessage) => {
+                    if (!updatedMessage?._id) return;
+                    const myId = useAuthStore.getState().user?._id?.toString();
+                    const senderIdStr = (updatedMessage.senderId?._id || updatedMessage.senderId)?.toString();
+                    const isOwn = senderIdStr === myId;
+                    const convoId = updatedMessage.conversationId;
+
+                    set((state) => {
+                        let updatedMessagesMap = { ...state.messages };
+                        const existingItems = updatedMessagesMap[convoId]?.items || [];
+                        const msgIndex = existingItems.findIndex(m => m._id === updatedMessage._id);
+
+                        if (msgIndex !== -1) {
+                            const newItems = [...existingItems];
+                            newItems[msgIndex] = { ...updatedMessage, isOwn };
+                            updatedMessagesMap[convoId] = {
+                                ...updatedMessagesMap[convoId],
+                                items: newItems
+                            };
+                        }
+
+                        const updatedConvos = state.conversations.map(c => {
+                            if (c._id === convoId && c.lastMessage?._id === updatedMessage._id) {
+                                return {
+                                    ...c,
+                                    lastMessage: {
+                                        ...c.lastMessage,
+                                        content: updatedMessage.content,
+                                        messageType: updatedMessage.messageType,
+                                    }
+                                };
+                            }
+                            return c;
+                        });
+
+                        return {
+                            messages: updatedMessagesMap,
+                            conversations: updatedConvos
+                        };
+                    });
+                });
+
+                socket.on("conversationUpdated", (updatedConvo) => {
+                    if (!updatedConvo?._id) return;
+                    set((state) => ({
+                        conversations: state.conversations.map(c => c._id === updatedConvo._id ? updatedConvo : c)
+                    }));
+                });
+
+                socket.on("conversationRemoved", ({ conversationId }) => {
+                    if (!conversationId) return;
+                    set((state) => ({
+                        conversations: state.conversations.filter(c => c._id !== conversationId),
+                        activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId
+                    }));
+                });
+
+                socket.on("groupDisbanded", ({ conversationId, groupName }) => {
+                    if (!conversationId) return;
+                    toast.info(`Nhóm "${groupName || ""}" đã được giải tán bởi quản trị viên.`);
+                    set((state) => ({
+                        conversations: state.conversations.filter(c => c._id !== conversationId),
+                        activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId
+                    }));
                 });
 
                 socket.on("messageReaction", ({ messageId, reactions, conversationId }) => {
@@ -954,10 +1086,14 @@ export const useChatStore = create(
                 const { socket } = useAuthStore.getState();
                 if (socket) {
                     socket.off("newMessage");
+                    socket.off("messageUpdated");
                     socket.off("messageReaction");
                     socket.off("messageRecalled");
                     socket.off("messagePinStatus");
                     socket.off("newConversation");
+                    socket.off("conversationUpdated");
+                    socket.off("conversationRemoved");
+                    socket.off("groupDisbanded");
                     socket.off("newFriendRequest");
                     socket.off("friendRequestAccepted");
                     socket.off("friendRequestDeclined");

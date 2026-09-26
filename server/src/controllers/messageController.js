@@ -489,3 +489,170 @@ export const forwardMessage = async (req, res) => {
         return res.status(500).json({ message: "System error" });
     }
 };
+
+export const createPoll = async (req, res) => {
+    try {
+        const { conversationId, question, options, allowMultiple } = req.body;
+        const senderId = req.user._id;
+
+        if (!conversationId || !question || !options || !Array.isArray(options) || options.length < 2) {
+            return res.status(400).json({ message: "Vui lòng nhập câu hỏi và ít nhất 2 phương án bình chọn" });
+        }
+
+        const conversation = await Conversation.findById(conversationId);
+        if (!conversation) {
+            return res.status(404).json({ message: "Cuộc trò chuyện không tồn tại" });
+        }
+
+        const pollOptions = options.map((opt, idx) => ({
+            id: `${idx + 1}_${Date.now().toString(36)}`,
+            text: (opt || "").trim(),
+            votes: []
+        })).filter(opt => opt.text.length > 0);
+
+        if (pollOptions.length < 2) {
+            return res.status(400).json({ message: "Cần ít nhất 2 phương án hợp lệ" });
+        }
+
+        const messageData = {
+            conversationId,
+            senderId,
+            content: question.trim(),
+            messageType: 'poll',
+            poll: {
+                question: question.trim(),
+                options: pollOptions,
+                allowMultiple: Boolean(allowMultiple),
+                closed: false,
+                createdBy: senderId
+            }
+        };
+
+        const message = await Message.create(messageData);
+        const populatedMessage = await Message.findById(message._id)
+            .populate("senderId", "username displayName avatarURL")
+            .populate("poll.options.votes", "username displayName avatarURL");
+
+        upDateConversationAfterCreateMessage(conversation, populatedMessage, senderId);
+        await conversation.save();
+
+        if (conversation.participants) {
+            conversation.participants.forEach(p => {
+                const participantId = (p.userId?._id || p.userId)?.toString();
+                if (participantId) {
+                    io.to(participantId).emit("newMessage", populatedMessage);
+                }
+            });
+        }
+
+        return res.status(201).json({ message: populatedMessage });
+    } catch (error) {
+        console.error("Error creating poll:", error);
+        return res.status(500).json({ message: "System error" });
+    }
+};
+
+export const votePoll = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { optionId } = req.body;
+        const userId = req.user._id;
+
+        const message = await Message.findById(id);
+        if (!message || message.messageType !== 'poll' || !message.poll) {
+            return res.status(404).json({ message: "Cuộc bình chọn không tồn tại" });
+        }
+
+        if (message.poll.closed) {
+            return res.status(400).json({ message: "Cuộc bình chọn này đã kết thúc" });
+        }
+
+        const targetOption = message.poll.options.find(opt => opt.id === optionId);
+        if (!targetOption) {
+            return res.status(404).json({ message: "Phương án bình chọn không tồn tại" });
+        }
+
+        const userIdStr = userId.toString();
+        const alreadyVotedIndex = targetOption.votes.findIndex(v => v.toString() === userIdStr);
+
+        if (message.poll.allowMultiple) {
+            if (alreadyVotedIndex !== -1) {
+                targetOption.votes.splice(alreadyVotedIndex, 1);
+            } else {
+                targetOption.votes.push(userId);
+            }
+        } else {
+            if (alreadyVotedIndex !== -1) {
+                targetOption.votes.splice(alreadyVotedIndex, 1);
+            } else {
+                message.poll.options.forEach(opt => {
+                    opt.votes = opt.votes.filter(v => v.toString() !== userIdStr);
+                });
+                targetOption.votes.push(userId);
+            }
+        }
+
+        await message.save();
+
+        const populatedMessage = await Message.findById(message._id)
+            .populate("senderId", "username displayName avatarURL")
+            .populate("poll.options.votes", "username displayName avatarURL");
+
+        const conversation = await Conversation.findById(message.conversationId);
+        if (conversation && conversation.participants) {
+            conversation.participants.forEach(p => {
+                const participantId = (p.userId?._id || p.userId)?.toString();
+                if (participantId) {
+                    io.to(participantId).emit("messageUpdated", populatedMessage);
+                }
+            });
+        }
+
+        return res.status(200).json({ message: populatedMessage });
+    } catch (error) {
+        console.error("Error voting poll:", error);
+        return res.status(500).json({ message: "System error" });
+    }
+};
+
+export const closePoll = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user._id;
+
+        const message = await Message.findById(id);
+        if (!message || message.messageType !== 'poll' || !message.poll) {
+            return res.status(404).json({ message: "Cuộc bình chọn không tồn tại" });
+        }
+
+        const conversation = await Conversation.findById(message.conversationId);
+        const isCreator = message.poll.createdBy?.toString() === userId.toString();
+        const isGroupAdmin = conversation?.participants?.some(p => (p.userId?._id || p.userId)?.toString() === userId.toString() && p.role === 'admin');
+
+        if (!isCreator && !isGroupAdmin) {
+            return res.status(403).json({ message: "Chỉ người tạo hoặc quản trị viên mới có thể đóng cuộc bình chọn" });
+        }
+
+        message.poll.closed = true;
+        message.poll.closedAt = new Date();
+        await message.save();
+
+        const populatedMessage = await Message.findById(message._id)
+            .populate("senderId", "username displayName avatarURL")
+            .populate("poll.options.votes", "username displayName avatarURL");
+
+        if (conversation && conversation.participants) {
+            conversation.participants.forEach(p => {
+                const participantId = (p.userId?._id || p.userId)?.toString();
+                if (participantId) {
+                    io.to(participantId).emit("messageUpdated", populatedMessage);
+                }
+            });
+        }
+
+        return res.status(200).json({ message: populatedMessage });
+    } catch (error) {
+        console.error("Error closing poll:", error);
+        return res.status(500).json({ message: "System error" });
+    }
+};

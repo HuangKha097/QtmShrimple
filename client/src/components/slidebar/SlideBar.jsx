@@ -4,12 +4,12 @@ import { useTranslation } from 'react-i18next';
 import styles from '../../assets/css/SlideBar.module.scss';
 import SlidebarBody from './SlidebarBody.jsx';
 import NotificationDropdown from '../common/NotificationDropdown.jsx';
-import { SquarePen, Users, ArrowLeft } from 'lucide-react';
+import { SquarePen, Users, ArrowLeft, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const cx = classNames.bind(styles);
 
-const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPopup }) => {
+const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPopup, onOpenQRModal }) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
 
@@ -33,6 +33,15 @@ const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPop
 
                     <div className={cx('header-actions')}>
                         <NotificationDropdown align="right" />
+                        <button 
+                            type="button" 
+                            className={cx('header-action-btn')} 
+                            onClick={onOpenQRModal}
+                            title="Mã QR cá nhân & Quét mã"
+                            aria-label="Mã QR cá nhân & Quét mã"
+                        >
+                            <QrCode size={20} />
+                        </button>
                         <button 
                             type="button" 
                             className={cx('header-action-btn')} 

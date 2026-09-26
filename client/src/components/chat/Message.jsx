@@ -3,7 +3,7 @@ import classNames from 'classnames/bind';
 import { motion as Motion } from 'motion/react';
 import styles from '../../assets/css/Message.module.scss';
 import profilePic_test from "../../../public/favicon.png";
-import { X, MapPin, ExternalLink, File, Download, Pin, CornerUpRight, RotateCcw, Trash2, MoreHorizontal, PinOff, Check, CheckCheck, PhoneCall, Radio } from 'lucide-react';
+import { X, MapPin, ExternalLink, File, Download, Pin, CornerUpRight, RotateCcw, Trash2, MoreHorizontal, PinOff, Check, CheckCheck, PhoneCall, PhoneOff, Radio, BarChart2 } from 'lucide-react';
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import { useGroupCallStore } from "../../stores/useGroupCallStore.js";
@@ -31,7 +31,11 @@ const Message = ({
     isPinned = false,
     isForwarded = false,
     messageId,
-    createdAt
+    createdAt,
+    callId = null,
+    callStatus = 'ended',
+    callDuration = null,
+    poll = null
 }) => {
     const [pickerStyle, setPickerStyle] = useState({});
     const [showDropdown, setShowDropdown] = useState(false);
@@ -47,8 +51,12 @@ const Message = ({
         activeReactionMessageId,
         setActiveReactionMessageId,
         activeConversationId,
-        conversations
+        conversations,
+        votePollAction,
+        closePollAction
     } = useChatStore();
+
+    const { user: currentUser } = useAuthStore();
 
     const { 
         activeGroupCalls, 
@@ -60,11 +68,20 @@ const Message = ({
 
     const currentConvo = (conversations || []).find(c => c && c._id === activeConversationId);
     const activeCall = activeConversationId ? activeGroupCalls[activeConversationId] : null;
-    const isCallActive = Boolean(activeCall?.isActive);
-    const isCurrentInThisCall = isInCall && currentConversationId === activeConversationId;
+
+    // A group call message is only active if the global activeCall matches this message's callId
+    const isThisCallActive = Boolean(
+        activeCall?.isActive && 
+        (callId ? activeCall?.callId === callId : callStatus === 'active')
+    );
+    const isCurrentInThisCall = isInCall && currentConversationId === activeConversationId && (!callId || !activeCall?.callId || activeCall?.callId === callId);
     const participantsCount = activeCall?.participants?.length || 0;
 
     const handleGroupCallAction = () => {
+        if (!isThisCallActive) {
+            toast.info("Cuộc gọi này đã kết thúc.");
+            return;
+        }
         if (!activeConversationId) return;
         if (isCurrentInThisCall) {
             setModalOpen(true);
@@ -75,7 +92,7 @@ const Message = ({
                 avatarURL: currentConvo?.avatarURL || currentConvo?.group?.avatarURL,
                 participantsCount: currentConvo?.participants?.length || 0,
             };
-            joinGroupCall(activeConversationId, groupInfo);
+            joinGroupCall(activeConversationId, groupInfo, callId);
         }
     };
 
@@ -370,42 +387,124 @@ const Message = ({
                                     <CustomAudioPlayer src={fileUrl} />
                                 </div>
                             ) : messageType === 'group_call' ? (
-                                <div className={cx('group-call-bubble', { 'active-call': isCallActive })}>
+                                <div className={cx('group-call-bubble', { 'active-call': isThisCallActive })}>
                                     <div className={cx('group-call-header')}>
-                                        <div className={cx('group-call-icon-box', { active: isCallActive })}>
-                                            {isCallActive ? <Radio size={20} /> : <PhoneCall size={20} />}
+                                        <div className={cx('group-call-icon-box', { active: isThisCallActive })}>
+                                            {isThisCallActive ? <Radio size={20} /> : <PhoneCall size={20} />}
                                         </div>
                                         <div className={cx('group-call-meta')}>
                                             <span className={cx('group-call-title')}>Cuộc gọi thoại nhóm</span>
                                             <span className={cx('group-call-status')}>
-                                                {isCallActive ? (
+                                                {isThisCallActive ? (
                                                     <>
                                                         <span className={cx('live-dot')} />
-                                                        <span>Đang diễn ra • {participantsCount} người tham gia</span>
+                                                        <span>{`Đang diễn ra • ${participantsCount} người tham gia`}</span>
                                                     </>
                                                 ) : (
-                                                    <span>Cuộc gọi đã kết thúc</span>
+                                                    <span>{text || 'Cuộc gọi đã kết thúc'}</span>
                                                 )}
                                             </span>
                                         </div>
                                     </div>
 
-                                    <button
-                                        type="button"
-                                        className={cx('group-call-btn', {
-                                            'in-call': isCurrentInThisCall
+                                    {isThisCallActive ? (
+                                        <button
+                                            type="button"
+                                            className={cx('group-call-btn', {
+                                                'in-call': isCurrentInThisCall
+                                            })}
+                                            onClick={handleGroupCallAction}
+                                        >
+                                            <PhoneCall size={16} />
+                                            <span>
+                                                {isCurrentInThisCall
+                                                    ? 'Mở phòng thoại'
+                                                    : 'Tham gia cuộc gọi'}
+                                            </span>
+                                        </button>
+                                    ) : (
+                                        <div className={cx('group-call-ended-badge')}>
+                                            <PhoneOff size={14} />
+                                            <span>Đã kết thúc</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : messageType === 'poll' && poll ? (
+                                <div className={cx('poll-card')}>
+                                    <div className={cx('poll-header')}>
+                                        <div className={cx('poll-icon-box')}>
+                                            <BarChart2 size={18} className={cx('poll-icon')} />
+                                        </div>
+                                        <div className={cx('poll-meta')}>
+                                            <span className={cx('poll-type-badge')}>
+                                                {poll.allowMultiple ? 'Chọn nhiều phương án' : 'Chọn 1 phương án'}
+                                                {poll.closed && ' • Đã kết thúc'}
+                                            </span>
+                                            <h4 className={cx('poll-question')}>{poll.question || text}</h4>
+                                        </div>
+                                    </div>
+
+                                    <div className={cx('poll-options')}>
+                                        {(poll.options || []).map((opt) => {
+                                            const totalVotes = (poll.options || []).reduce((sum, o) => sum + (o.votes?.length || 0), 0);
+                                            const optVotes = opt.votes?.length || 0;
+                                            const percent = totalVotes > 0 ? Math.round((optVotes / totalVotes) * 100) : 0;
+                                            const isVotedByMe = (opt.votes || []).some((v) => {
+                                                const vId = (v?._id || v)?.toString();
+                                                return vId === currentUser?._id?.toString();
+                                            });
+
+                                            return (
+                                                <div
+                                                    key={opt.id}
+                                                    className={cx('poll-option-item', {
+                                                        'voted-by-me': isVotedByMe,
+                                                        'disabled': poll.closed
+                                                    })}
+                                                    onClick={() => {
+                                                        if (!poll.closed) {
+                                                            votePollAction(messageId, opt.id);
+                                                        }
+                                                    }}
+                                                >
+                                                    <div
+                                                        className={cx('poll-progress-bar')}
+                                                        style={{ width: `${percent}%` }}
+                                                    />
+                                                    <div className={cx('poll-option-content')}>
+                                                        <div className={cx('poll-option-left')}>
+                                                            <span className={cx('poll-checkbox', { checked: isVotedByMe })}>
+                                                                {isVotedByMe && <Check size={12} strokeWidth={3} />}
+                                                            </span>
+                                                            <span className={cx('poll-option-text')}>{opt.text}</span>
+                                                        </div>
+                                                        <div className={cx('poll-option-right')}>
+                                                            <span className={cx('poll-percent')}>{percent}%</span>
+                                                            <span className={cx('poll-count')}>({optVotes})</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
                                         })}
-                                        onClick={handleGroupCallAction}
-                                    >
-                                        <PhoneCall size={16} />
-                                        <span>
-                                            {isCurrentInThisCall
-                                                ? 'Mở phòng thoại'
-                                                : isCallActive
-                                                ? 'Tham gia cuộc gọi'
-                                                : 'Bắt đầu cuộc gọi'}
+                                    </div>
+
+                                    <div className={cx('poll-footer')}>
+                                        <span className={cx('poll-total-votes')}>
+                                            {(poll.options || []).reduce((s, o) => s + (o.votes?.length || 0), 0)} lượt bình chọn
                                         </span>
-                                    </button>
+                                        {!poll.closed && (
+                                            (poll.createdBy?.toString() === currentUser?._id?.toString() ||
+                                            currentConvo?.participants?.some(p => p._id === currentUser?._id && p.role === 'admin'))
+                                        ) && (
+                                            <button
+                                                type="button"
+                                                className={cx('poll-close-btn')}
+                                                onClick={() => closePollAction(messageId)}
+                                            >
+                                                Kết thúc bình chọn
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             ) : (
                                 (!image || text) && (

@@ -9,6 +9,13 @@ let localAnalyser = null;
 let audioInterval = null;
 const remoteAnalysers = new Map(); // socketId -> AnalyserNode
 
+const peerConfig = {
+    iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+    ],
+};
+
 export const useGroupCallStore = create((set, get) => {
     // Internal refs held inside closure
     const peersRef = { current: {} }; // socketId -> { peer, user, stream, isMuted, isCameraOn, isScreenSharing }
@@ -142,6 +149,13 @@ export const useGroupCallStore = create((set, get) => {
             socket.off("groupCallSignal");
             socket.off("groupCallParticipantMediaChanged");
             socket.off("groupCallUserLeft");
+            socket.off("groupCallEnded");
+            socket.off("groupCallError");
+
+            socket.on("groupCallError", ({ message }) => {
+                toast.error(message || "Cuộc gọi đã kết thúc.");
+                get().leaveGroupCall();
+            });
 
             // 1. Status of active calls in conversations
             socket.on("groupCallStatusChanged", (data) => {
@@ -155,6 +169,44 @@ export const useGroupCallStore = create((set, get) => {
                     }
                     return { activeGroupCalls: newMap };
                 });
+
+                // Sync current call state and prune stale peers
+                const { currentConversationId, isInCall } = get();
+                if (isInCall && currentConversationId === data.conversationId) {
+                    if (!data.isActive) {
+                        toast.info("Cuộc gọi nhóm đã kết thúc");
+                        get().leaveGroupCall();
+                    } else if (Array.isArray(data.participants)) {
+                        const activeSocketIds = new Set(data.participants.map((p) => p.socketId));
+                        const currentPeers = get().peers;
+                        let changed = false;
+                        const newPeers = { ...currentPeers };
+                        Object.keys(currentPeers).forEach((sid) => {
+                            if (!activeSocketIds.has(sid)) {
+                                if (peersRef.current[sid]?.peer) {
+                                    try {
+                                        peersRef.current[sid].peer.destroy();
+                                    } catch (e) {}
+                                }
+                                delete peersRef.current[sid];
+                                delete newPeers[sid];
+                                changed = true;
+                            }
+                        });
+                        if (changed) {
+                            set({ peers: newPeers });
+                        }
+                    }
+                }
+            });
+
+            // Handle when group call ends
+            socket.on("groupCallEnded", ({ conversationId }) => {
+                const { currentConversationId, isInCall } = get();
+                if (isInCall && currentConversationId === conversationId) {
+                    toast.info("Cuộc gọi nhóm đã kết thúc");
+                    get().leaveGroupCall();
+                }
             });
 
             // 2. Initial list of all active calls
@@ -288,9 +340,9 @@ export const useGroupCallStore = create((set, get) => {
                         peer,
                         user: fromUser,
                         stream: null,
-                        isMuted: false,
-                        isCameraOn: false,
-                        isScreenSharing: false,
+                        isMuted: get().peers[fromSocketId]?.isMuted ?? false,
+                        isCameraOn: get().peers[fromSocketId]?.isCameraOn ?? false,
+                        isScreenSharing: get().peers[fromSocketId]?.isScreenSharing ?? false,
                     };
                     peersRef.current[fromSocketId] = peerEntry;
 
@@ -357,10 +409,12 @@ export const useGroupCallStore = create((set, get) => {
             socket.off("groupCallSignal");
             socket.off("groupCallParticipantMediaChanged");
             socket.off("groupCallUserLeft");
+            socket.off("groupCallEnded");
+            socket.off("groupCallError");
         },
 
         // Join Voice Channel / Room
-        joinGroupCall: async (conversationId, groupInfo) => {
+        joinGroupCall: async (conversationId, groupInfo, targetCallId = null) => {
             const { socket, user } = useAuthStore.getState();
             if (!socket || !conversationId) return;
 
@@ -406,6 +460,7 @@ export const useGroupCallStore = create((set, get) => {
                 // Join room via socket
                 socket.emit("joinGroupCall", {
                     conversationId,
+                    callId: targetCallId || null,
                     user: {
                         _id: user?._id,
                         displayName: user?.displayName,

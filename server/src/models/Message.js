@@ -17,11 +17,48 @@ const messageSchema = mongoose.Schema({
     messageType: {
         type: String,
         required: true,
-        enum: ['text', 'image', 'video', 'file', 'audio', 'location', 'group_call'],
+        enum: ['text', 'image', 'video', 'file', 'audio', 'location', 'group_call', 'poll'],
         default: 'text'
     },
+    // For group_call tracking
+    callId: {
+        type: String,
+        default: null,
+    },
+    callStatus: {
+        type: String,
+        enum: ['active', 'ended'],
+        default: 'ended',
+    },
+    callDuration: {
+        type: String,
+        default: null,
+    },
+    startedAt: {
+        type: Date,
+        default: null,
+    },
+    endedAt: {
+        type: Date,
+        default: null,
+    },
+    // For polls/votes
+    poll: {
+        question: { type: String },
+        options: [
+            {
+                id: { type: String, required: true },
+                text: { type: String, required: true },
+                votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+            }
+        ],
+        allowMultiple: { type: Boolean, default: false },
+        closed: { type: Boolean, default: false },
+        closedAt: { type: Date },
+        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    },
     replyTo: {
-        type: ongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'Message'
     },
     edit: {type: Boolean, default: false},

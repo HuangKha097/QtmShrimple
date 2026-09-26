@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import Peer from 'simple-peer';
 import { useCallStore } from '../../stores/useCallStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from 'lucide-react';
 import { toast } from 'sonner';
+import TranslationNotes from './TranslationNotes.jsx';
 
 const defaultAvatar = '/favicon.png';
 
@@ -26,6 +27,10 @@ const CallModal = () => {
     const myVideo = useRef(null);
     const userVideo = useRef(null);
     const connectionRef = useRef(null);
+    const translationSources = useMemo(() => [
+        { id: user?._id, stream, muted: !micOn },
+        { id: callerInfo?.id, stream: remoteStream, muted: false },
+    ], [user?._id, stream, micOn, callerInfo?.id, remoteStream]);
 
     // 1. Handle user media (Camera/Mic)
     useEffect(() => {
@@ -218,6 +223,7 @@ const CallModal = () => {
                             <video playsInline ref={userVideo} autoPlay style={{ width: '300px', height: '225px', objectFit: 'cover', borderRadius: '1rem', border: '2px solid #444', backgroundColor: '#111' }} />
                         ) : (
                             <div style={{ width: '150px', height: '150px', borderRadius: '50%', backgroundColor: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', border: '3px solid #2ecc71' }}>
+                                <audio ref={userVideo} autoPlay playsInline />
                                 <img src={callerInfo?.avatar || defaultAvatar} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.src = defaultAvatar; }} />
                             </div>
                         )}
@@ -281,6 +287,8 @@ const CallModal = () => {
                             {cameraOn ? <Video size={22} /> : <VideoOff size={22} />}
                         </button>
                     )}
+                    <TranslationNotes active={callAcceptedState && !!remoteStream} kind="direct"
+                        sessionId={callerInfo?.id} sources={translationSources} />
                 </div>
             )}
         </div>
