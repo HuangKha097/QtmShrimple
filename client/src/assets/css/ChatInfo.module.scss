@@ -805,6 +805,13 @@
 }
 
 // Loading & Empty States
+.remove-member {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 34px; height: 34px; border: 1px solid rgba(239, 68, 68, .3);
+    border-radius: 9px; background: transparent; color: #ef4444; cursor: pointer;
+    &:hover { background: rgba(239, 68, 68, .15); }
+    &:disabled { opacity: .5; cursor: wait; }
+}
 .loading-box {
     display: flex;
     align-items: center;

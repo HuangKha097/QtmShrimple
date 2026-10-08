@@ -313,6 +313,17 @@ export const useAuthStore = create(
                         set({ onlineUsers: userIds });
                     }
                 });
+                let retriedSocketAuth = false;
+                newSocket.on('connect', () => {
+                    retriedSocketAuth = false;
+                    useChatStore.getState().fetchConversations();
+                });
+                newSocket.on('connect_error', async (error) => {
+                    if (retriedSocketAuth || error.message !== 'Vui lòng đăng nhập để kết nối') return;
+                    retriedSocketAuth = true;
+                    await get().refresh();
+                    if (get().accessToken && get().socket === newSocket) newSocket.connect();
+                });
                 
                 // Subscribe to chat and notification events
                 useChatStore.getState().subscribeToMessages();

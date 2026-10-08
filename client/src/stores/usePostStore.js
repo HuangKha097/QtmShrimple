@@ -326,7 +326,7 @@ export const usePostStore = create((set, get) => ({
     },
 
     fetchVideoFeed: async (isRefresh = false) => {
-         const { videoNextCursor, hasMoreVideos, isLoading } = get();
+         const { videoNextCursor, hasMoreVideos } = get();
          // If already loading, maybe debounce or ignore, but here simple check
          // We might want separate loading state for video feed if they can load purely independently without UI conflict
          

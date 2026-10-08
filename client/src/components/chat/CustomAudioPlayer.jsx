@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/CustomAudioPlayer.module.scss';
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
@@ -10,10 +10,8 @@ const CustomAudioPlayer = ({ src }) => {
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
-    const [volume, setVolume] = useState(1);
 
     const audioRef = useRef(null);
-    const progressRef = useRef(null);
 
     useEffect(() => {
         const audio = audioRef.current;

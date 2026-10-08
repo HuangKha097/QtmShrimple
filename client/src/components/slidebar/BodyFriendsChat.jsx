@@ -1,11 +1,7 @@
-import React from 'react';
+
 import ChatCard from "../chat/ChatCard.jsx";
-import {useChatStore} from "../../stores/useChatStore.js";
 
 const BodyFriendsChat = ({convo}) => {
-    const {user, activeConversationId} = useChatStore();
-
-    // if (!user) return null;
 
     const friendConversations = convo.filter(c => !c.isGroup);
 

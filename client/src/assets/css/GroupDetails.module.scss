@@ -1,0 +1,40 @@
+.details, .dialog, .joinCard {
+    color: var(--primary-textColor, #e7e9ea);
+    background: var(--primary-backgroundColor, #000);
+    font-size: 1.35rem;
+    button {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 10px 12px; border: 1px solid rgba(127, 127, 127, .3); border-radius: 10px;
+        background: rgba(127, 127, 127, .1); color: inherit; font: inherit; cursor: pointer;
+        &:hover { background: rgba(249, 115, 22, .15); }
+        &:disabled { opacity: .5; cursor: wait; }
+        &:focus-visible { outline: 2px solid #f97316; outline-offset: 3px; }
+    }
+    h2, h3, p { margin: 0 0 12px; }
+    p { line-height: 1.5; }
+    .danger { color: #ef4444; border-color: rgba(239, 68, 68, .4); }
+}
+.details { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid rgba(127, 127, 127, .2); }
+.heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; h2, h3 { margin: 0; } }
+.role { font-size: 1.1rem; color: #f97316; white-space: nowrap; }
+.description { white-space: pre-wrap; overflow-wrap: anywhere; opacity: .8; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.field {
+    display: flex; flex-direction: column; gap: 8px; margin: 14px 0;
+    input, textarea {
+        width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px;
+        border: 1px solid rgba(127, 127, 127, .35); background: rgba(127, 127, 127, .1);
+        color: inherit; font: inherit; resize: vertical;
+        &:focus { outline: 2px solid #f97316; }
+    }
+}
+.dialog { width: min(400px, calc(100vw - 32px)); padding: 0; border: 1px solid rgba(127, 127, 127, .35); border-radius: 18px; max-height: 90dvh; overflow-y: auto; &::backdrop { background: rgba(0, 0, 0, .75); } }
+.dialogContent { padding: 24px; }
+.qr { display: flex; justify-content: center; margin: 20px 0; svg { max-width: 100%; height: auto; border-radius: 8px; } }
+.rotate { margin-top: 12px; width: 100%; }
+.loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 30px 0; }
+.spinner { animation: spin 1s linear infinite; }
+.joinPage { display: grid; place-items: center; min-height: 100dvh; padding: 24px; box-sizing: border-box; background: var(--primary-backgroundColor, #000); }
+.joinCard { width: min(420px, 100%); padding: 28px; box-sizing: border-box; border: 1px solid rgba(127, 127, 127, .3); border-radius: 20px; text-align: center; h1 { font-size: 2.4rem; overflow-wrap: anywhere; } .actions { justify-content: center; } }
+.joinIcon { color: #f97316; margin-bottom: 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }

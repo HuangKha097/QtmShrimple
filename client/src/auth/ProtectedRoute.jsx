@@ -1,28 +1,33 @@
-import React, {useEffect, useState} from 'react';
+import { useEffect, useState } from 'react';
 import {useAuthStore} from "../stores/useAuthStore.js";
 import {Navigate, Outlet} from "react-router";
 
 import LoadingSpin from "../components/common/loading/LoadingSpin.jsx";
 
 const ProtectedRoute = () => {
-    const {accessToken, user, loading, refresh, fetchMe, connectSocket} = useAuthStore()
+    const {accessToken, user} = useAuthStore()
     const [starting, setStarting] = useState(true);
 
-    const init = async () => {
-        if (!accessToken) {
-            await refresh()
-        }
-        if (accessToken && !user) {
-            await fetchMe();
-        } else if (user) {
-            connectSocket();
-        }
-
-        setStarting(false);
-    }
-
     useEffect(() => {
-        init()
+        let alive = true;
+        if (/^\/groups\/join\/(?:[a-f0-9]{64}|[a-f0-9]{24})$/.test(window.location.pathname)) {
+            sessionStorage.setItem('shrimple-group-invite', window.location.pathname);
+        } else if (window.location.pathname === '/chat') {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('invite');
+            if (params.has('joinGroup') && /^(?:[a-f0-9]{64}|[a-f0-9]{24})$/.test(token || '')) {
+                sessionStorage.setItem('shrimple-group-invite', `/groups/join/${token}`);
+            }
+        }
+        const init = async () => {
+            if (!useAuthStore.getState().accessToken) await useAuthStore.getState().refresh();
+            const current = useAuthStore.getState();
+            if (current.accessToken && !current.user) await current.fetchMe();
+            else if (current.user) current.connectSocket();
+            if (alive) setStarting(false);
+        };
+        init();
+        return () => { alive = false; };
     }, [])
     if (starting) {
         return (

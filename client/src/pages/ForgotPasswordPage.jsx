@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import styles from '../assets/css/ForgotPasswordPage.module.scss';
-import { Loader2, ArrowLeft, Key, Mail, Lock, Eye, EyeOff, Check, ShieldAlert } from 'lucide-react';
+import { Loader2, ArrowLeft, Key, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import OTPInput from "@/components/lightswind-pro/otp-input";
 

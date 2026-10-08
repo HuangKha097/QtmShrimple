@@ -1,4 +1,4 @@
-import React from 'react';
+
 import classNames from 'classnames/bind';
 import { useTranslation } from 'react-i18next';
 import styles from '../../assets/css/SlideBar.module.scss';
@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 
 const cx = classNames.bind(styles);
 
-const SlideBar = ({ onCloseSetting, onCloseAddFriendPopup, onCloseCreateGroupPopup, onOpenQRModal }) => {
+const SlideBar = ({ onCloseAddFriendPopup, onCloseCreateGroupPopup, onOpenQRModal }) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
 

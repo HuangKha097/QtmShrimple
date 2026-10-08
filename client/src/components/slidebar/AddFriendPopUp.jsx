@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/AddFriendPopUp.module.scss';
 import { Search, UserPlus, X, Check, UserCheck, Loader2, Sparkles, Users, QrCode } from 'lucide-react';

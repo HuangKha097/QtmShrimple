@@ -1,18 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { 
-    MessageSquare, 
-    Newspaper, 
-    Video, 
-    Bookmark, 
-    Users, 
-    User, 
-    Settings, 
-    LogOut,
-    SquarePen,
-    Feather,
-    MoreHorizontal
-} from 'lucide-react';
+import { MessageSquare, Newspaper, Video, Users, User, Settings, LogOut, Feather, MoreHorizontal } from 'lucide-react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/XNavRail.module.scss';
 import { useTranslation } from 'react-i18next';
@@ -24,7 +12,7 @@ import { ASSET_BASE_URL } from '../../config/env';
 
 const cx = classNames.bind(styles);
 
-export default function XNavRail({ onCloseSetting, onOpenNewChat, onOpenPostModal }) {
+export default function XNavRail({ onOpenPostModal }) {
     const { t } = useTranslation();
     const { user, signOut } = useAuthStore();
     const conversations = useChatStore(state => state.conversations || []);

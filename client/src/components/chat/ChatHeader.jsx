@@ -1,13 +1,13 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/ChatHeader.module.scss';
 import defaultAvatar from "../../../public/favicon.png";
-import { Info, Phone, Video, ChevronLeft, MoreVertical, Pin, PinOff, ChevronDown, ChevronUp, X, PhoneCall } from 'lucide-react';
+import { Info, Phone, Video, ChevronLeft, MoreVertical, Pin, PinOff, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useCallStore } from '../../stores/useCallStore';
 import { useGroupCallStore } from '../../stores/useGroupCallStore';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ASSET_BASE_URL } from '../../config/env.js';
 
@@ -62,11 +62,9 @@ const ChatHeader = ({ onCloseChatInfo, chat }) => {
         partnerId = partner._id;
     }
 
-    const isAllowedToCall = useMemo(() => {
-        if (isGroup) return true;
-        if (!partner) return false;
-        return friends.some(f => f._id.toString() === partner._id.toString());
-    }, [isGroup, partner, friends]);
+    const isAllowedToCall = isGroup || Boolean(
+        partner && friends.some(f => f._id.toString() === partner._id.toString())
+    );
 
     const renderAvatar = () => {
         const getAvatarSrc = (url) => {

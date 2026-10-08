@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { X, UploadCloud, Film, Loader2, Globe, Users, Lock, Sparkles } from 'lucide-react';
 import { usePostStore } from '../../stores/usePostStore';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -88,7 +88,7 @@ const VideoUploadModal = ({ isOpen, onClose }) => {
             setFile(null);
             if (preview) URL.revokeObjectURL(preview);
             setPreview(null);
-        } catch (err) {
+        } catch {
             toast.error("Không thể tải lên video");
         }
     };

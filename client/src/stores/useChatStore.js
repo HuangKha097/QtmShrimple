@@ -3,6 +3,8 @@ import {persist} from "zustand/middleware";
 import {chatService} from "../services/chatService.js";
 import {friendService} from "../services/friendService.js";
 import {useAuthStore} from "./useAuthStore.js"; // 1. Import thêm service
+import { useGroupCallStore } from './useGroupCallStore.js';
+import { toast } from 'sonner';
 
 
 export const useChatStore = create(
@@ -19,6 +21,50 @@ export const useChatStore = create(
             isCreatingGroup: false,
             activeReactionMessageId: null,
             setActiveReactionMessageId: (id) => set({ activeReactionMessageId: id }),
+
+            upsertConversation: (conversation) => {
+                if (!conversation?._id) return;
+                const myId = useAuthStore.getState().user?._id?.toString();
+                if (myId && conversation.isGroup && !conversation.participants?.some(member => (member?._id || member)?.toString() === myId)) {
+                    get().removeConversation(conversation._id);
+                    return;
+                }
+                set(state => ({ conversations: state.conversations.some(c => c._id === conversation._id)
+                    ? state.conversations.map(c => c._id === conversation._id ? conversation : c)
+                    : [conversation, ...state.conversations] }));
+            },
+            removeConversation: (conversationId) => {
+                useGroupCallStore.getState().removeConversationCalls(conversationId);
+                set(state => {
+                    const messages = { ...state.messages };
+                    const pinnedMessages = { ...state.pinnedMessages };
+                    delete messages[conversationId];
+                    delete pinnedMessages[conversationId];
+                    return {
+                        conversations: state.conversations.filter(c => c._id !== conversationId),
+                        messages, pinnedMessages,
+                        activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId,
+                    };
+                });
+            },
+            updateGroup: async (id, data) => {
+                const { conversation } = await chatService.updateGroup(id, data);
+                get().upsertConversation(conversation);
+            },
+            removeGroupMember: async (id, memberId) => {
+                const { conversation } = await chatService.removeGroupMember(id, memberId);
+                get().upsertConversation(conversation);
+            },
+            deleteGroup: async (id) => {
+                await chatService.deleteGroup(id);
+                get().removeConversation(id);
+            },
+            joinGroupInvite: async (token) => {
+                const { conversation } = await chatService.joinGroupInvite(token);
+                get().upsertConversation(conversation);
+                get().setActiveConversationId(conversation._id);
+                return conversation;
+            },
 
             friends: [],
             friendRequests: [],
@@ -52,6 +98,9 @@ export const useChatStore = create(
                 try {
 
                     const {conversations} = await chatService.fetchConversations();
+                    const visibleIds = new Set(conversations.map(c => c._id));
+                    get().conversations.filter(c => c.isGroup && !visibleIds.has(c._id))
+                        .forEach(c => get().removeConversation(c._id));
                     set({
                         conversations: conversations,
                         loading: false
@@ -150,9 +199,6 @@ export const useChatStore = create(
                 try {
                     await friendService.sendRequest(targetUserId);
                     // Optionally update state if needed, e.g. add to sent requests list
-                     set((state) => ({
-                         // Maybe track sent requests ID to disable button
-                     }));
                 } catch (error) {
                     console.error("Error sending friend request:", error);
                     throw error;
@@ -219,6 +265,7 @@ export const useChatStore = create(
 
                     set((state) => {
                         const prevItems = state.messages[convoId]?.items ?? [];
+                        if (!state.conversations.some(c => c._id === convoId)) return state;
                         
                         // Lọc bỏ tin nhắn đã tồn tại để tránh trùng key
                         const newItems = processed.filter(
@@ -518,7 +565,6 @@ export const useChatStore = create(
                              // Simple approach: Just assume we receive an object map { userId: count, ... } from backend
                              // But here we might just want to set the whole unreadCounts object/map for 'me' to 0
                              
-                             const currentUnread = updatedConversations[convoIndex].unreadCounts || {};
                              
                              // If it's a Map in local state (unlikely from JSON), convert or set.
                              // Safest: clone object and set logic
@@ -717,9 +763,7 @@ export const useChatStore = create(
             addMembersAction: async (conversationId, memberIds) => {
                 const data = await chatService.addMembers(conversationId, memberIds);
                 if (data.conversation) {
-                    set((state) => ({
-                        conversations: state.conversations.map(c => c._id === conversationId ? data.conversation : c)
-                    }));
+                    get().upsertConversation(data.conversation);
                 }
                 return data;
             },
@@ -727,9 +771,7 @@ export const useChatStore = create(
             removeMemberAction: async (conversationId, memberId) => {
                 const data = await chatService.removeMember(conversationId, memberId);
                 if (data.conversation) {
-                    set((state) => ({
-                        conversations: state.conversations.map(c => c._id === conversationId ? data.conversation : c)
-                    }));
+                    get().upsertConversation(data.conversation);
                 }
                 return data;
             },
@@ -737,27 +779,19 @@ export const useChatStore = create(
             updateMemberRoleAction: async (conversationId, memberId, role) => {
                 const data = await chatService.updateMemberRole(conversationId, memberId, role);
                 if (data.conversation) {
-                    set((state) => ({
-                        conversations: state.conversations.map(c => c._id === conversationId ? data.conversation : c)
-                    }));
+                    get().upsertConversation(data.conversation);
                 }
                 return data;
             },
 
             leaveGroupAction: async (conversationId) => {
                 await chatService.leaveGroup(conversationId);
-                set((state) => ({
-                    conversations: state.conversations.filter(c => c._id !== conversationId),
-                    activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId
-                }));
+                get().removeConversation(conversationId);
             },
 
             disbandGroupAction: async (conversationId) => {
                 await chatService.disbandGroup(conversationId);
-                set((state) => ({
-                    conversations: state.conversations.filter(c => c._id !== conversationId),
-                    activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId
-                }));
+                get().removeConversation(conversationId);
             },
 
             createPollAction: async (conversationId, question, options, allowMultiple) => {
@@ -915,26 +949,18 @@ export const useChatStore = create(
 
                 socket.on("conversationUpdated", (updatedConvo) => {
                     if (!updatedConvo?._id) return;
-                    set((state) => ({
-                        conversations: state.conversations.map(c => c._id === updatedConvo._id ? updatedConvo : c)
-                    }));
+                    get().upsertConversation(updatedConvo);
                 });
 
                 socket.on("conversationRemoved", ({ conversationId }) => {
                     if (!conversationId) return;
-                    set((state) => ({
-                        conversations: state.conversations.filter(c => c._id !== conversationId),
-                        activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId
-                    }));
+                    get().removeConversation(conversationId);
                 });
 
                 socket.on("groupDisbanded", ({ conversationId, groupName }) => {
                     if (!conversationId) return;
                     toast.info(`Nhóm "${groupName || ""}" đã được giải tán bởi quản trị viên.`);
-                    set((state) => ({
-                        conversations: state.conversations.filter(c => c._id !== conversationId),
-                        activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId
-                    }));
+                    get().removeConversation(conversationId);
                 });
 
                 socket.on("messageReaction", ({ messageId, reactions, conversationId }) => {

@@ -4,24 +4,9 @@ import styles from '../../assets/css/PostsContainer.module.scss';
 import { usePostStore } from '../../stores/usePostStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useChatStore } from '../../stores/useChatStore';
-import { useNotificationStore } from '../../stores/useNotificationStore';
+
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { 
-    Image, 
-    Video, 
-    Menu, 
-    Search, 
-    Globe, 
-    Users,
-    Lock,
-    ChevronDown,
-    Check,
-    X,
-    Smile,
-    Loader2,
-    Bell,
-    ArrowUp
-} from 'lucide-react';
+import { Image, Video, Search, Globe, Users, Lock, ChevronDown, Check, X, Loader2, ArrowUp } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import PostItem from './PostItem';
 import WhoToFollowWidget from './WhoToFollowWidget';
@@ -30,7 +15,7 @@ import LoadingSpin from '../common/loading/LoadingSpin';
 import NotificationDropdown from '../common/NotificationDropdown';
 import { useTranslation } from 'react-i18next';
 import default_avt from '../../../public/favicon.png';
-import { friendService } from '../../services/friendService';
+
 import { toast } from 'sonner';
 
 const cx = classNames.bind(styles);

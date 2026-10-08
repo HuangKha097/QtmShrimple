@@ -1,29 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/PostsContainer.module.scss';
 import { usePostStore } from '../../stores/usePostStore';
-import { 
-    Heart, 
-    MessageCircle, 
-    Trash2, 
-    MoreHorizontal, 
-    Bookmark, 
-    EyeOff, 
-    Flag, 
-    Link as LinkIcon, 
-    Repeat, 
-    Share, 
-    Send, 
-    Smile, 
-    Globe, 
-    Users, 
-    Lock, 
-    Check, 
-    X, 
-    Pencil, 
-    Volume2, 
-    VolumeX 
-} from 'lucide-react';
+import { Heart, MessageCircle, Trash2, MoreHorizontal, Bookmark, EyeOff, Flag, Link as LinkIcon, Repeat, Share, Send, Globe, Users, Lock, Check, X, Pencil, Volume2, VolumeX } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';

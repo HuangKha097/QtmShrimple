@@ -2,6 +2,20 @@
 
 Shrimple là ứng dụng mạng xã hội full-stack kết hợp nhắn tin thời gian thực, được xây dựng với React, Express, Socket.IO và MongoDB.
 
+## Tài liệu dự án
+
+Các tài liệu dưới đây được tái dựng từ code ngày 2026-10-08; trạng thái đã triển
+khai và nghiệm thu được phân biệt rõ trong kanban.
+
+| Tài liệu | Trách nhiệm |
+| --- | --- |
+| [PRD](docs/prd.md) | Mục tiêu, phạm vi, FR, BR và tiêu chí nghiệm thu |
+| [Kanban](docs/kanban.md) | Ticket, dependency, trạng thái và bằng chứng |
+| [Design](docs/design.md) | Màn hình, luồng UI, design token và khả năng truy cập |
+| [Plan](docs/plan.md) | Kiến trúc, API, dữ liệu và kế hoạch hoàn thiện |
+| [AGENTS.md](AGENTS.md) | Hướng dẫn agent làm việc trong repository |
+| [Kết quả cleanup](docs/validation/codebase-cleanup.md) | Phần đã dọn và các kiểm tra thực tế |
+
 ## Điểm nổi bật
 
 - **Xác thực:** đăng ký/đăng nhập bằng email và mật khẩu, xác minh email đăng ký bằng OTP, đăng nhập Google, quên mật khẩu bằng OTP.
@@ -37,7 +51,7 @@ Client gọi REST để xử lý dữ liệu nghiệp vụ và dùng Socket.IO c
 | Phần | Công nghệ chính |
 |---|---|
 | Client | React 19, Vite 7, React Router, Zustand, Axios, Socket.IO Client, simple-peer |
-| Giao diện | Sass, Framer Motion, Lucide, Sonner |
+| Giao diện | Sass, Motion, GSAP, OGL, Lucide, Sonner |
 | Form và xác thực client | React Hook Form, Zod, <code>@react-oauth/google</code> |
 | Anti-Peep | <code>@vladmandic/human</code> (BlazeFace, FaceMesh, Iris, FaceRes) |
 | Server | Node.js ESM, Express 5, Socket.IO 4 |
@@ -205,6 +219,7 @@ Backend tổ chức REST API theo các nhóm sau:
 | <code>/api/messages</code> | Tin nhắn và thao tác trên tin nhắn |
 | <code>/api/conversations</code> | Hội thoại trực tiếp và nhóm |
 | <code>/api/posts</code> | Bài đăng, feed và tương tác |
+| <code>/api/notifications</code> | Thông báo trong app và đánh dấu đã đọc |
 
 Các nhóm nghiệp vụ được bảo vệ bằng xác thực; nhóm auth là điểm vào công khai. Chi tiết payload và response nên được đối chiếu trực tiếp với route/controller tương ứng khi tích hợp.
 

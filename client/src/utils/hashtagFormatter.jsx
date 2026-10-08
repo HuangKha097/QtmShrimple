@@ -1,4 +1,4 @@
-import React from "react";
+
 
 /**
  * Format text content containing #hashtags, @mentions, and URLs into clickable elements

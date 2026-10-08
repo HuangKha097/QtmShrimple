@@ -1,16 +1,31 @@
-# React + Vite
+# Shrimple client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend React 19 + Vite 7 của Shrimple: chat, feed, video, hồ sơ, cài đặt,
+WebRTC và Anti-Peep. Code dùng JavaScript ESM, Zustand và Sass Modules.
 
-Currently, two official plugins are available:
+## Chạy và kiểm tra
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Từ thư mục `client/`:
 
-## React Compiler
+```powershell
+npm ci
+npm run dev
+npm run lint
+npm test
+npm run build
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Tạo `.env.development` từ `.env.example` theo [hướng dẫn gốc](../README.md).
+Các biến `VITE_*` được đưa vào bundle trình duyệt; chỉ chứa cấu hình công khai.
 
-## Expanding the ESLint configuration
+## Tài liệu dự án
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- [PRD](../docs/prd.md): yêu cầu và hành vi sản phẩm.
+- [Kanban](../docs/kanban.md): trạng thái và bằng chứng ticket.
+- [Thiết kế](../docs/design.md): màn hình, token, luồng và trạng thái UI.
+- [Kế hoạch kỹ thuật](../docs/plan.md): kiến trúc, API, dữ liệu và vận hành.
+- [Hướng dẫn agent](../AGENTS.md): quy tắc thay đổi và kiểm tra.
+
+Anti-Peep dùng model tại `public/models/human/`; không xóa các cặp JSON/BIN.
+Unit tests hiện tập trung vào tracker Anti-Peep; chưa thay thế nghiệm thu
+giao diện, camera hoặc cuộc gọi trên thiết bị thật.

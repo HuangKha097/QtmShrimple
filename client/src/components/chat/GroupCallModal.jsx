@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/GroupCall.module.scss';
 import { useGroupCallStore } from '../../stores/useGroupCallStore';

@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import SignInPage from "./pages/SignInPage.jsx";
 import SignUpPage from "./pages/SignUpPage.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
 import ChatPage from "./pages/ChatPage.jsx";
+import JoinGroupPage from './pages/JoinGroupPage.jsx';
 import { Toaster } from "sonner";
 import ProtectedRoute from "./auth/ProtectedRoute.jsx";
 import { useThemeStore } from "./stores/useThemeStore.js";
@@ -26,7 +27,6 @@ import { useGroupCallStore } from "./stores/useGroupCallStore.js";
 import { useNotificationStore } from "./stores/useNotificationStore.js";
 import { useAuthStore } from "./stores/useAuthStore.js";
 import { useUIStore } from "./stores/useUIStore.js";
-// import LoadingSpin from "./components/common/loading/LoadingSpin.jsx"; // Removed from here
 
 
 import { AntiPeepProvider } from "./components/anti-peep/AntiPeepProvider.jsx";
@@ -37,6 +37,10 @@ import { useTranslation } from 'react-i18next';
 // Wrapper to consume outlet context and pass it to ChatContainer
 const ChatContainerWrapper = () => {
     const context = useOutletContext();
+    const pendingInvite = sessionStorage.getItem('shrimple-group-invite');
+    if (/^\/groups\/join\/(?:[a-f0-9]{64}|[a-f0-9]{24})$/.test(pendingInvite || '')) {
+        return <Navigate to={pendingInvite} replace />;
+    }
     return <ChatContainer {...context} />;
 };
 
@@ -104,6 +108,7 @@ const App = () => {
 
 
                     <Route element={<ProtectedRoute />}>
+                        <Route path="/groups/join/:token" element={<JoinGroupPage />} />
                         <Route path="/complete-profile" element={<CompleteProfile />} />
                         <Route element={<ChatPage />}>
                             <Route path="/" element={<Navigate to="/chat" replace />} />

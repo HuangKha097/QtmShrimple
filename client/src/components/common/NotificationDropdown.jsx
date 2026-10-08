@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import classNames from 'classnames/bind';
 import { motion as Motion, AnimatePresence } from 'motion/react';
-import { Bell, Heart, MessageCircle, Reply, UserPlus } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import styles from '../../assets/css/NotificationDropdown.module.scss';
 import { useNotificationStore } from '../../stores/useNotificationStore';
 import { useChatStore } from '../../stores/useChatStore';

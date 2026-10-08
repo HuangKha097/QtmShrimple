@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { MailCheck, X } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "motion/react";
 import { useAuthStore } from "../../stores/useAuthStore";
@@ -88,9 +88,6 @@ const GoogleOtpDialog = ({ open, email, pendingToken, onVerified, onCancel }) =>
                                     length={CODE_LENGTH}
                                     value={code}
                                     onChange={setCode}
-                                    onComplete={(fullCode) => {
-                                        // Optional auto submit
-                                    }}
                                     disabled={loading}
                                     autoFocus={open}
                                 />

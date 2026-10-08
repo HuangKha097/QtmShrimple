@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import classNames from 'classnames/bind';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { useAuthStore } from "../../stores/useAuthStore.js";
 import { useChatStore } from "../../stores/useChatStore.js";
 import { chatService } from "../../services/chatService.js";
 import { userSettingsService } from "../../services/userSettingsService.js";
+import GroupDetails from './GroupDetails.jsx';
 import { ASSET_BASE_URL } from "../../config/env.js";
 import AddMemberModal from "./AddMemberModal.jsx";
 import TreeQRCodeModal from "../common/TreeQRCodeModal.jsx";
@@ -43,7 +44,7 @@ const cx = classNames.bind(styles);
 
 const ChatInfo = ({ chat, onClose }) => {
     const navigate = useNavigate();
-    const { user: currentUser, onlineUsers } = useAuthStore();
+    const { user: currentUser, onlineUsers, socket } = useAuthStore();
     const { 
         friends, 
         pinnedMessages, 
@@ -65,6 +66,7 @@ const ChatInfo = ({ chat, onClose }) => {
     const [showQRModal, setShowQRModal] = useState(false);
     const [groupInviteCode, setGroupInviteCode] = useState('');
     const [activeMemberMenu, setActiveMemberMenu] = useState(null);
+    const [showInvite, setShowInvite] = useState(false);
 
     const isGroup = !!chat?.isGroup;
     const participants = chat?.participants || [];
@@ -80,17 +82,28 @@ const ChatInfo = ({ chat, onClose }) => {
 
             fetchPinnedMessages(chat._id);
 
-            if (isGroup) {
-                chatService.getGroupInvite(chat._id)
-                    .then(data => {
-                        if (data?.inviteCode) {
-                            setGroupInviteCode(data.inviteCode);
-                        }
-                    })
-                    .catch(err => console.error("Failed to fetch group invite", err));
-            }
         }
-    }, [chat?._id, isGroup]);
+    }, [chat?._id, fetchPinnedMessages]);
+
+    useEffect(() => {
+        if (!isGroup || !chat?._id) return;
+        let alive = true;
+        let requestId = 0;
+        const load = async () => {
+            const currentRequest = ++requestId;
+            setGroupInviteCode('');
+            try {
+                const data = await chatService.getGroupInvite(chat._id);
+                if (alive && currentRequest === requestId) setGroupInviteCode(data.token || data.inviteCode || '');
+            } catch (error) {
+                if (alive && currentRequest === requestId) console.error('Failed to fetch group invite', error);
+            }
+        };
+        const onChanged = ({ conversationId }) => { if (conversationId === chat._id) load(); };
+        load();
+        socket?.on('groupInviteChanged', onChanged);
+        return () => { alive = false; socket?.off('groupInviteChanged', onChanged); };
+    }, [chat?._id, isGroup, socket]);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -101,11 +114,14 @@ const ChatInfo = ({ chat, onClose }) => {
 
     const sortedParticipants = useMemo(() => {
         return [...(chat?.participants || [])].sort((a, b) => {
+            const creatorId = (chat?.group?.createdBy?._id || chat?.group?.createdBy)?.toString();
+            if (a._id === creatorId) return -1;
+            if (b._id === creatorId) return 1;
             if (a._id === currentUser?._id) return -1;
             if (b._id === currentUser?._id) return 1;
             return 0;
         });
-    }, [chat?.participants, currentUser]);
+    }, [chat?.participants, chat?.group?.createdBy, currentUser]);
 
     if (!chat) return null;
 
@@ -161,6 +177,7 @@ const ChatInfo = ({ chat, onClose }) => {
                 return pin.content || "Tin nhắn đã ghim";
         }
     };
+    const isLeader = isGroup && isCurrentUserCreator;
 
     const getAvatarSrc = (url) => {
         if (!url) return defaultAvatar;
@@ -189,11 +206,6 @@ const ChatInfo = ({ chat, onClose }) => {
             toast.info(next ? "Đã tắt thông báo cuộc trò chuyện" : "Đã bật thông báo cuộc trò chuyện");
             return next;
         });
-    };
-
-    const handleCopyLink = () => {
-        navigator.clipboard.writeText(window.location.href);
-        toast.success("Đã sao chép liên kết vào bộ nhớ tạm");
     };
 
     const handleViewProfile = (uid) => {
@@ -294,7 +306,7 @@ const ChatInfo = ({ chat, onClose }) => {
                     <X size={20} strokeWidth={2.2} />
                 </button>
                 <div className={cx('nav-title-box')}>
-                    <span className={cx('nav-title')}>Thông tin cuộc trò chuyện</span>
+                    <span className={cx('nav-title')}>{isGroup ? 'Thông tin nhóm' : 'Thông tin cuộc trò chuyện'}</span>
                 </div>
             </header>
 
@@ -304,12 +316,14 @@ const ChatInfo = ({ chat, onClose }) => {
                     <div className={cx('avatar-wrapper')}>
                         {isGroup ? (
                             chat.avatarURL || chat.group?.avatarURL ? (
+                                <div className={cx('single-avatar-box')}>
                                 <img
                                     src={getAvatarSrc(chat.avatarURL || chat.group?.avatarURL)}
                                     alt="Group Avatar"
                                     className={cx('single-avatar')}
                                     onError={(e) => { e.target.src = defaultAvatar; }}
                                 />
+                                </div>
                             ) : (
                                 <div className={cx('group-avatar-stack')}>
                                     <img 
@@ -377,6 +391,7 @@ const ChatInfo = ({ chat, onClose }) => {
                             className={cx('action-pill')}
                             whileTap={{ scale: 0.94 }}
                             onClick={() => setShowQRModal(true)}
+                            disabled={isGroup && !groupInviteCode}
                             title={isGroup ? "Mã QR nhóm" : "Mã QR kết bạn"}
                         >
                             <QrCode size={18} />
@@ -387,11 +402,11 @@ const ChatInfo = ({ chat, onClose }) => {
                             <Motion.button 
                                 className={cx('action-pill')}
                                 whileTap={{ scale: 0.94 }}
-                                onClick={handleCopyLink}
-                                title="Chia sẻ liên kết"
+                                onClick={() => setShowInvite(true)}
+                                title="Mời thành viên bằng URL hoặc QR"
                             >
                                 <Share2 size={18} />
-                                <span>Chia sẻ</span>
+                                <span>Mời / QR</span>
                             </Motion.button>
                         ) : (
                             <Motion.button 
@@ -483,6 +498,8 @@ const ChatInfo = ({ chat, onClose }) => {
 
             {/* 4. Tab Content Area */}
             <div className={cx('scroll-content')}>
+                {isGroup && <GroupDetails key={chat._id} chat={chat} isLeader={isLeader}
+                    showInvite={showInvite} onCloseInvite={() => setShowInvite(false)} onClose={onClose} />}
                 <AnimatePresence mode="wait">
                     {activeTab === 'media' && (
                         <Motion.div 
@@ -651,7 +668,7 @@ const ChatInfo = ({ chat, onClose }) => {
                                     const isThisCreator = groupCreatorId && memberIdStr === groupCreatorId;
                                     const isThisAdmin = isThisCreator || member.role === 'admin';
                                     const memberOnline = Array.isArray(onlineUsers) && onlineUsers.includes(memberIdStr);
-                                    const canManageThisMember = isCurrentUserAdmin && !isMe && !isThisCreator;
+                                    const canManageThisMember = !isMe && !isThisCreator && (isCurrentUserCreator || (isCurrentUserAdmin && member.role !== 'admin'));
 
                                     return (
                                         <div 
@@ -707,7 +724,7 @@ const ChatInfo = ({ chat, onClose }) => {
 
                                                     {activeMemberMenu === memberIdStr && (
                                                         <div className={cx('member-menu-popover')}>
-                                                            {member.role === 'admin' ? (
+                                                            {isCurrentUserCreator && (member.role === 'admin' ? (
                                                                 <button 
                                                                     className={cx('menu-opt')}
                                                                     onClick={() => handleUpdateRole(member._id, 'member')}
@@ -723,7 +740,7 @@ const ChatInfo = ({ chat, onClose }) => {
                                                                     <ShieldCheck size={15} />
                                                                     <span>Bổ nhiệm Quản trị viên</span>
                                                                 </button>
-                                                            )}
+                                                            ))}
                                                             <button 
                                                                 className={cx('menu-opt', 'danger')}
                                                                 onClick={() => handleRemoveMember(member._id, member.displayName || member.username)}
@@ -750,7 +767,7 @@ const ChatInfo = ({ chat, onClose }) => {
                                     <LogOut size={16} />
                                     <span>Rời khỏi nhóm</span>
                                 </button>
-                                {isCurrentUserAdmin && (
+                                {isCurrentUserCreator && (
                                     <button 
                                         type="button" 
                                         className={cx('group-action-btn', 'disband')}
@@ -813,7 +830,7 @@ const ChatInfo = ({ chat, onClose }) => {
                 title={isGroup ? `Mã QR nhóm ${displayName}` : `Mã QR của ${displayName}`}
                 dataValue={
                     isGroup 
-                        ? `${window.location.origin}/chat?joinGroup=true&invite=${groupInviteCode}` 
+                        ? `${window.location.origin}/groups/join/${groupInviteCode}`
                         : `${window.location.origin}/feed/profile/${partnerId}?action=add_friend`
                 }
                 name={displayName}

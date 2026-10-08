@@ -1,17 +1,8 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import classNames from 'classnames/bind';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import styles from '../../assets/css/AntiPeep.module.scss';
-import { 
-    X, 
-    Delete, 
-    CheckCircle2,
-    RefreshCw,
-    ScanFace,
-    Shield,
-    KeyRound,
-    Sparkles
-} from 'lucide-react';
+import { X, Delete, CheckCircle2, RefreshCw, KeyRound, Sparkles } from 'lucide-react';
 import XButton from '../ui/animate/XButton';
 
 const cx = classNames.bind(styles);

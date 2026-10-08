@@ -1,11 +1,4 @@
-import React, {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useRef,
-    useState,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { toast } from 'sonner';
 import axios from '../../lib/axios';
@@ -24,10 +17,6 @@ import {
     OWNER_MATCH_THRESHOLD,
     scanConfig,
 } from './antiPeepVision';
-import styles from '../../assets/css/AntiPeep.module.scss';
-import classNames from 'classnames/bind';
-
-const cx = classNames.bind(styles);
 const AntiPeepContext = createContext();
 
 const SCAN_DELAY_MS = 1500;

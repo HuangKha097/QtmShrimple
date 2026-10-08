@@ -34,7 +34,6 @@ const Message = ({
     createdAt,
     callId = null,
     callStatus = 'ended',
-    callDuration = null,
     poll = null
 }) => {
     const [pickerStyle, setPickerStyle] = useState({});
@@ -494,7 +493,7 @@ const Message = ({
                                         </span>
                                         {!poll.closed && (
                                             (poll.createdBy?.toString() === currentUser?._id?.toString() ||
-                                            currentConvo?.participants?.some(p => p._id === currentUser?._id && p.role === 'admin'))
+                                            currentConvo?.participants?.some(p => p._id === currentUser?._id && ['leader', 'admin'].includes(p.role)))
                                         ) && (
                                             <button
                                                 type="button"

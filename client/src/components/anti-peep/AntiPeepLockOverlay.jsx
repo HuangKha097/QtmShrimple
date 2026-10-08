@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import classNames from 'classnames/bind';
 import { motion as Motion, AnimatePresence } from 'motion/react';
-import { Lock, ShieldAlert, KeyRound, Delete, Loader2, ArrowRight } from 'lucide-react';
+import { Lock, ShieldAlert, KeyRound, Delete, ArrowRight } from 'lucide-react';
 import styles from '../../assets/css/AntiPeep.module.scss';
 import XButton from '../ui/animate/XButton';
 

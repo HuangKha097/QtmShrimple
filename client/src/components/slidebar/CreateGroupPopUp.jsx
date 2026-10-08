@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/CreateGroupPopUp.module.scss';
 import {
@@ -20,9 +20,7 @@ const CreateGroupPopup = ({ onCloseCreateGroupPopup }) => {
 
     // --- State Form ---
     const [groupName, setGroupName] = useState('');
-    const [groupDesc, setGroupDesc] = useState('');
     const [avatarPreview, setAvatarPreview] = useState(null);
-    const [groupAvatarFile, setGroupAvatarFile] = useState(null);
 
     // --- State Members ---
     const [selectedMembers, setSelectedMembers] = useState([]);
@@ -37,7 +35,6 @@ const CreateGroupPopup = ({ onCloseCreateGroupPopup }) => {
     const handleImageChange = (e) => {
         const file = e.target.files?.[0];
         if (file) {
-            setGroupAvatarFile(file);
             setAvatarPreview(URL.createObjectURL(file));
         }
     };

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import classNames from 'classnames/bind';
 import styles from '../../assets/css/AntiPeep.module.scss';
 import { useAuthStore } from '../../stores/useAuthStore';

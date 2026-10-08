@@ -21,8 +21,6 @@ import {
   BirchIcon,
 } from '../magic-tree/ui/icons';
 import '../magic-tree/styles.css';
-import { chatService } from '../../services/chatService.js';
-import { useChatStore } from '../../stores/useChatStore.js';
 import { Download, ScanLine, X, Camera, Upload, Trees } from 'lucide-react';
 
 const SEASON_ICONS = {
@@ -51,7 +49,6 @@ const TreeQRCodeModal = ({
   avatarUrl = '',
 }) => {
   const navigate = useNavigate();
-  const { fetchConversations, setActiveConversationId } = useChatStore();
 
   const canvasRef = useRef(null);
   const dockRef = useRef(null);
@@ -239,28 +236,20 @@ const TreeQRCodeModal = ({
   const handleQRResult = async (result) => {
     toast.info("Đã quét mã QR!");
 
-    // 1. Group Invite
-    if (result.includes("joinGroup=") || result.includes("/chat?joinGroup=")) {
-      try {
-        const url = new URL(result);
-        const inviteCode = url.searchParams.get("invite") || url.searchParams.get("joinGroup");
-        if (inviteCode) {
-          const res = await chatService.joinGroupByInvite(inviteCode);
-          toast.success("Đã tham gia nhóm thành công!");
-          await fetchConversations();
-          if (res?.conversation?._id) {
-            setActiveConversationId(res.conversation._id);
-          }
-          onClose();
-          navigate("/chat");
-          return;
-        }
-      } catch (e) {
-        console.error("Parse group invite failed", e);
+    // Secure invitations open the preview before joining.
+    try {
+      const url = new URL(result, window.location.origin);
+      const match = url.pathname.match(/^\/groups\/join\/((?:[a-f0-9]{64}|[a-f0-9]{24}))$/i);
+      const legacyToken = url.searchParams.get('invite');
+      const token = match?.[1] || (url.pathname === '/chat' && url.searchParams.has('joinGroup') && /^(?:[a-f0-9]{64}|[a-f0-9]{24})$/i.test(legacyToken || '') ? legacyToken : null);
+      if (token) {
+        onClose();
+        navigate(`/groups/join/${token}`);
+        return;
       }
-    }
+    } catch { /* Non-URL QR content is handled below. */ }
 
-    // 2. Profile link
+    // Profile link
     if (result.includes("/feed/profile/")) {
       try {
         const parts = result.split("/feed/profile/");
