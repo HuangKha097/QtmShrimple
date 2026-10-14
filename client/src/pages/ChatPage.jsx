@@ -10,7 +10,6 @@ import XNavRail from "../components/common/XNavRail.jsx";
 
 import { useAuthStore } from "../stores/useAuthStore.js";
 import { useChatStore } from "../stores/useChatStore.js";
-
 import AddFriendPopUp from "../components/slidebar/AddFriendPopUp.jsx";
 import CreateGroupPopUp from "../components/slidebar/CreateGroupPopUp.jsx";
 import TreeQRCodeModal from "../components/common/TreeQRCodeModal.jsx";
@@ -81,13 +80,14 @@ const ChatPage = () => {
                                 onCloseAddFriendPopup={onCloseAddFriendPopup}
                                 onCloseCreateGroupPopup={onCloseCreateGroupPopup}
                                 onOpenQRModal={() => setIsShowQRModal(true)}
+                                onOpenNavigation={toggleFeedMenu}
                             />
                         </div>
                     </div>
                 )}
 
                 {/* Mobile Drawer for Feed */}
-                {isFeedView && isFeedMenuOpen && (
+                {isFeedMenuOpen && (
                     <>
                         <div className={cx("mobile-backdrop")} onClick={closeFeedMenu}></div>
                         <div className={cx("mobile-feed-drawer")}>

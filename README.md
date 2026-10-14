@@ -22,6 +22,7 @@ khai và nghiệm thu được phân biệt rõ trong kanban.
 - **Hồ sơ và quan hệ:** quản lý hồ sơ cá nhân, kết bạn và chặn người dùng.
 - **Nhắn tin trực tiếp và nhóm:** gửi nội dung và media, reaction, thu hồi, xóa, ghim, chuyển tiếp, trạng thái đã đọc và trạng thái online.
 - **Cuộc gọi:** gọi thoại/video ngang hàng bằng WebRTC; server chuyển tiếp tín hiệu thiết lập cuộc gọi qua Socket.IO.
+- **Mic dịch thuật:** trong cuộc gọi 1–1 hoặc nhóm, người dùng có thể mở note dịch tiếng Anh/Việt theo tên người nói. Audio được chia thành clip ngắn, xử lý qua FastAPI và chỉ lưu note trong phiên giao diện hiện tại.
 - **Nội dung xã hội:** bài đăng, bảng tin, bình luận, reaction, nội dung đã lưu và bảng tin video ngắn.
 - **Cá nhân hóa:** giao diện sáng/tối và các thiết lập người dùng.
 - **Anti-Peep:** ghi nhớ chủ nhân bằng 5 embedding, quét camera ở nhịp thấp và chỉ khóa khi cùng một người lạ nhìn vào màn hình liên tục 3 giây. Camera tự dừng khi tab bị ẩn.
@@ -45,6 +46,37 @@ React 19 + Vite
 ~~~
 
 Client gọi REST để xử lý dữ liệu nghiệp vụ và dùng Socket.IO cho trạng thái thời gian thực cũng như signaling WebRTC. Âm thanh/video cuộc gọi đi trực tiếp giữa các peer sau khi kết nối được thiết lập; server không phải media server.
+
+Khi bật Mic dịch, trình duyệt tạo clip 6 giây riêng từ luồng mic của từng người tham gia, gửi tới Express qua REST có access token; Express kiểm tra người gửi và người nói thuộc phiên gọi trước khi chuyển clip sang FastAPI. FastAPI gửi audio tới `whisper-server` của whisper.cpp để nhận dạng giọng nói bằng model medium đa ngôn ngữ lượng tử hóa q5_0; sau đó Qwen3 1.7B dịch `en`/`vi` theo prompt chỉ trả về bản dịch, với chế độ suy luận đã tắt. Người dùng chọn ngôn ngữ đang nói để nhận chữ chính xác hơn; API vẫn hỗ trợ tự nhận diện. Model whisper được nạp một lần trong tiến trình riêng. Nếu xử lý chậm, hàng chờ giữ tối đa một clip chưa gửi cho mỗi người nói, bỏ clip cũ hơn và hiển thị cảnh báo để ghi chú không tụt lại quá xa. Clip và note không được lưu vào MongoDB.
+
+### Chạy dịch thuật cục bộ
+
+Khuyến nghị chạy bằng Docker Compose trên máy có NVIDIA GPU và Docker Desktop WSL2 GPU support: tạo `ai-service/.env` từ `ai-service/.env.example`, đặt cùng `TRANSLATION_AI_KEY` với `server/.env`, rồi chạy `docker compose up -d --build`. Service `whisper` biên dịch whisper.cpp v1.9.4 với CUDA, tải model `ggml-medium-q5_0.bin` (khoảng 539 MB), kiểm tra SHA-256 và giữ model trong volume `whisper-model-cache`. Service `qwen` chạy bản GGUF Q8_0 chính thức của Qwen3 1.7B bằng llama.cpp và giữ model trong volume `qwen-model-cache`; `ai` nối tới hai service này. Lần đầu cần mạng để tải model. Trên máy không có NVIDIA GPU, đổi `whisper.build.dockerfile` trong `compose.yaml` về `Dockerfile`, bỏ `whisper.deploy.resources.reservations.devices` và `whisper.image`; bản CPU chạy được nhưng medium thường không theo kịp clip 6 giây.
+
+Nếu chạy ngoài Docker, cần Python 3.10+, `whisper-server` được build theo [hướng dẫn whisper.cpp](https://github.com/ggml-org/whisper.cpp), `llama-server` theo [hướng dẫn llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md), model medium đa ngôn ngữ và FFmpeg trên PATH. Khởi động `whisper-server` trước với `--model <đường_dẫn_model> --host 127.0.0.1 --port 8080 --language auto --convert`; khởi động `llama-server` với `-hf Qwen/Qwen3-1.7B-GGUF:Q8_0 --host 127.0.0.1 --port 8081 -c 1024 -np 1 -t 4`, rồi chạy FastAPI từ thư mục `ai-service/`:
+
+~~~powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:TRANSLATION_AI_KEY="replace_with_a_long_random_key"
+$env:QWEN_URL="http://127.0.0.1:8081"
+$env:WHISPER_CPP_URL="http://127.0.0.1:8080"
+.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8001
+~~~
+
+Đặt cùng giá trị `TRANSLATION_AI_KEY` trong `server/.env`, và `TRANSLATION_AI_URL=http://127.0.0.1:8001` nếu chạy backend trực tiếp trên Windows.
+
+Để thử riêng Qwen với câu mẫu trước khi mở cuộc gọi, chạy trong thư mục `ai-service/` sau khi `llama-server` sẵn sàng:
+
+~~~powershell
+.\.venv\Scripts\python.exe -c "from app import translate_text; print(translate_text('We should deploy the backend tonight.', 'en', 'vi'))"
+~~~
+
+Kết quả kỳ vọng là một câu tiếng Việt ngắn như `Chúng ta nên triển khai backend vào tối nay.`; cách diễn đạt có thể khác đôi chút giữa các lần chạy/model.
+
+Compose tự nối backend đến `http://ai:8001`; không dùng `127.0.0.1` giữa hai container. Có thể kiểm tra `http://127.0.0.1:8001/health`: lúc tải model hoặc chờ whisper trả HTTP 503 với `status=loading`, sau đó trả `status=ready`. Nếu bật Mic dịch trong lúc khởi động, bảng note sẽ kiểm tra lại trạng thái tải model thay vì tự đóng ngay. Model Qwen mặc định là `Qwen/Qwen3-1.7B-GGUF:Q8_0`; liên kết `Qwen/Qwen3-0.6B-FP8` là model nhỏ hơn và không phải cấu hình mặc định này.
+
+Chỉ hỗ trợ dịch Việt ↔ Anh. Đây là dịch theo clip khoảng 6 giây, nên vẫn có độ trễ ghi âm và xử lý, không bảo đảm độ chính xác tuyệt đối. Nếu nhiều người nói cùng lúc khiến medium + Qwen xử lý chậm hơn tốc độ ghi, app ưu tiên clip mới nhất và báo đã bỏ qua clip cũ. Chỉ bật Mic dịch khi người tham gia đồng ý gửi audio đến dịch vụ AI.
 
 ## Công nghệ
 
@@ -176,8 +208,10 @@ Các tệp env thật được Git bỏ qua. Hai tệp <code>.env.example</code>
 |---|---|
 | <code>npm run dev</code> | Chạy backend ở chế độ phát triển |
 | <code>npm start</code> | Khởi động backend bằng Node.js |
+| <code>npm test</code> | Kiểm tra xác thực socket và quyền tham gia phiên dịch của cuộc gọi 1–1 |
+| <code>npm run test:ai</code> | Gửi clip WAV im lặng qua FastAPI để kiểm tra đường xử lý audio; cần AI service đang chạy và các biến `TRANSLATION_AI_URL`, `TRANSLATION_AI_KEY` |
 
-Server hiện chưa khai báo npm script cho kiểm thử tự động.
+Các script trên kiểm tra quyền tham gia phiên dịch và đường xử lý audio của dịch vụ AI.
 
 ## Cấu trúc chính
 

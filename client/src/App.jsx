@@ -7,7 +7,6 @@ import ChatPage from "./pages/ChatPage.jsx";
 import JoinGroupPage from './pages/JoinGroupPage.jsx';
 import { Toaster } from "sonner";
 import ProtectedRoute from "./auth/ProtectedRoute.jsx";
-import { useThemeStore } from "./stores/useThemeStore.js";
 import PostsContainer from "./components/posts/PostsContainer.jsx";
 import SearchResultsContainer from "./components/posts/SearchResultsContainer.jsx";
 import ChatContainer from "./components/chat/ChatContainer.jsx";
@@ -29,7 +28,6 @@ import { useAuthStore } from "./stores/useAuthStore.js";
 import { useUIStore } from "./stores/useUIStore.js";
 
 
-import { AntiPeepProvider } from "./components/anti-peep/AntiPeepProvider.jsx";
 
 
 import { useTranslation } from 'react-i18next';
@@ -46,7 +44,6 @@ const ChatContainerWrapper = () => {
 
 const App = () => {
     const { i18n } = useTranslation();
-    const { isLight } = useThemeStore();
     const { subscribeToCallEvents, unsubscribeFromCallEvents } = useCallStore();
     const { subscribeToGroupCallEvents, unsubscribeFromGroupCallEvents } = useGroupCallStore();
     const { subscribeToNotificationEvents, unsubscribeFromNotificationEvents } = useNotificationStore();
@@ -86,9 +83,9 @@ const App = () => {
     }, [setOffline]);
 
     return (
-        <AntiPeepProvider>
+        <>
             <Toaster 
-                theme={isLight ? "light" : "dark"} 
+                theme="dark"
                 position="bottom-center"
                 toastOptions={{
                     duration: 2600,
@@ -128,7 +125,7 @@ const App = () => {
                     </Route>
                 </Routes>
             </BrowserRouter>
-        </AntiPeepProvider>
+        </>
     );
 };
 

@@ -87,6 +87,8 @@
   display: none;
 }
 
+.mobile-feed-drawer { display: none; }
+
 /* MEDIA QUERIES FOR MOBILE */
 @media (max-width: 768px) {
   .container {
@@ -145,11 +147,12 @@
   }
 
   .mobile-feed-drawer {
+    display: block;
     position: fixed;
     top: 0;
     left: 0;
-    height: 100%;
-    width: 280px;
+    height: 100dvh;
+    width: min(320px, calc(100vw - 36px));
     z-index: 1001;
     background-color: #000000;
     box-shadow: 4px 0 25px rgba(0, 0, 0, 0.85);

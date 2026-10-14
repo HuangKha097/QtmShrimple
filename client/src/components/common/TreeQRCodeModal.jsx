@@ -152,9 +152,10 @@ const TreeQRCodeModal = ({
   }, []);
 
   const handleDownload = () => {
-    if (!canvasRef.current) return;
+    if (!sceneRef.current) return;
     try {
-      const dataUrl = canvasRef.current.toDataURL('image/png');
+      // Render and capture in the same task, before WebGL clears its buffer.
+      const dataUrl = sceneRef.current.snapshot();
       const a = document.createElement('a');
       a.download = `MagicTree-3D-QR-${name || 'tree'}.png`;
       a.href = dataUrl;

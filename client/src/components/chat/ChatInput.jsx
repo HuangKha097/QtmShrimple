@@ -6,7 +6,6 @@ import { Image as ImageIcon, Smile, Mic, Plus, Send, X, File, MapPin, BarChart2 
 import { useChatStore } from "../../stores/useChatStore.js";
 import { useAuthStore } from "../../stores/useAuthStore.js";
 import EmojiPicker from 'emoji-picker-react';
-import { useThemeStore } from '../../stores/useThemeStore';
 import CreatePollModal from './CreatePollModal.jsx';
 import { toast } from 'sonner';
 import api from '../../lib/axios.js';
@@ -29,7 +28,6 @@ const resolveRecipientId = (currentConvo, currentUser) => {
 };
 
 const ChatInput = () => {
-    const isLight = useThemeStore(state => state.isLight);
     const [text, setText] = useState("");
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [showActionsMenu, setShowActionsMenu] = useState(false);
@@ -374,7 +372,7 @@ const ChatInput = () => {
                 <div className={cx('emoji-picker-container')}>
                     <EmojiPicker 
                         onEmojiClick={onEmojiClick} 
-                        theme={isLight ? "light" : "dark"} 
+                        theme="dark"
                         width={320} 
                         height={400} 
                     />
