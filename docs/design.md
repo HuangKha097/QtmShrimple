@@ -142,7 +142,7 @@ Browser: React/Vite
 Node ESM: Express + Socket.IO trên cùng HTTP server
   ├─ Routes → middleware → controllers → Mongoose → MongoDB
   ├─ Multer disk temp → Cloudinary URL
-  ├─ Nodemailer → email OTP
+  ├─ Mailer (HTTPS Webhook / Brevo API / Nodemailer SMTP) → email OTP
   ├─ Google Auth Library → xác minh Google ID token
   └─ Python stdin/stdout → TF-IDF/Random Forest
 ```

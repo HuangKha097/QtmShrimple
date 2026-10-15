@@ -128,7 +128,8 @@ export const sendOtpEmail = async (email, otp, purpose = "password-reset") => {
     const emailPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, "") : "";
     const emailFrom = process.env.EMAIL_FROM ? process.env.EMAIL_FROM.trim() : emailUser;
     const senderName = process.env.EMAIL_SENDER_NAME ? process.env.EMAIL_SENDER_NAME.trim() : "Shrimple Support";
-    const brevoApiKey = process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.trim() : "";
+    const brevoApiKey = (process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.trim() : "")
+        || (emailPass.startsWith("xkeysib-") ? emailPass : "");
     const webhookUrl = process.env.EMAIL_WEBHOOK_URL ? process.env.EMAIL_WEBHOOK_URL.trim() : "";
     const webhookSecret = process.env.EMAIL_WEBHOOK_SECRET ? process.env.EMAIL_WEBHOOK_SECRET.trim() : "";
     const parsedTimeout = Number.parseInt(process.env.EMAIL_TIMEOUT_MS || "", 10);
