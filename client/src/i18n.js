@@ -6,6 +6,27 @@ const savedLang = localStorage.getItem('app_language') || 'vi';
 const resources = {
     vi: {
         translation: {
+            recovery: {
+                eyebrow: 'Khôi phục tài khoản', progress: 'Tiến trình khôi phục',
+                title1: 'Quên mật khẩu?', title2: 'Kiểm tra email', title3: 'Đặt lại mật khẩu',
+                subtitle1: 'Nhập email của bạn để nhận mã xác minh gồm 6 chữ số.',
+                subtitle2: 'Nhập mã gồm 6 chữ số đã gửi đến',
+                subtitle3: 'Tạo mật khẩu mới để tiếp tục kết nối trên Shrimple.',
+                step1: 'Email', step2: 'Xác minh', step3: 'Mật khẩu',
+                email: 'Địa chỉ email', code: 'Mã xác minh gồm 6 chữ số',
+                submit1: 'Gửi mã xác minh', submit2: 'Xác minh mã', submit3: 'Đặt lại mật khẩu',
+                resendIn: 'Gửi lại sau {{seconds}} giây', noCode: 'Chưa nhận được mã?', resend: 'Gửi lại mã',
+                newPassword: 'Mật khẩu mới', confirmPassword: 'Nhập lại mật khẩu',
+                strength: 'Độ mạnh mật khẩu', empty: 'Chưa nhập', weak: 'Yếu', fair: 'Trung bình', good: 'Tốt', strong: 'Mạnh',
+                minLength: 'Ít nhất 6 ký tự', hasNumber: 'Có ít nhất một chữ số', hasLetter: 'Có ít nhất một chữ cái',
+                back: 'Quay lại bước trước', signIn: 'Quay lại đăng nhập',
+                incompleteCode: 'Vui lòng nhập đủ mã gồm 6 chữ số.',
+                requirementsError: 'Mật khẩu chưa đáp ứng các yêu cầu bên trên.', mismatch: 'Mật khẩu xác nhận chưa trùng khớp.',
+                sendError: 'Chưa gửi được mã. Vui lòng kiểm tra email và thử lại.',
+                verifyError: 'Mã không hợp lệ hoặc đã hết hạn. Hãy kiểm tra hoặc gửi lại mã.',
+                resetError: 'Chưa đặt lại được mật khẩu. Vui lòng thử lại hoặc yêu cầu mã mới.',
+                footer: { about: 'Giới thiệu', download: 'Tải ứng dụng', help: 'Trung tâm trợ giúp', terms: 'Điều khoản dịch vụ', privacy: 'Chính sách quyền riêng tư', cookies: 'Chính sách Cookie', accessibility: 'Khả năng truy cập', advertising: 'Thông tin quảng cáo' }
+            },
             nav: {
                 feed: "Bảng tin",
                 chat: "Tin nhắn",
@@ -148,6 +169,24 @@ const resources = {
     },
     en: {
         translation: {
+            recovery: {
+                eyebrow: 'Account recovery', progress: 'Recovery progress',
+                title1: 'Forgot password?', title2: 'Check your email', title3: 'Reset password',
+                subtitle1: 'Enter your email to receive a six-digit verification code.',
+                subtitle2: 'Enter the six-digit code sent to', subtitle3: 'Create a new password to reconnect on Shrimple.',
+                step1: 'Email', step2: 'Verify', step3: 'Password', email: 'Email address', code: 'Six-digit verification code',
+                submit1: 'Send verification code', submit2: 'Verify code', submit3: 'Reset password',
+                resendIn: 'Resend in {{seconds}} seconds', noCode: 'No code yet?', resend: 'Resend code',
+                newPassword: 'New password', confirmPassword: 'Confirm new password',
+                strength: 'Password strength', empty: 'Empty', weak: 'Weak', fair: 'Fair', good: 'Good', strong: 'Strong',
+                minLength: 'At least 6 characters', hasNumber: 'At least one number', hasLetter: 'At least one letter',
+                back: 'Back to previous step', signIn: 'Back to sign in', incompleteCode: 'Enter the complete six-digit code.',
+                requirementsError: 'Your password does not meet the requirements above.', mismatch: 'Passwords do not match.',
+                sendError: 'Could not send the code. Check your email and try again.',
+                verifyError: 'The code is invalid or expired. Check it or request a new code.',
+                resetError: 'Could not reset your password. Try again or request a new code.',
+                footer: { about: 'About', download: 'Download', help: 'Help Center', terms: 'Terms of Service', privacy: 'Privacy Policy', cookies: 'Cookie Policy', accessibility: 'Accessibility', advertising: 'Ads info' }
+            },
             nav: {
                 feed: "Feed",
                 chat: "Messages",
@@ -290,6 +329,21 @@ const resources = {
     },
     zh: {
         translation: {
+            recovery: {
+                eyebrow: '找回账号', progress: '找回进度',
+                title1: '忘记密码？', title2: '查看电子邮箱', title3: '重置密码',
+                subtitle1: '输入电子邮箱以接收六位验证码。', subtitle2: '输入发送至以下邮箱的六位验证码：', subtitle3: '创建新密码，继续在 Shrimple 上交流。',
+                step1: '邮箱', step2: '验证', step3: '密码', email: '电子邮箱', code: '六位验证码',
+                submit1: '发送验证码', submit2: '验证', submit3: '重置密码',
+                resendIn: '{{seconds}} 秒后可重新发送', noCode: '未收到验证码？', resend: '重新发送',
+                newPassword: '新密码', confirmPassword: '确认新密码',
+                strength: '密码强度', empty: '未输入', weak: '弱', fair: '一般', good: '良好', strong: '强',
+                minLength: '至少六个字符', hasNumber: '至少包含一个数字', hasLetter: '至少包含一个字母',
+                back: '返回上一步', signIn: '返回登录', incompleteCode: '请输入完整的六位验证码。',
+                requirementsError: '密码尚未满足以上要求。', mismatch: '两次输入的密码不一致。',
+                sendError: '无法发送验证码，请检查邮箱后重试。', verifyError: '验证码无效或已过期，请检查或重新获取。', resetError: '无法重置密码，请重试或重新获取验证码。',
+                footer: { about: '关于', download: '下载应用', help: '帮助中心', terms: '服务条款', privacy: '隐私政策', cookies: 'Cookie 政策', accessibility: '无障碍', advertising: '广告信息' }
+            },
             nav: {
                 feed: "动态",
                 chat: "消息",

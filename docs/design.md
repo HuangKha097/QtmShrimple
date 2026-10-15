@@ -90,6 +90,8 @@ Các đường dẫn component tương đối với `client/src/`; bảng mô t�
 
 ## 3. Màn hình và trạng thái
 
+Auth recovery UI (2026-10-15): `/forgot-password` dùng cùng `SignInPage.module.scss`, logo `/logo_remove_bg.png`, SideRays, XInput và XButton với đăng nhập. Ba bước email → OTP → mật khẩu giữ các API hiện có; có lỗi inline, nhãn vi/en/zh, focus bàn phím và logo mobile. Reduced motion tắt SideRays/logo bob trên trang này; bề mặt auth tiếp tục nền đen như trang đăng nhập. Phạm vi browser evidence và tình trạng deploy: [validation](./validation/auth-recovery-ui-and-app-screens.md).
+
 | Màn hình | Nội dung và thao tác chính | Trạng thái cần có / kiểm tra |
 | --- | --- | --- |
 | Signin/signup | Email/password, Google, chuyển signup/signin, OTP | Form invalid, submit pending, credentials sai, OTP sai/hết hạn/resend, Google hủy |
