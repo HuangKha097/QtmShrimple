@@ -199,8 +199,9 @@ export const getConversation = async (req, res) => {
 export const getMessage = async (req, res) => {
     try {
         const {conversationId} = req.params;
-        const {limit = 50, cursor} = req.query;
+        const {limit = 20, cursor} = req.query;
         const userId = req.user._id;
+        const parsedLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
 
         const query = {
             conversationId,
@@ -212,15 +213,15 @@ export const getMessage = async (req, res) => {
         }
 
         let messages = await Message.find(query)
-            .sort({createdAt: -1 })
-            .limit(Number(limit)+1)
+            .sort({createdAt: -1, _id: -1 })
+            .limit(parsedLimit + 1)
             .populate('poll.options.votes', 'username displayName avatarURL');
 
         let nextCursor = null;
-        if(messages.length > Number(limit)){
-            const nextMessage = messages[messages.length - 1];
-            nextCursor = nextMessage.createdAt.toISOString();
+        if(messages.length > parsedLimit){
             messages.pop();
+            const oldestInBatch = messages[messages.length - 1];
+            nextCursor = oldestInBatch ? oldestInBatch.createdAt.toISOString() : null;
         }
         messages = messages.reverse();
         return res.status(200).json({messages, nextCursor});

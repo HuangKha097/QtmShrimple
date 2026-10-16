@@ -241,46 +241,64 @@ export const useChatStore = create(
                 }
             },
 
-            fetchMessages: async (conversationId) => {
-                const {activeConversationId, messages} = get();
-                const {user} = useAuthStore.getState();
+            fetchMessages: async (conversationId, options = {}) => {
+                const { loadMore = false } = options;
+                const { activeConversationId, messages, messageLoading } = get();
+                const { user } = useAuthStore.getState();
 
                 const convoId = conversationId ?? activeConversationId;
                 if (!convoId) return;
 
                 const current = messages?.[convoId];
-                const nextCursor = current?.nextCursor === undefined ? "" : current?.nextCursor;
+                const isInitialized = Boolean(current?.initialized);
 
-                if (nextCursor === null) return;
+                if (!loadMore && isInitialized) {
+                    return;
+                }
 
-                set({messageLoading: true});
+                if (loadMore) {
+                    if (!isInitialized || !current?.hasMore || !current?.nextCursor || messageLoading) {
+                        return;
+                    }
+                } else if (messageLoading) {
+                    return;
+                }
+
+                const cursorToUse = loadMore ? current.nextCursor : "";
+
+                set({ messageLoading: true });
 
                 try {
-                    const {messages: fetched, cursor} = await chatService.fetchMessage(convoId, nextCursor);
+                    const { messages: fetched, cursor } = await chatService.fetchMessage(convoId, cursorToUse);
 
-                    const processed = fetched.map((m) => ({
-                        ...m,
-                        isOwn: m.senderId === user?._id,
-                    }));
+                    const myIdStr = user?._id?.toString();
+                    const processed = (fetched || []).map((m) => {
+                        const sId = (m.senderId?._id || m.senderId)?.toString();
+                        return {
+                            ...m,
+                            isOwn: Boolean(myIdStr && sId === myIdStr),
+                        };
+                    });
 
                     set((state) => {
-                        const prevItems = state.messages[convoId]?.items ?? [];
                         if (!state.conversations.some(c => c._id === convoId)) return state;
-                        
+                        const prevItems = loadMore ? (state.messages[convoId]?.items ?? []) : [];
+
                         // Lọc bỏ tin nhắn đã tồn tại để tránh trùng key
                         const newItems = processed.filter(
                             (newItem) => !prevItems.some((prevItem) => prevItem._id === newItem._id)
                         );
 
-                        const merged = [...newItems, ...prevItems];
+                        const merged = loadMore ? [...newItems, ...prevItems] : processed;
 
                         return {
                             messages: {
                                 ...state.messages,
                                 [convoId]: {
                                     items: merged,
-                                    hasMore: !!cursor,
+                                    hasMore: Boolean(cursor),
                                     nextCursor: cursor ?? null,
+                                    initialized: true,
                                 }
                             }
                         };
@@ -288,7 +306,7 @@ export const useChatStore = create(
                 } catch (error) {
                     console.error("Error fetching messages:", error);
                 } finally {
-                    set({messageLoading: false});
+                    set({ messageLoading: false });
                 }
             },
 
@@ -847,16 +865,18 @@ export const useChatStore = create(
                         const convoId = newMessage.conversationId;
                         const isActive = state.activeConversationId === convoId;
 
-                        // 1. Update Messages
+                        // 1. Update Messages (only append if this conversation's messages were already initialized)
                         let updatedMessagesMap = { ...state.messages };
-                        const existingItems = updatedMessagesMap[convoId]?.items || [];
-                        const isDuplicate = existingItems.some(item => item._id === newMessage._id);
+                        if (updatedMessagesMap[convoId]?.initialized) {
+                            const existingItems = updatedMessagesMap[convoId]?.items || [];
+                            const isDuplicate = existingItems.some(item => item._id === newMessage._id);
 
-                        if (!isDuplicate) {
-                            updatedMessagesMap[convoId] = {
-                                ...(updatedMessagesMap[convoId] || { hasMore: false, nextCursor: null }),
-                                items: [...existingItems, { ...newMessage, isOwn }]
-                            };
+                            if (!isDuplicate) {
+                                updatedMessagesMap[convoId] = {
+                                    ...updatedMessagesMap[convoId],
+                                    items: [...existingItems, { ...newMessage, isOwn }]
+                                };
+                            }
                         }
 
                         // 2. Update Conversations List

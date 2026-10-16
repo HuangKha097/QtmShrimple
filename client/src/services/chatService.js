@@ -27,10 +27,9 @@ export const chatService = {
         const res = await api.get("/api/conversations");
         return res.data;
     },
-    async fetchMessage(id, cursor) {
-
+    async fetchMessage(id, cursor, limit = 20) {
         const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
-        const res = await api.get(`/api/conversations/${id}/messages?limit=50${cursorParam}`);
+        const res = await api.get(`/api/conversations/${id}/messages?limit=${limit}${cursorParam}`);
         return {messages: res.data.messages, cursor: res.data.nextCursor};
     },
     async sendDirectMessage(recipientId, content, conversationId, image, file, type) {
