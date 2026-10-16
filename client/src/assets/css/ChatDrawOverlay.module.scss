@@ -1,39 +1,37 @@
-.draw-overlay-root {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 32;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.draw-canvas {
+/* --- Scroll-Anchored Drawing Surface inside .messages-inner-container --- */
+.scroll-draw-layer {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     pointer-events: none;
-    touch-action: none;
+    z-index: 15;
+    overflow: hidden;
     transition: opacity 0.2s ease;
 
     &.interactive {
         pointer-events: auto;
         cursor: crosshair;
-        background: radial-gradient(
-            circle at center,
-            rgba(249, 115, 22, 0.03) 0%,
-            rgba(0, 0, 0, 0.18) 100%
-        );
+        touch-action: pan-y;
+        background: rgba(249, 115, 22, 0.015);
     }
 
-    &.hidden-canvas {
+    &.hidden-layer {
         opacity: 0;
     }
 }
 
-/* --- Pinned Top Pill (Always pinned at top of chat screen) --- */
+.scroll-draw-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+/* --- Pinned Top Pill (Toolbar stays accessible at top of chat viewport) --- */
 .pinned-top-bar {
     position: absolute;
     top: 10px;

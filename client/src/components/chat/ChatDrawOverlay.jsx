@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { create } from 'zustand';
 import classNames from 'classnames/bind';
 import {
     PenTool,
@@ -39,6 +40,21 @@ const STROKE_SIZES = [
     { label: 'Cực đại', value: 18, dot: 15 },
 ];
 
+/**
+ * Shared store between Top-Pinned Toolbar (ChatDrawOverlay) and Scroll-Anchored Layer (ChatDrawScrollLayer)
+ */
+export const useDrawToolStore = create((set) => ({
+    brushMode: 'neon', // 'neon' | 'solid' | 'highlighter' | 'dashed' | 'eraser'
+    color: '#f97316',
+    strokeSize: 6,
+    isHiddenLocal: false,
+    setBrushMode: (brushMode) => set({ brushMode }),
+    setColor: (color) => set({ color }),
+    setStrokeSize: (strokeSize) => set({ strokeSize }),
+    setIsHiddenLocal: (isHiddenLocal) => set({ isHiddenLocal }),
+    toggleHiddenLocal: () => set((s) => ({ isHiddenLocal: !s.isHiddenLocal })),
+}));
+
 const resolveRecipientId = (currentConvo, currentUser) => {
     if (currentConvo?.participants && currentUser) {
         const currentUserIdStr = (currentUser._id || currentUser.id)?.toString();
@@ -54,159 +70,101 @@ const resolveRecipientId = (currentConvo, currentUser) => {
     return null;
 };
 
-const drawStrokeOnCtx = (ctx, stroke, width, height) => {
+/**
+ * Resolve pixel coordinates of a stroke's points inside .messages-inner-container
+ */
+const resolveStrokePixelPoints = (stroke, width, height, innerEl) => {
     const pts = stroke?.points;
-    if (!pts || pts.length === 0) return;
+    if (!pts || pts.length === 0) return [];
 
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    const mode = stroke.mode || 'solid';
-    const baseSize = Number(stroke.size) || 5;
-    const color = stroke.color || '#f97316';
-
-    if (mode === 'eraser') {
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.strokeStyle = 'rgba(0,0,0,1)';
-        ctx.lineWidth = baseSize * 2.2;
-    } else if (mode === 'neon') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.shadowColor = color;
-        ctx.shadowBlur = baseSize * 2.6;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = baseSize;
-    } else if (mode === 'highlighter') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 0.38;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = baseSize * 2.1;
-    } else if (mode === 'dashed') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.setLineDash([baseSize * 1.8, baseSize * 1.4]);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = baseSize;
-    } else {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = color;
-        ctx.lineWidth = baseSize;
-    }
-
-    ctx.beginPath();
-    const firstX = pts[0].x * width;
-    const firstY = pts[0].y * height;
-    ctx.moveTo(firstX, firstY);
-
-    if (pts.length === 1) {
-        ctx.lineTo(firstX + 0.1, firstY + 0.1);
-    } else {
-        for (let i = 1; i < pts.length; i++) {
-            const prev = pts[i - 1];
-            const curr = pts[i];
-            const midX = ((prev.x + curr.x) / 2) * width;
-            const midY = ((prev.y + curr.y) / 2) * height;
-            ctx.quadraticCurveTo(prev.x * width, prev.y * height, midX, midY);
+    let anchorTop = null;
+    if (stroke.anchorMsgId && innerEl) {
+        const msgEl = document.getElementById(stroke.anchorMsgId);
+        if (msgEl && innerEl.contains(msgEl)) {
+            anchorTop = msgEl.offsetTop;
         }
-        const last = pts[pts.length - 1];
-        ctx.lineTo(last.x * width, last.y * height);
     }
 
-    ctx.stroke();
-
-    // Inner bright core for neon brush
-    if (mode === 'neon') {
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = '#ffffff';
-        ctx.globalAlpha = 0.75;
-        ctx.lineWidth = Math.max(1.5, baseSize * 0.38);
-        ctx.stroke();
-    }
-
-    ctx.restore();
+    return pts.map((pt) => {
+        const x = (typeof pt.x === 'number' ? pt.x : 0) * width;
+        let y;
+        if (anchorTop !== null && typeof pt.dy === 'number') {
+            y = anchorTop + pt.dy;
+        } else if (typeof pt.bottomOffset === 'number') {
+            y = height - pt.bottomOffset;
+        } else if (typeof pt.absY === 'number') {
+            y = pt.absY;
+        } else {
+            y = (typeof pt.y === 'number' ? pt.y : 0) * height;
+        }
+        return { x, y };
+    });
 };
 
-const ChatDrawOverlay = ({ conversationId }) => {
-    const {
-        chatDrawings,
-        setChatDrawing,
-        isDrawModeOpen,
-        setIsDrawModeOpen,
-        conversations,
-        sendDirectMessage,
-        sendGroupMessage,
-    } = useChatStore();
+const buildSmoothSvgPath = (pixelPoints) => {
+    if (!pixelPoints || pixelPoints.length === 0) return '';
+    if (pixelPoints.length === 1) {
+        const p = pixelPoints[0];
+        return `M ${p.x.toFixed(1)} ${p.y.toFixed(1)} L ${(p.x + 0.5).toFixed(1)} ${(p.y + 0.5).toFixed(1)}`;
+    }
+    let d = `M ${pixelPoints[0].x.toFixed(1)} ${pixelPoints[0].y.toFixed(1)}`;
+    for (let i = 1; i < pixelPoints.length; i++) {
+        const prev = pixelPoints[i - 1];
+        const curr = pixelPoints[i];
+        const midX = (prev.x + curr.x) / 2;
+        const midY = (prev.y + curr.y) / 2;
+        d += ` Q ${prev.x.toFixed(1)} ${prev.y.toFixed(1)} ${midX.toFixed(1)} ${midY.toFixed(1)}`;
+    }
+    const last = pixelPoints[pixelPoints.length - 1];
+    d += ` L ${last.x.toFixed(1)} ${last.y.toFixed(1)}`;
+    return d;
+};
+
+/**
+ * 1. SCROLL-ANCHORED DRAWING LAYER
+ * Mounted directly inside `.messages-inner-container` of `ChatBody.jsx`.
+ * Drawings stay attached to the exact message/scroll position where they were drawn
+ * and scroll naturally with the conversation content!
+ */
+export const ChatDrawScrollLayer = ({ conversationId, innerRef }) => {
+    const { chatDrawings, setChatDrawing, isDrawModeOpen } = useChatStore();
     const { user: currentUser, socket } = useAuthStore();
+    const { brushMode, color, strokeSize, isHiddenLocal, setIsHiddenLocal } = useDrawToolStore();
 
-    const canvasRef = useRef(null);
+    const layerRef = useRef(null);
     const isDrawingRef = useRef(false);
-    const currentStrokeRef = useRef(null);
-
-    const [brushMode, setBrushMode] = useState('neon'); // 'solid' | 'neon' | 'highlighter' | 'dashed' | 'eraser'
-    const [color, setColor] = useState('#f97316');
-    const [strokeSize, setStrokeSize] = useState(6);
-    const [isHiddenLocal, setIsHiddenLocal] = useState(false);
-    const [isSendingImage, setIsSendingImage] = useState(false);
+    const [activeStroke, setActiveStroke] = useState(null);
+    const [containerDim, setContainerDim] = useState({ width: 800, height: 600 });
+    const [, setLayoutVersion] = useState(0);
 
     const currentDrawing = chatDrawings?.[conversationId];
     const strokes = useMemo(() => currentDrawing?.strokes || [], [currentDrawing]);
-    const updatedByName = currentDrawing?.updatedBy?.name;
 
-    // Fetch existing pinned drawing from server when switching conversations
+    // Observe size/layout changes of .messages-inner-container (e.g. infinite scroll loading older messages)
     useEffect(() => {
-        if (!conversationId || !socket) return;
-        socket.emit('getChatScreenDrawing', { conversationId }, (res) => {
-            if (res && Array.isArray(res.strokes) && res.strokes.length > 0) {
-                setChatDrawing(conversationId, res);
-            }
-        });
-    }, [conversationId, socket, setChatDrawing]);
+        const el = innerRef?.current || layerRef.current?.parentElement;
+        if (!el) return;
 
-    // Render all strokes onto canvas
-    const renderCanvas = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const rect = canvas.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
+        const updateMetrics = () => {
+            setContainerDim({
+                width: el.clientWidth || 800,
+                height: el.scrollHeight || el.offsetHeight || 600,
+            });
+            setLayoutVersion((v) => v + 1);
+        };
 
-        if (canvas.width !== Math.floor(rect.width * dpr) || canvas.height !== Math.floor(rect.height * dpr)) {
-            canvas.width = Math.floor(rect.width * dpr);
-            canvas.height = Math.floor(rect.height * dpr);
+        updateMetrics();
+        if (typeof ResizeObserver !== 'undefined') {
+            const ro = new ResizeObserver(updateMetrics);
+            ro.observe(el);
+            return () => ro.disconnect();
         }
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.save();
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, rect.width, rect.height);
-
-        strokes.forEach((s) => drawStrokeOnCtx(ctx, s, rect.width, rect.height));
-        if (currentStrokeRef.current) {
-            drawStrokeOnCtx(ctx, currentStrokeRef.current, rect.width, rect.height);
-        }
-        ctx.restore();
-    }, [strokes]);
-
-    useEffect(() => {
-        renderCanvas();
-    }, [renderCanvas, isDrawModeOpen]);
-
-    // ResizeObserver to keep canvas crisp when chat panel resizes
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || typeof ResizeObserver === 'undefined') return;
-        const ro = new ResizeObserver(() => {
-            renderCanvas();
-        });
-        ro.observe(canvas);
-        return () => ro.disconnect();
-    }, [renderCanvas]);
+    }, [innerRef, strokes.length, conversationId]);
 
     const broadcastStrokes = useCallback(
         (nextStrokes) => {
             if (!conversationId) return;
-            const authorName =
-                currentUser?.displayName || currentUser?.username || 'Bạn';
+            const authorName = currentUser?.displayName || currentUser?.username || 'Bạn';
             const payload = {
                 conversationId,
                 strokes: nextStrokes,
@@ -225,59 +183,346 @@ const ChatDrawOverlay = ({ conversationId }) => {
         [conversationId, currentUser, setChatDrawing, socket]
     );
 
-    const getNormalizedPoint = (e) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return { x: 0, y: 0 };
-        const rect = canvas.getBoundingClientRect();
+    // Find closest message DOM element (#msg-...) inside .messages-inner-container at localY
+    const findAnchorMessageAtY = (localY, innerEl) => {
+        if (!innerEl) return { anchorMsgId: null, anchorTop: null };
+        const msgNodes = innerEl.querySelectorAll('[id^="msg-"]');
+        let bestId = null;
+        let bestTop = null;
+        let bestDist = Infinity;
+
+        msgNodes.forEach((node) => {
+            const top = node.offsetTop;
+            const center = top + node.offsetHeight / 2;
+            const dist = Math.abs(localY - center);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestId = node.id;
+                bestTop = top;
+            }
+        });
+
+        return { anchorMsgId: bestId, anchorTop: bestTop };
+    };
+
+    const getLocalCoords = (e) => {
+        const layerEl = layerRef.current;
+        if (!layerEl) return { localX: 0, localY: 0, width: 1, height: 1 };
+        const rect = layerEl.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
         return {
-            x: Math.max(0, Math.min(1, (clientX - rect.left) / (rect.width || 1))),
-            y: Math.max(0, Math.min(1, (clientY - rect.top) / (rect.height || 1))),
+            localX: clientX - rect.left,
+            localY: clientY - rect.top,
+            width: rect.width || 1,
+            height: rect.height || 1,
         };
+    };
+
+    // Erase stroke points within eraserRadius of (localX, localY)
+    const eraseAtPoint = (localX, localY, width, height, innerEl) => {
+        const eraserRadius = Math.max(18, strokeSize * 2.4);
+        let changed = false;
+        const nextStrokes = [];
+
+        strokes.forEach((stroke) => {
+            const resolved = resolveStrokePixelPoints(stroke, width, height, innerEl);
+            let currentSegment = [];
+
+            resolved.forEach((pxPt, idx) => {
+                const dist = Math.hypot(pxPt.x - localX, pxPt.y - localY);
+                if (dist <= eraserRadius) {
+                    changed = true;
+                    if (currentSegment.length > 0) {
+                        nextStrokes.push({
+                            ...stroke,
+                            id: `${stroke.id}-seg-${idx}-${Math.random().toString(36).slice(2, 5)}`,
+                            points: currentSegment,
+                        });
+                        currentSegment = [];
+                    }
+                } else {
+                    currentSegment.push(stroke.points[idx]);
+                }
+            });
+
+            if (currentSegment.length === stroke.points.length) {
+                nextStrokes.push(stroke);
+            } else if (currentSegment.length > 0) {
+                nextStrokes.push({
+                    ...stroke,
+                    id: `${stroke.id}-tail-${Math.random().toString(36).slice(2, 5)}`,
+                    points: currentSegment,
+                });
+            }
+        });
+
+        if (changed) {
+            broadcastStrokes(nextStrokes);
+        }
     };
 
     const handlePointerDown = (e) => {
         if (!isDrawModeOpen) return;
-        e.preventDefault();
+        if (e.button !== undefined && e.button !== 0) return;
+
         isDrawingRef.current = true;
         setIsHiddenLocal(false);
-        const pt = getNormalizedPoint(e);
-        currentStrokeRef.current = {
+
+        const innerEl = innerRef?.current || layerRef.current?.parentElement;
+        const { localX, localY, width, height } = getLocalCoords(e);
+
+        if (brushMode === 'eraser') {
+            eraseAtPoint(localX, localY, width, height, innerEl);
+            return;
+        }
+
+        const { anchorMsgId, anchorTop } = findAnchorMessageAtY(localY, innerEl);
+        const pt = {
+            x: Math.max(0, Math.min(1, localX / width)),
+            dy: anchorTop !== null ? localY - anchorTop : undefined,
+            bottomOffset: height - localY,
+            absY: localY,
+        };
+
+        setActiveStroke({
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             mode: brushMode,
             color,
             size: strokeSize,
+            anchorMsgId,
+            _anchorTop: anchorTop,
             points: [pt],
-        };
-        renderCanvas();
+        });
     };
 
     const handlePointerMove = (e) => {
-        if (!isDrawingRef.current || !currentStrokeRef.current) return;
-        e.preventDefault();
-        const pt = getNormalizedPoint(e);
-        const pts = currentStrokeRef.current.points;
-        const last = pts[pts.length - 1];
-        const dist = Math.hypot(pt.x - last.x, pt.y - last.y);
-        if (dist < 0.002) return;
-        pts.push(pt);
-        renderCanvas();
+        if (!isDrawingRef.current || !isDrawModeOpen) return;
+
+        const innerEl = innerRef?.current || layerRef.current?.parentElement;
+        const { localX, localY, width, height } = getLocalCoords(e);
+
+        if (brushMode === 'eraser') {
+            eraseAtPoint(localX, localY, width, height, innerEl);
+            return;
+        }
+
+        setActiveStroke((prev) => {
+            if (!prev) return null;
+            const anchorTop = prev._anchorTop;
+            const nextPt = {
+                x: Math.max(0, Math.min(1, localX / width)),
+                dy: anchorTop !== null && anchorTop !== undefined ? localY - anchorTop : undefined,
+                bottomOffset: height - localY,
+                absY: localY,
+            };
+            const lastPt = prev.points[prev.points.length - 1];
+            if (lastPt && Math.hypot((nextPt.x - lastPt.x) * width, nextPt.absY - (lastPt.absY ?? 0)) < 2.5) {
+                return prev;
+            }
+            return {
+                ...prev,
+                points: [...prev.points, nextPt],
+            };
+        });
     };
 
     const handlePointerUp = () => {
-        if (!isDrawingRef.current || !currentStrokeRef.current) return;
+        if (!isDrawingRef.current) return;
         isDrawingRef.current = false;
-        const finishedStroke = currentStrokeRef.current;
-        currentStrokeRef.current = null;
-        const nextStrokes = [...strokes, finishedStroke];
-        broadcastStrokes(nextStrokes);
+
+        if (activeStroke && activeStroke.points.length > 0) {
+            const cleanStroke = {
+                id: activeStroke.id,
+                mode: activeStroke.mode,
+                color: activeStroke.color,
+                size: activeStroke.size,
+                anchorMsgId: activeStroke.anchorMsgId,
+                points: activeStroke.points.map(({ x, dy, bottomOffset, absY }) => ({
+                    x,
+                    dy,
+                    bottomOffset,
+                    absY,
+                })),
+            };
+            setActiveStroke(null);
+            broadcastStrokes([...strokes, cleanStroke]);
+        }
     };
+
+    const innerEl = innerRef?.current || layerRef.current?.parentElement;
+    const allStrokesToRender = activeStroke ? [...strokes, activeStroke] : strokes;
+
+    return (
+        <div
+            ref={layerRef}
+            className={cx('scroll-draw-layer', {
+                interactive: isDrawModeOpen,
+                'hidden-layer': isHiddenLocal && !isDrawModeOpen,
+            })}
+            onMouseDown={handlePointerDown}
+            onMouseMove={handlePointerMove}
+            onMouseUp={handlePointerUp}
+            onMouseLeave={handlePointerUp}
+            onTouchStart={handlePointerDown}
+            onTouchMove={handlePointerMove}
+            onTouchEnd={handlePointerUp}
+        >
+            <svg
+                className={cx('scroll-draw-svg')}
+                width="100%"
+                height="100%"
+            >
+                {allStrokesToRender.map((stroke) => {
+                    if (stroke.mode === 'eraser') return null;
+                    const pxPoints = resolveStrokePixelPoints(
+                        stroke,
+                        containerDim.width,
+                        containerDim.height,
+                        innerEl
+                    );
+                    const d = buildSmoothSvgPath(pxPoints);
+                    if (!d) return null;
+
+                    const baseSize = Number(stroke.size) || 6;
+                    const strokeColor = stroke.color || '#f97316';
+                    const mode = stroke.mode || 'solid';
+
+                    if (mode === 'neon') {
+                        return (
+                            <g key={stroke.id}>
+                                <path
+                                    d={d}
+                                    fill="none"
+                                    stroke={strokeColor}
+                                    strokeWidth={baseSize}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    style={{
+                                        filter: `drop-shadow(0 0 ${baseSize * 1.2}px ${strokeColor}) drop-shadow(0 0 ${baseSize * 2.4}px ${strokeColor})`,
+                                    }}
+                                />
+                                <path
+                                    d={d}
+                                    fill="none"
+                                    stroke="#ffffff"
+                                    strokeOpacity={0.82}
+                                    strokeWidth={Math.max(1.5, baseSize * 0.36)}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                />
+                            </g>
+                        );
+                    }
+
+                    if (mode === 'highlighter') {
+                        return (
+                            <path
+                                key={stroke.id}
+                                d={d}
+                                fill="none"
+                                stroke={strokeColor}
+                                strokeOpacity={0.38}
+                                strokeWidth={baseSize * 2.2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        );
+                    }
+
+                    if (mode === 'dashed') {
+                        return (
+                            <path
+                                key={stroke.id}
+                                d={d}
+                                fill="none"
+                                stroke={strokeColor}
+                                strokeWidth={baseSize}
+                                strokeDasharray={`${baseSize * 1.8} ${baseSize * 1.4}`}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        );
+                    }
+
+                    return (
+                        <path
+                            key={stroke.id}
+                            d={d}
+                            fill="none"
+                            stroke={strokeColor}
+                            strokeWidth={baseSize}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                    );
+                })}
+            </svg>
+        </div>
+    );
+};
+
+/**
+ * 2. TOP-PINNED TOOLBAR & CONTROLS
+ * Mounted at the top of the chat viewport (`ChatContainer.jsx`) so the Pen tool is always reachable.
+ */
+const ChatDrawOverlay = ({ conversationId }) => {
+    const {
+        chatDrawings,
+        setChatDrawing,
+        isDrawModeOpen,
+        setIsDrawModeOpen,
+        conversations,
+        sendDirectMessage,
+        sendGroupMessage,
+    } = useChatStore();
+    const { user: currentUser, socket } = useAuthStore();
+    const {
+        brushMode,
+        color,
+        strokeSize,
+        isHiddenLocal,
+        setBrushMode,
+        setColor,
+        setStrokeSize,
+        setIsHiddenLocal,
+        toggleHiddenLocal,
+    } = useDrawToolStore();
+
+    const [isSendingImage, setIsSendingImage] = useState(false);
+
+    const currentDrawing = chatDrawings?.[conversationId];
+    const strokes = useMemo(() => currentDrawing?.strokes || [], [currentDrawing]);
+    const updatedByName = currentDrawing?.updatedBy?.name;
+
+    // Fetch existing drawing for this conversation on open
+    useEffect(() => {
+        if (!conversationId || !socket) return;
+        socket.emit('getChatScreenDrawing', { conversationId }, (res) => {
+            if (res && Array.isArray(res.strokes) && res.strokes.length > 0) {
+                setChatDrawing(conversationId, res);
+            }
+        });
+    }, [conversationId, socket, setChatDrawing]);
 
     const handleUndo = () => {
         if (strokes.length === 0) return;
         const nextStrokes = strokes.slice(0, -1);
-        broadcastStrokes(nextStrokes);
+        const authorName = currentUser?.displayName || currentUser?.username || 'Bạn';
+        const payload = {
+            conversationId,
+            strokes: nextStrokes,
+            updatedBy: { _id: currentUser?._id, name: authorName },
+            updatedAt: new Date().toISOString(),
+        };
+        setChatDrawing(conversationId, payload);
+        if (socket) {
+            socket.emit('updateChatScreenDrawing', {
+                conversationId,
+                strokes: nextStrokes,
+                authorName,
+            });
+        }
     };
 
     const handleClearAll = () => {
@@ -291,31 +536,82 @@ const ChatDrawOverlay = ({ conversationId }) => {
         if (socket) {
             socket.emit('clearChatScreenDrawing', { conversationId, authorName });
         }
-        toast.info('Đã xóa nét vẽ trên màn hình chat');
+        toast.info('Đã xóa nét vẽ trong cuộc trò chuyện');
     };
 
     const handlePinAndClose = () => {
         setIsDrawModeOpen(false);
         if (strokes.length > 0) {
-            toast.success('Đã ghim nét vẽ lên màn hình cuộc trò chuyện!');
+            toast.success('Đã đính nét vẽ tại vị trí tin nhắn!');
         }
     };
 
     const handleSendAsChatImage = async () => {
-        const canvas = canvasRef.current;
-        if (!canvas || strokes.length === 0 || isSendingImage) return;
-
+        if (strokes.length === 0 || isSendingImage) return;
         setIsSendingImage(true);
         const toastId = toast.loading('Đang gửi bản vẽ vào cuộc trò chuyện...');
+
         try {
-            // Create export canvas with dark background so neon strokes look great in chat bubble
+            const innerEl = document.querySelector('[data-chat-inner="true"]');
+            const width = innerEl?.clientWidth || 720;
+            const height = innerEl?.scrollHeight || 600;
+
+            // Compute bounding box of all strokes so exported image frames the drawing nicely
+            let minY = Infinity;
+            let maxY = -Infinity;
+            const resolvedStrokes = strokes.map((s) => {
+                const pts = resolveStrokePixelPoints(s, width, height, innerEl);
+                pts.forEach((p) => {
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                });
+                return { stroke: s, pts };
+            });
+
+            const pad = 48;
+            const topY = Math.max(0, (Number.isFinite(minY) ? minY : 0) - pad);
+            const exportHeight = Math.max(240, Math.min(1200, (Number.isFinite(maxY) ? maxY - topY : 400) + pad * 2));
+
             const exportCanvas = document.createElement('canvas');
-            exportCanvas.width = canvas.width;
-            exportCanvas.height = canvas.height;
-            const eCtx = exportCanvas.getContext('2d');
-            eCtx.fillStyle = '#0b0e14';
-            eCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-            eCtx.drawImage(canvas, 0, 0);
+            exportCanvas.width = width;
+            exportCanvas.height = exportHeight;
+            const ctx = exportCanvas.getContext('2d');
+            ctx.fillStyle = '#0b0e14';
+            ctx.fillRect(0, 0, width, exportHeight);
+
+            resolvedStrokes.forEach(({ stroke, pts }) => {
+                if (!pts.length || stroke.mode === 'eraser') return;
+                ctx.save();
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                const baseSize = Number(stroke.size) || 6;
+                const strokeColor = stroke.color || '#f97316';
+                if (stroke.mode === 'neon') {
+                    ctx.shadowColor = strokeColor;
+                    ctx.shadowBlur = baseSize * 2.5;
+                } else if (stroke.mode === 'highlighter') {
+                    ctx.globalAlpha = 0.38;
+                } else if (stroke.mode === 'dashed') {
+                    ctx.setLineDash([baseSize * 1.8, baseSize * 1.4]);
+                }
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = stroke.mode === 'highlighter' ? baseSize * 2.2 : baseSize;
+
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y - topY);
+                for (let i = 1; i < pts.length; i++) {
+                    const prev = pts[i - 1];
+                    const curr = pts[i];
+                    ctx.quadraticCurveTo(
+                        prev.x,
+                        prev.y - topY,
+                        (prev.x + curr.x) / 2,
+                        (prev.y + curr.y) / 2 - topY
+                    );
+                }
+                ctx.stroke();
+                ctx.restore();
+            });
 
             const dataUrl = exportCanvas.toDataURL('image/png');
             const currentConvo = (conversations || []).find((c) => c && c._id === conversationId);
@@ -339,14 +635,13 @@ const ChatDrawOverlay = ({ conversationId }) => {
     const hasStrokes = strokes.length > 0;
 
     return (
-        <div className={cx('draw-overlay-root')}>
-            {/* Top-Pinned Bar (Always Pinned at Top of Chat Screen Layout) */}
+        <>
             {!isDrawModeOpen ? (
                 <div className={cx('pinned-top-bar', { 'has-drawing': hasStrokes })}>
                     {hasStrokes && (
                         <div className={cx('pinned-status-info')}>
                             <span className={cx('pulse-dot')} />
-                            <span>Nét vẽ trên màn hình</span>
+                            <span>Nét vẽ trong đoạn chat</span>
                             {updatedByName && (
                                 <span className={cx('author-sub')}>({updatedByName})</span>
                             )}
@@ -360,7 +655,7 @@ const ChatDrawOverlay = ({ conversationId }) => {
                             setIsHiddenLocal(false);
                             setIsDrawModeOpen(true);
                         }}
-                        title="Vẽ trực tiếp lên màn hình chat (Instagram Draw)"
+                        title="Vẽ trực tiếp lên vị trí tin nhắn (Instagram Draw)"
                     >
                         <PenTool size={14} />
                         <span>{hasStrokes ? 'Vẽ thêm' : 'Bút vẽ màn hình'}</span>
@@ -371,8 +666,8 @@ const ChatDrawOverlay = ({ conversationId }) => {
                             <button
                                 type="button"
                                 className={cx('pinned-mini-btn')}
-                                onClick={() => setIsHiddenLocal(!isHiddenLocal)}
-                                title={isHiddenLocal ? 'Hiện nét vẽ trên màn hình' : 'Tạm ẩn nét vẽ'}
+                                onClick={toggleHiddenLocal}
+                                title={isHiddenLocal ? 'Hiện nét vẽ' : 'Tạm ẩn nét vẽ'}
                             >
                                 {isHiddenLocal ? <Eye size={14} /> : <EyeOff size={14} />}
                             </button>
@@ -380,7 +675,7 @@ const ChatDrawOverlay = ({ conversationId }) => {
                                 type="button"
                                 className={cx('pinned-mini-btn', 'danger')}
                                 onClick={handleClearAll}
-                                title="Xóa nét vẽ trên màn hình"
+                                title="Xóa toàn bộ nét vẽ"
                             >
                                 <Trash2 size={14} />
                             </button>
@@ -388,15 +683,14 @@ const ChatDrawOverlay = ({ conversationId }) => {
                     )}
                 </div>
             ) : (
-                /* Active Instagram Draw Studio Dock Pinned at Top */
                 <div className={cx('draw-studio-dock')}>
                     <div className={cx('studio-top-row')}>
                         <div className={cx('studio-brand')}>
                             <span className={cx('brand-badge')}>
                                 <PenTool size={14} />
                             </span>
-                            <span>Vẽ lên màn hình Chat</span>
-                            <span className={cx('live-pill')}>LIVE</span>
+                            <span>Vẽ lên đoạn Chat</span>
+                            <span className={cx('live-pill')}>Cuộn theo vị trí vẽ</span>
                         </div>
 
                         <div className={cx('brush-group')}>
@@ -440,7 +734,7 @@ const ChatDrawOverlay = ({ conversationId }) => {
                                 type="button"
                                 className={cx('brush-btn', { active: brushMode === 'eraser' })}
                                 onClick={() => setBrushMode('eraser')}
-                                title="Tẩy nét vẽ"
+                                title="Tẩy nét vẽ tại vị trí chạm"
                             >
                                 <Eraser size={14} />
                                 <span>Tẩy</span>
@@ -480,10 +774,10 @@ const ChatDrawOverlay = ({ conversationId }) => {
                                 type="button"
                                 className={cx('action-pill-btn', 'primary')}
                                 onClick={handlePinAndClose}
-                                title="Ghim nét vẽ đính trên màn hình chat"
+                                title="Xong & giữ nét vẽ tại vị trí tin nhắn"
                             >
                                 <Pin size={13} />
-                                <span>Ghim trên màn hình</span>
+                                <span>Xong</span>
                             </button>
                             <button
                                 type="button"
@@ -545,23 +839,7 @@ const ChatDrawOverlay = ({ conversationId }) => {
                     </div>
                 </div>
             )}
-
-            {/* Transparent Drawing Canvas Overlay */}
-            <canvas
-                ref={canvasRef}
-                className={cx('draw-canvas', {
-                    interactive: isDrawModeOpen,
-                    'hidden-canvas': isHiddenLocal && !isDrawModeOpen,
-                })}
-                onMouseDown={handlePointerDown}
-                onMouseMove={handlePointerMove}
-                onMouseUp={handlePointerUp}
-                onMouseLeave={handlePointerUp}
-                onTouchStart={handlePointerDown}
-                onTouchMove={handlePointerMove}
-                onTouchEnd={handlePointerUp}
-            />
-        </div>
+        </>
     );
 };
 
