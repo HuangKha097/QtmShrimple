@@ -22,6 +22,19 @@ export const useChatStore = create(
             activeReactionMessageId: null,
             setActiveReactionMessageId: (id) => set({ activeReactionMessageId: id }),
 
+            // Instagram-Style Chat Screen Draw State
+            chatDrawings: {},
+            isDrawModeOpen: false,
+            setIsDrawModeOpen: (val) => set({ isDrawModeOpen: Boolean(val) }),
+            toggleDrawMode: () => set((state) => ({ isDrawModeOpen: !state.isDrawModeOpen })),
+            setChatDrawing: (conversationId, payload) =>
+                set((state) => ({
+                    chatDrawings: {
+                        ...state.chatDrawings,
+                        [conversationId]: payload,
+                    },
+                })),
+
             upsertConversation: (conversation) => {
                 if (!conversation?._id) return;
                 const myId = useAuthStore.getState().user?._id?.toString();
@@ -916,12 +929,23 @@ export const useChatStore = create(
                         };
                     });
 
-                    // Thông báo tin nhắn mới nếu không đang mở hội thoại này
+                    // Thông báo tin nhắn mới & thông báo khi được nhắc tên (@mention / @everyone)
                     const state = get();
                     const convoId = newMessage.conversationId;
                     const isActive = state.activeConversationId === convoId;
-                    if (!isOwn && !isActive) {
-                        toast.info("Tin nhắn mới: " + (newMessage.content || "Đã gửi một tệp/ảnh"));
+                    const currentUser = useAuthStore.getState().user;
+                    const rawContent = newMessage.content || "";
+                    const myUsername = currentUser?.username;
+                    const isEveryoneTagged = /(?:^|\s)@(?:everyone|all)\b/i.test(rawContent);
+                    const isMeTagged = myUsername
+                        ? new RegExp(`(?:^|\\s)@${myUsername.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i').test(rawContent)
+                        : false;
+
+                    if (!isOwn && (isEveryoneTagged || isMeTagged)) {
+                        const senderName = newMessage.senderId?.displayName || newMessage.senderId?.username || "Ai đó";
+                        toast.info(`📣 ${senderName} đã nhắc đến bạn: "${rawContent.slice(0, 80)}"`);
+                    } else if (!isOwn && !isActive) {
+                        toast.info("Tin nhắn mới: " + (rawContent || "Đã gửi một tệp/ảnh"));
                     }
                 });
 
@@ -1126,6 +1150,17 @@ export const useChatStore = create(
                         }));
                     }
                 });
+
+                socket.off("chatScreenDrawingUpdated");
+                socket.on("chatScreenDrawingUpdated", (payload) => {
+                    if (!payload?.conversationId) return;
+                    set((state) => ({
+                        chatDrawings: {
+                            ...state.chatDrawings,
+                            [payload.conversationId]: payload,
+                        },
+                    }));
+                });
             },
 
             unsubscribeFromMessages: () => {
@@ -1143,6 +1178,7 @@ export const useChatStore = create(
                     socket.off("newFriendRequest");
                     socket.off("friendRequestAccepted");
                     socket.off("friendRequestDeclined");
+                    socket.off("chatScreenDrawingUpdated");
                 }
             },
 
@@ -1155,6 +1191,7 @@ export const useChatStore = create(
                 friends: state.friends,
                 friendRequests: state.friendRequests,
                 activeConversationId: state.activeConversationId,
+                chatDrawings: state.chatDrawings,
             }),
         }
     )

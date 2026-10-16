@@ -101,6 +101,11 @@
       background-color: rgba(249, 115, 22, 0.08);
     }
 
+    &.mentioned-me-bubble {
+      border: 1px solid rgba(249, 115, 22, 0.55);
+      box-shadow: 0 0 14px rgba(249, 115, 22, 0.18);
+    }
+
     .message-text {
       line-height: 1.45;
       font-size: 1.48rem;

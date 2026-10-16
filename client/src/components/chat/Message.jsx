@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import classNames from 'classnames/bind';
 import { motion as Motion } from 'motion/react';
 import styles from '../../assets/css/Message.module.scss';
@@ -10,6 +11,7 @@ import { useAuthStore } from "../../stores/useAuthStore.js";
 import { useGroupCallStore } from "../../stores/useGroupCallStore.js";
 import CustomAudioPlayer from './CustomAudioPlayer.jsx';
 import ForwardModal from './ForwardModal.jsx';
+import { formatHashtags } from '../../utils/hashtagFormatter.jsx';
 import { toast } from 'sonner';
 
 const cx = classNames.bind(styles);
@@ -59,6 +61,19 @@ const Message = ({
     } = useChatStore();
 
     const { user: currentUser } = useAuthStore();
+    const navigate = useNavigate();
+
+    const isMentioningMe = React.useMemo(() => {
+        if (!text || typeof text !== 'string' || isMe) return false;
+        const lower = text.toLowerCase();
+        if (/(?:^|\s)@(?:everyone|all)\b/i.test(lower)) return true;
+        if (currentUser?.username) {
+            const escaped = currentUser.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const myRegex = new RegExp(`(?:^|\\s)@${escaped}\\b`, 'i');
+            if (myRegex.test(text)) return true;
+        }
+        return false;
+    }, [text, isMe, currentUser?.username]);
 
     const { 
         activeGroupCalls, 
@@ -521,8 +536,21 @@ const Message = ({
                                 </div>
                             ) : (
                                 (!image || text) && (
-                                    <div className={cx('message-bubble', { 'pinned-message': isPinned })}>
-                                        <p className={cx('message-text')}>{text}</p>
+                                    <div className={cx('message-bubble', { 'pinned-message': isPinned, 'mentioned-me-bubble': isMentioningMe })}>
+                                        <p className={cx('message-text')}>
+                                            {formatHashtags(
+                                                text,
+                                                (tag) => navigate(`/feed/search?q=${encodeURIComponent('#' + tag)}`),
+                                                (username, resolvedUser) => {
+                                                    if (resolvedUser?._id) {
+                                                        navigate(`/feed/profile/${resolvedUser._id}`);
+                                                    } else {
+                                                        navigate(`/feed/search?q=${encodeURIComponent('@' + username)}`);
+                                                    }
+                                                },
+                                                { isOwnMessage: isMe }
+                                            )}
+                                        </p>
                                     </div>
                                 )
                             )}

@@ -260,6 +260,7 @@ const NotificationDropdown = ({ align = 'right' }) => {
                                                 if (notif.type === 'like') actionDesc = 'đã thích bài viết của bạn.';
                                                 if (notif.type === 'comment') actionDesc = `đã bình luận: "${notif.text || ''}"`;
                                                 if (notif.type === 'reply') actionDesc = `đã phản hồi: "${notif.text || ''}"`;
+                                                if (notif.type === 'mention') actionDesc = `đã nhắc đến bạn: "${notif.text || ''}"`;
                                                 if (notif.type === 'friend_accept') actionDesc = 'đã chấp nhận lời mời kết bạn của bạn.';
                                                 if (notif.type === 'friend_request') actionDesc = 'đã gửi cho bạn một lời mời kết bạn.';
 
