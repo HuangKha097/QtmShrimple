@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import classNames from 'classnames/bind';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
@@ -24,7 +25,6 @@ import {
     Share2, 
     Download, 
     Crown,
-    Check,
     Loader2,
     Shield,
     ShieldAlert,
@@ -81,7 +81,6 @@ const ChatInfo = ({ chat, onClose }) => {
                 .finally(() => setLoadingMedia(false));
 
             fetchPinnedMessages(chat._id);
-
         }
     }, [chat?._id, fetchPinnedMessages]);
 
@@ -183,6 +182,15 @@ const ChatInfo = ({ chat, onClose }) => {
         if (!url) return defaultAvatar;
         if (url.startsWith('http') || url.startsWith('data:')) return url;
         return `${ASSET_BASE_URL}${url}`;
+    };
+
+    const resolveMemberAvatar = (member) => {
+        if (!member) return defaultAvatar;
+        if (Array.isArray(friends) && friends.length > 0) {
+            const friend = friends.find(f => f && f._id && f._id.toString() === member._id?.toString());
+            if (friend?.avatarURL) return getAvatarSrc(friend.avatarURL);
+        }
+        return getAvatarSrc(member.avatarURL);
     };
 
     const handleBlockUser = async () => {
@@ -310,182 +318,156 @@ const ChatInfo = ({ chat, onClose }) => {
                 </div>
             </header>
 
-            {/* 2. Hero Profile */}
-            <section className={cx('profile-hero')}>
-                <div className={cx('hero-content')}>
-                    <div className={cx('avatar-wrapper')}>
-                        {isGroup ? (
-                            chat.avatarURL || chat.group?.avatarURL ? (
-                                <div className={cx('single-avatar-box')}>
-                                <img
-                                    src={getAvatarSrc(chat.avatarURL || chat.group?.avatarURL)}
-                                    alt="Group Avatar"
-                                    className={cx('single-avatar')}
-                                    onError={(e) => { e.target.src = defaultAvatar; }}
-                                />
-                                </div>
-                            ) : (
-                                <div className={cx('group-avatar-stack')}>
-                                    <img 
-                                        src={getAvatarSrc(participants[0]?.avatarURL)} 
-                                        className={cx('stack-img', 'first')} 
-                                        alt="" 
-                                        onError={(e) => { e.target.src = defaultAvatar; }}
-                                    />
-                                    {participants.length > 1 && (
+            {/* Unified Scroll Body so Hero + Sticky Tabs + Content scroll harmoniously */}
+            <div className={cx('info-scroll-body')}>
+                {/* 2. Hero Profile */}
+                <section className={cx('profile-hero')}>
+                    <div className={cx('hero-content')}>
+                        <div className={cx('avatar-wrapper')}>
+                            {isGroup ? (
+                                chat.avatarURL || chat.group?.avatarURL ? (
+                                    <div className={cx('single-avatar-box')}>
+                                        <img
+                                            src={getAvatarSrc(chat.avatarURL || chat.group?.avatarURL)}
+                                            alt="Group Avatar"
+                                            className={cx('single-avatar')}
+                                            onError={(e) => { e.target.src = defaultAvatar; }}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className={cx('group-avatar-stack')}>
                                         <img 
-                                            src={getAvatarSrc(participants[1]?.avatarURL)} 
-                                            className={cx('stack-img', 'second')} 
+                                            src={resolveMemberAvatar(participants[0])} 
+                                            className={cx('stack-img', 'first')} 
                                             alt="" 
                                             onError={(e) => { e.target.src = defaultAvatar; }}
                                         />
-                                    )}
+                                        {participants.length > 1 && (
+                                            <img 
+                                                src={resolveMemberAvatar(participants[1])} 
+                                                className={cx('stack-img', 'second')} 
+                                                alt="" 
+                                                onError={(e) => { e.target.src = defaultAvatar; }}
+                                            />
+                                        )}
+                                    </div>
+                                )
+                            ) : (
+                                <div className={cx('single-avatar-box')}>
+                                    <img
+                                        src={getAvatarSrc(partner?.avatarURL)}
+                                        alt={displayName}
+                                        className={cx('single-avatar')}
+                                        onError={(e) => { e.target.src = defaultAvatar; }}
+                                    />
+                                    <span className={cx('online-status-dot', { online: isOnline })} />
                                 </div>
-                            )
-                        ) : (
-                            <div className={cx('single-avatar-box')}>
-                                <img
-                                    src={getAvatarSrc(partner?.avatarURL)}
-                                    alt={displayName}
-                                    className={cx('single-avatar')}
-                                    onError={(e) => { e.target.src = defaultAvatar; }}
-                                />
-                                <span className={cx('online-status-dot', { online: isOnline })} />
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
 
-                    <h2 className={cx('hero-name')}>{displayName}</h2>
-                    
-                    <div className={cx('hero-meta')}>
-                        {usernameTag && <span className={cx('hero-username')}>{usernameTag}</span>}
-                        <span className={cx('hero-sub', { online: isOnline })}>{subInfo}</span>
-                    </div>
+                        <h2 className={cx('hero-name')}>{displayName}</h2>
+                        
+                        <div className={cx('hero-meta')}>
+                            {usernameTag && <span className={cx('hero-username')}>{usernameTag}</span>}
+                            <span className={cx('hero-sub', { online: isOnline })}>{subInfo}</span>
+                        </div>
 
-                    {/* Quick Action Pills (X Style) */}
-                    <div className={cx('quick-actions')}>
-                        {!isGroup && partnerId && (
+                        {/* Quick Action Pills (X Style) */}
+                        <div className={cx('quick-actions')}>
+                            {!isGroup && partnerId && (
+                                <Motion.button 
+                                    className={cx('action-pill')}
+                                    whileTap={{ scale: 0.94 }}
+                                    onClick={() => handleViewProfile(partnerId)}
+                                    title="Xem hồ sơ"
+                                >
+                                    <User size={18} />
+                                    <span>Hồ sơ</span>
+                                </Motion.button>
+                            )}
+
+                            <Motion.button 
+                                className={cx('action-pill', { active: isMuted })}
+                                whileTap={{ scale: 0.94 }}
+                                onClick={handleToggleMute}
+                                title={isMuted ? "Bật thông báo" : "Tắt thông báo"}
+                            >
+                                {isMuted ? <BellOff size={18} /> : <Bell size={18} />}
+                                <span>{isMuted ? "Đã tắt" : "Tắt báo"}</span>
+                            </Motion.button>
+
+                            {isGroup && isCurrentUserAdmin && (
+                                <Motion.button 
+                                    className={cx('action-pill')}
+                                    whileTap={{ scale: 0.94 }}
+                                    onClick={() => setShowAddMemberModal(true)}
+                                    title="Thêm thành viên vào nhóm"
+                                >
+                                    <UserPlus size={18} />
+                                    <span>Thêm TV</span>
+                                </Motion.button>
+                            )}
+
+                            {/* Tree QR Code Action Pill */}
                             <Motion.button 
                                 className={cx('action-pill')}
                                 whileTap={{ scale: 0.94 }}
-                                onClick={() => handleViewProfile(partnerId)}
-                                title="Xem hồ sơ"
+                                onClick={() => setShowQRModal(true)}
+                                disabled={isGroup && !groupInviteCode}
+                                title={isGroup ? "Mã QR Cây 3D của nhóm" : "Mã QR kết bạn"}
                             >
-                                <User size={18} />
-                                <span>Hồ sơ</span>
+                                <QrCode size={18} />
+                                <span>{isGroup ? "QR 3D" : "Mã QR"}</span>
                             </Motion.button>
-                        )}
 
-                        <Motion.button 
-                            className={cx('action-pill', { active: isMuted })}
-                            whileTap={{ scale: 0.94 }}
-                            onClick={handleToggleMute}
-                            title={isMuted ? "Bật thông báo" : "Tắt thông báo"}
-                        >
-                            {isMuted ? <BellOff size={18} /> : <Bell size={18} />}
-                            <span>{isMuted ? "Đã tắt" : "Tắt báo"}</span>
-                        </Motion.button>
+                            {isGroup ? (
+                                <Motion.button 
+                                    className={cx('action-pill')}
+                                    whileTap={{ scale: 0.94 }}
+                                    onClick={() => setShowInvite(true)}
+                                    title="Mời thành viên bằng liên kết hoặc QR 2D"
+                                >
+                                    <Share2 size={18} />
+                                    <span>Link mời</span>
+                                </Motion.button>
+                            ) : (
+                                <Motion.button 
+                                    className={cx('action-pill', 'danger-pill', { blocked: isBlocked })}
+                                    whileTap={{ scale: 0.94 }}
+                                    onClick={handleBlockUser}
+                                    title={isBlocked ? "Đã chặn" : "Chặn người dùng"}
+                                >
+                                    <Ban size={18} />
+                                    <span>{isBlocked ? "Đã chặn" : "Chặn"}</span>
+                                </Motion.button>
+                            )}
+                        </div>
 
-                        {/* Tree QR Code Action Pill */}
-                        <Motion.button 
-                            className={cx('action-pill')}
-                            whileTap={{ scale: 0.94 }}
-                            onClick={() => setShowQRModal(true)}
-                            disabled={isGroup && !groupInviteCode}
-                            title={isGroup ? "Mã QR nhóm" : "Mã QR kết bạn"}
-                        >
-                            <QrCode size={18} />
-                            <span>Mã QR</span>
-                        </Motion.button>
-
-                        {isGroup ? (
-                            <Motion.button 
-                                className={cx('action-pill')}
-                                whileTap={{ scale: 0.94 }}
-                                onClick={() => setShowInvite(true)}
-                                title="Mời thành viên bằng URL hoặc QR"
-                            >
-                                <Share2 size={18} />
-                                <span>Mời / QR</span>
-                            </Motion.button>
-                        ) : (
-                            <Motion.button 
-                                className={cx('action-pill', 'danger-pill', { blocked: isBlocked })}
-                                whileTap={{ scale: 0.94 }}
-                                onClick={handleBlockUser}
-                                title={isBlocked ? "Đã chặn" : "Chặn người dùng"}
-                            >
-                                <Ban size={18} />
-                                <span>{isBlocked ? "Đã chặn" : "Chặn"}</span>
-                            </Motion.button>
+                        {/* Compact Group Overview Card inside Hero */}
+                        {isGroup && (
+                            <GroupDetails
+                                key={chat._id}
+                                chat={chat}
+                                isLeader={isLeader}
+                                showInvite={showInvite}
+                                onCloseInvite={() => setShowInvite(false)}
+                                onClose={onClose}
+                            />
                         )}
                     </div>
-                </div>
-            </section>
+                </section>
 
-            {/* 3. Segmented Navigation Tabs (X Style) */}
-            <div className={cx('tabs-container')}>
-                <button 
-                    className={cx('tab-btn', { active: activeTab === 'media' })}
-                    onClick={() => setActiveTab('media')}
-                    title="Ảnh đã chia sẻ"
-                >
-                    <ImageIcon size={15} />
-                    <span className={cx('tab-label')}>Ảnh</span>
-                    {media.images.length > 0 && <span className={cx('tab-count')}>{media.images.length}</span>}
-                    {activeTab === 'media' && (
-                        <Motion.div 
-                            className={cx('tab-indicator')} 
-                            layoutId="activeChatInfoTab" 
-                            transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                        />
-                    )}
-                </button>
-
-                <button 
-                    className={cx('tab-btn', { active: activeTab === 'files' })}
-                    onClick={() => setActiveTab('files')}
-                    title="Tệp đã chia sẻ"
-                >
-                    <FileText size={15} />
-                    <span className={cx('tab-label')}>Tệp</span>
-                    {media.files.length > 0 && <span className={cx('tab-count')}>{media.files.length}</span>}
-                    {activeTab === 'files' && (
-                        <Motion.div 
-                            className={cx('tab-indicator')} 
-                            layoutId="activeChatInfoTab" 
-                            transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                        />
-                    )}
-                </button>
-
-                <button 
-                    className={cx('tab-btn', { active: activeTab === 'pins' })}
-                    onClick={() => setActiveTab('pins')}
-                    title="Tin nhắn đã ghim"
-                >
-                    <Pin size={15} />
-                    <span className={cx('tab-label')}>Ghim</span>
-                    {pins.length > 0 && <span className={cx('tab-count')}>{pins.length}</span>}
-                    {activeTab === 'pins' && (
-                        <Motion.div 
-                            className={cx('tab-indicator')} 
-                            layoutId="activeChatInfoTab" 
-                            transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                        />
-                    )}
-                </button>
-
-                {isGroup && (
+                {/* 3. Segmented Navigation Tabs (Sticky inside scroll body) */}
+                <div className={cx('tabs-container')}>
                     <button 
-                        className={cx('tab-btn', { active: activeTab === 'members' })}
-                        onClick={() => setActiveTab('members')}
-                        title="Thành viên nhóm"
+                        className={cx('tab-btn', { active: activeTab === 'media' })}
+                        onClick={() => setActiveTab('media')}
+                        title="Ảnh đã chia sẻ"
                     >
-                        <Users size={15} />
-                        <span className={cx('tab-label')}>T.viên</span>
-                        <span className={cx('tab-count')}>{participants.length}</span>
-                        {activeTab === 'members' && (
+                        <ImageIcon size={15} />
+                        <span className={cx('tab-label')}>Ảnh</span>
+                        {media.images.length > 0 && <span className={cx('tab-count')}>{media.images.length}</span>}
+                        {activeTab === 'media' && (
                             <Motion.div 
                                 className={cx('tab-indicator')} 
                                 layoutId="activeChatInfoTab" 
@@ -493,325 +475,379 @@ const ChatInfo = ({ chat, onClose }) => {
                             />
                         )}
                     </button>
-                )}
-            </div>
 
-            {/* 4. Tab Content Area */}
-            <div className={cx('scroll-content')}>
-                {isGroup && <GroupDetails key={chat._id} chat={chat} isLeader={isLeader}
-                    showInvite={showInvite} onCloseInvite={() => setShowInvite(false)} onClose={onClose} />}
-                <AnimatePresence mode="wait">
-                    {activeTab === 'media' && (
-                        <Motion.div 
-                            key="tab-media"
-                            className={cx('tab-pane')}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            transition={{ duration: 0.18 }}
+                    <button 
+                        className={cx('tab-btn', { active: activeTab === 'files' })}
+                        onClick={() => setActiveTab('files')}
+                        title="Tệp đã chia sẻ"
+                    >
+                        <FileText size={15} />
+                        <span className={cx('tab-label')}>Tệp</span>
+                        {media.files.length > 0 && <span className={cx('tab-count')}>{media.files.length}</span>}
+                        {activeTab === 'files' && (
+                            <Motion.div 
+                                className={cx('tab-indicator')} 
+                                layoutId="activeChatInfoTab" 
+                                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                            />
+                        )}
+                    </button>
+
+                    <button 
+                        className={cx('tab-btn', { active: activeTab === 'pins' })}
+                        onClick={() => setActiveTab('pins')}
+                        title="Tin nhắn đã ghim"
+                    >
+                        <Pin size={15} />
+                        <span className={cx('tab-label')}>Ghim</span>
+                        {pins.length > 0 && <span className={cx('tab-count')}>{pins.length}</span>}
+                        {activeTab === 'pins' && (
+                            <Motion.div 
+                                className={cx('tab-indicator')} 
+                                layoutId="activeChatInfoTab" 
+                                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                            />
+                        )}
+                    </button>
+
+                    {isGroup && (
+                        <button 
+                            className={cx('tab-btn', { active: activeTab === 'members' })}
+                            onClick={() => setActiveTab('members')}
+                            title="Thành viên nhóm"
                         >
-                            {loadingMedia ? (
-                                <div className={cx('loading-box')}>
-                                    <Loader2 size={24} className={cx('spinner')} />
-                                </div>
-                            ) : media.images.length > 0 ? (
-                                <div className={cx('media-grid')}>
-                                    {media.images.map((img) => (
-                                        <Motion.div 
-                                            key={img._id} 
-                                            className={cx('media-item')}
-                                            whileHover={{ scale: 1.03 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            onClick={() => setSelectedImage(img.url)}
-                                        >
-                                            <img src={img.url} alt="Shared" loading="lazy" />
-                                        </Motion.div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className={cx('empty-state')}>
-                                    <ImageIcon size={36} className={cx('empty-icon')} />
-                                    <p className={cx('empty-text')}>Chưa có ảnh nào được chia sẻ</p>
-                                </div>
+                            <Users size={15} />
+                            <span className={cx('tab-label')}>T.viên</span>
+                            <span className={cx('tab-count')}>{participants.length}</span>
+                            {activeTab === 'members' && (
+                                <Motion.div 
+                                    className={cx('tab-indicator')} 
+                                    layoutId="activeChatInfoTab" 
+                                    transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                                />
                             )}
-                        </Motion.div>
+                        </button>
                     )}
+                </div>
 
-                    {activeTab === 'files' && (
-                        <Motion.div 
-                            key="tab-files"
-                            className={cx('tab-pane')}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            transition={{ duration: 0.18 }}
-                        >
-                            {loadingMedia ? (
-                                <div className={cx('loading-box')}>
-                                    <Loader2 size={24} className={cx('spinner')} />
-                                </div>
-                            ) : media.files.length > 0 ? (
-                                <div className={cx('files-list')}>
-                                    {media.files.map((file) => (
-                                        <a 
-                                            key={file._id} 
-                                            href={file.url} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className={cx('file-card')}
-                                        >
-                                            <div className={cx('file-icon-box')}>
-                                                <FileText size={20} />
-                                            </div>
-                                            <div className={cx('file-details')}>
-                                                <span className={cx('file-name')}>{file.fileName || "Tệp đính kèm"}</span>
-                                                <span className={cx('file-meta')}>Nhấn để mở / tải xuống</span>
-                                            </div>
-                                            <div className={cx('file-download-btn')}>
-                                                <Download size={16} />
-                                            </div>
-                                        </a>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className={cx('empty-state')}>
-                                    <FileText size={36} className={cx('empty-icon')} />
-                                    <p className={cx('empty-text')}>Chưa có tệp nào được gửi</p>
-                                </div>
-                            )}
-                        </Motion.div>
-                    )}
-
-                    {activeTab === 'pins' && (
-                        <Motion.div 
-                            key="tab-pins"
-                            className={cx('tab-pane')}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            transition={{ duration: 0.18 }}
-                        >
-                            {pins.length > 0 ? (
-                                <div className={cx('pins-list')}>
-                                    {pins.map((pin) => (
-                                        <div key={pin._id} className={cx('pin-card')}>
-                                            <div className={cx('pin-card-top')}>
-                                                <div className={cx('pin-sender-box')}>
-                                                    <img 
-                                                        src={getAvatarSrc(pin.senderId?.avatarURL)} 
-                                                        alt="" 
-                                                        className={cx('pin-sender-avatar')}
-                                                        onError={(e) => { e.target.src = defaultAvatar; }}
-                                                    />
-                                                    <div className={cx('pin-sender-info')}>
-                                                        <span className={cx('pin-sender-name')}>
-                                                            {pin.senderId?.displayName || pin.senderId?.username || "Người gửi"}
-                                                        </span>
-                                                        <span className={cx('pin-date')}>
-                                                            {pin.createdAt ? new Date(pin.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <button 
-                                                    className={cx('pin-unpin-action-btn')}
-                                                    onClick={() => handleUnpin(pin._id)}
-                                                    title="Bỏ ghim tin nhắn"
-                                                >
-                                                    <PinOff size={15} />
-                                                </button>
-                                            </div>
-                                            <div 
-                                                className={cx('pin-card-body')} 
-                                                onClick={() => handleScrollToMessage(pin._id)}
-                                                title="Nhấn để cuộn đến tin nhắn"
+                {/* 4. Tab Content Area */}
+                <div className={cx('scroll-content')}>
+                    <AnimatePresence mode="wait">
+                        {activeTab === 'media' && (
+                            <Motion.div 
+                                key="tab-media"
+                                className={cx('tab-pane')}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                transition={{ duration: 0.18 }}
+                            >
+                                {loadingMedia ? (
+                                    <div className={cx('loading-box')}>
+                                        <Loader2 size={24} className={cx('spinner')} />
+                                    </div>
+                                ) : media.images.length > 0 ? (
+                                    <div className={cx('media-grid')}>
+                                        {media.images.map((img) => (
+                                            <Motion.div 
+                                                key={img._id} 
+                                                className={cx('media-item')}
+                                                whileHover={{ scale: 1.03 }}
+                                                whileTap={{ scale: 0.98 }}
+                                                onClick={() => setSelectedImage(img.url)}
                                             >
-                                                <p className={cx('pin-text')}>{getPinPreviewText(pin)}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className={cx('empty-state')}>
-                                    <Pin size={36} className={cx('empty-icon')} />
-                                    <p className={cx('empty-text')}>Chưa có tin nhắn nào được ghim</p>
-                                </div>
-                            )}
-                        </Motion.div>
-                    )}
+                                                <img src={img.url} alt="Shared" loading="lazy" />
+                                            </Motion.div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className={cx('empty-state')}>
+                                        <ImageIcon size={36} className={cx('empty-icon')} />
+                                        <p className={cx('empty-text')}>Chưa có ảnh nào được chia sẻ</p>
+                                    </div>
+                                )}
+                            </Motion.div>
+                        )}
 
-                    {activeTab === 'members' && isGroup && (
-                        <Motion.div 
-                            key="tab-members"
-                            className={cx('tab-pane')}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            transition={{ duration: 0.18 }}
-                        >
-                            {isCurrentUserAdmin && (
-                                <div className={cx('members-actions-bar')}>
-                                    <button 
-                                        type="button"
-                                        className={cx('add-member-header-btn')}
-                                        onClick={() => setShowAddMemberModal(true)}
-                                    >
-                                        <UserPlus size={16} />
-                                        <span>Thêm thành viên</span>
-                                    </button>
-                                </div>
-                            )}
-
-                            <div className={cx('members-list')}>
-                                {sortedParticipants.map((member) => {
-                                    const memberIdStr = member._id?.toString();
-                                    const isMe = memberIdStr === currentUser?._id?.toString();
-                                    const isThisCreator = groupCreatorId && memberIdStr === groupCreatorId;
-                                    const isThisAdmin = isThisCreator || member.role === 'admin';
-                                    const memberOnline = Array.isArray(onlineUsers) && onlineUsers.includes(memberIdStr);
-                                    const canManageThisMember = !isMe && !isThisCreator && (isCurrentUserCreator || (isCurrentUserAdmin && member.role !== 'admin'));
-
-                                    return (
-                                        <div 
-                                            key={member._id} 
-                                            className={cx('member-row')}
-                                        >
-                                            <div 
-                                                className={cx('member-main-click')}
-                                                onClick={() => !isMe && handleViewProfile(member._id)}
+                        {activeTab === 'files' && (
+                            <Motion.div 
+                                key="tab-files"
+                                className={cx('tab-pane')}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                transition={{ duration: 0.18 }}
+                            >
+                                {loadingMedia ? (
+                                    <div className={cx('loading-box')}>
+                                        <Loader2 size={24} className={cx('spinner')} />
+                                    </div>
+                                ) : media.files.length > 0 ? (
+                                    <div className={cx('files-list')}>
+                                        {media.files.map((file) => (
+                                            <a 
+                                                key={file._id} 
+                                                href={file.url} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className={cx('file-card')}
                                             >
-                                                <div className={cx('member-avatar-box')}>
-                                                    <img 
-                                                        src={getAvatarSrc(member.avatarURL)} 
-                                                        className={cx('member-avatar')} 
-                                                        alt="" 
-                                                        onError={(e) => { e.target.src = defaultAvatar; }}
-                                                    />
-                                                    {memberOnline && <span className={cx('member-online-dot')} />}
+                                                <div className={cx('file-icon-box')}>
+                                                    <FileText size={20} />
                                                 </div>
-                                                
-                                                <div className={cx('member-info')}>
-                                                    <div className={cx('name-line')}>
-                                                        <span className={cx('member-name')}>
-                                                            {isMe ? `${member.displayName || "Bạn"} (Bạn)` : (member.displayName || member.username || "Thành viên")}
-                                                        </span>
-                                                        {isThisCreator ? (
-                                                            <span className={cx('creator-badge')} title="Trưởng nhóm">
-                                                                <Crown size={12} />
-                                                                <span>Trưởng nhóm</span>
-                                                            </span>
-                                                        ) : isThisAdmin ? (
-                                                            <span className={cx('admin-badge')} title="Quản trị viên">
-                                                                <Shield size={12} />
-                                                                <span>Quản trị viên</span>
-                                                            </span>
-                                                        ) : null}
-                                                    </div>
-                                                    {member.username && (
-                                                        <span className={cx('member-username')}>@{member.username}</span>
-                                                    )}
+                                                <div className={cx('file-details')}>
+                                                    <span className={cx('file-name')}>{file.fileName || "Tệp đính kèm"}</span>
+                                                    <span className={cx('file-meta')}>Nhấn để mở / tải xuống</span>
                                                 </div>
-                                            </div>
+                                                <div className={cx('file-download-btn')}>
+                                                    <Download size={16} />
+                                                </div>
+                                            </a>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className={cx('empty-state')}>
+                                        <FileText size={36} className={cx('empty-icon')} />
+                                        <p className={cx('empty-text')}>Chưa có tệp nào được gửi</p>
+                                    </div>
+                                )}
+                            </Motion.div>
+                        )}
 
-                                            {canManageThisMember && (
-                                                <div className={cx('member-row-menu-container')} onClick={(e) => e.stopPropagation()}>
-                                                    <button 
-                                                        className={cx('member-menu-trigger')}
-                                                        onClick={() => setActiveMemberMenu(activeMemberMenu === memberIdStr ? null : memberIdStr)}
-                                                        title="Tùy chọn thành viên"
-                                                    >
-                                                        <MoreVertical size={16} />
-                                                    </button>
-
-                                                    {activeMemberMenu === memberIdStr && (
-                                                        <div className={cx('member-menu-popover')}>
-                                                            {isCurrentUserCreator && (member.role === 'admin' ? (
-                                                                <button 
-                                                                    className={cx('menu-opt')}
-                                                                    onClick={() => handleUpdateRole(member._id, 'member')}
-                                                                >
-                                                                    <ShieldAlert size={15} />
-                                                                    <span>Gỡ quyền Quản trị viên</span>
-                                                                </button>
-                                                            ) : (
-                                                                <button 
-                                                                    className={cx('menu-opt')}
-                                                                    onClick={() => handleUpdateRole(member._id, 'admin')}
-                                                                >
-                                                                    <ShieldCheck size={15} />
-                                                                    <span>Bổ nhiệm Quản trị viên</span>
-                                                                </button>
-                                                            ))}
-                                                            <button 
-                                                                className={cx('menu-opt', 'danger')}
-                                                                onClick={() => handleRemoveMember(member._id, member.displayName || member.username)}
-                                                            >
-                                                                <UserMinus size={15} />
-                                                                <span>Xóa khỏi nhóm</span>
-                                                            </button>
+                        {activeTab === 'pins' && (
+                            <Motion.div 
+                                key="tab-pins"
+                                className={cx('tab-pane')}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                transition={{ duration: 0.18 }}
+                            >
+                                {pins.length > 0 ? (
+                                    <div className={cx('pins-list')}>
+                                        {pins.map((pin) => (
+                                            <div key={pin._id} className={cx('pin-card')}>
+                                                <div className={cx('pin-card-top')}>
+                                                    <div className={cx('pin-sender-box')}>
+                                                        <img 
+                                                            src={getAvatarSrc(pin.senderId?.avatarURL)} 
+                                                            alt="" 
+                                                            className={cx('pin-sender-avatar')}
+                                                            onError={(e) => { e.target.src = defaultAvatar; }}
+                                                        />
+                                                        <div className={cx('pin-sender-info')}>
+                                                            <span className={cx('pin-sender-name')}>
+                                                                {pin.senderId?.displayName || pin.senderId?.username || "Người gửi"}
+                                                            </span>
+                                                            <span className={cx('pin-date')}>
+                                                                {pin.createdAt ? new Date(pin.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}
+                                                            </span>
                                                         </div>
-                                                    )}
+                                                    </div>
+                                                    <button 
+                                                        className={cx('pin-unpin-action-btn')}
+                                                        onClick={() => handleUnpin(pin._id)}
+                                                        title="Bỏ ghim tin nhắn"
+                                                    >
+                                                        <PinOff size={15} />
+                                                    </button>
                                                 </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                                <div 
+                                                    className={cx('pin-card-body')} 
+                                                    onClick={() => handleScrollToMessage(pin._id)}
+                                                    title="Nhấn để cuộn đến tin nhắn"
+                                                >
+                                                    <p className={cx('pin-text')}>{getPinPreviewText(pin)}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className={cx('empty-state')}>
+                                        <Pin size={36} className={cx('empty-icon')} />
+                                        <p className={cx('empty-text')}>Chưa có tin nhắn nào được ghim</p>
+                                    </div>
+                                )}
+                            </Motion.div>
+                        )}
 
-                            {/* Group Danger Actions */}
-                            <div className={cx('group-danger-section')}>
-                                <button 
-                                    type="button" 
-                                    className={cx('group-action-btn', 'leave')}
-                                    onClick={handleLeaveGroup}
-                                >
-                                    <LogOut size={16} />
-                                    <span>Rời khỏi nhóm</span>
-                                </button>
-                                {isCurrentUserCreator && (
+                        {activeTab === 'members' && isGroup && (
+                            <Motion.div 
+                                key="tab-members"
+                                className={cx('tab-pane')}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                transition={{ duration: 0.18 }}
+                            >
+                                {isCurrentUserAdmin && (
+                                    <div className={cx('members-actions-bar')}>
+                                        <button 
+                                            type="button"
+                                            className={cx('add-member-header-btn')}
+                                            onClick={() => setShowAddMemberModal(true)}
+                                        >
+                                            <UserPlus size={16} />
+                                            <span>Thêm thành viên</span>
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className={cx('members-list')}>
+                                    {sortedParticipants.map((member) => {
+                                        const memberIdStr = member._id?.toString();
+                                        const isMe = memberIdStr === currentUser?._id?.toString();
+                                        const isThisCreator = groupCreatorId && memberIdStr === groupCreatorId;
+                                        const isThisAdmin = isThisCreator || member.role === 'admin';
+                                        const memberOnline = Array.isArray(onlineUsers) && onlineUsers.includes(memberIdStr);
+                                        const canManageThisMember = !isMe && !isThisCreator && (isCurrentUserCreator || (isCurrentUserAdmin && member.role !== 'admin'));
+
+                                        return (
+                                            <div 
+                                                key={member._id} 
+                                                className={cx('member-row')}
+                                            >
+                                                <div 
+                                                    className={cx('member-main-click')}
+                                                    onClick={() => !isMe && handleViewProfile(member._id)}
+                                                >
+                                                    <div className={cx('member-avatar-box')}>
+                                                        <img 
+                                                            src={resolveMemberAvatar(member)} 
+                                                            className={cx('member-avatar')} 
+                                                            alt="" 
+                                                            onError={(e) => { e.target.src = defaultAvatar; }}
+                                                        />
+                                                        {memberOnline && <span className={cx('member-online-dot')} />}
+                                                    </div>
+                                                    
+                                                    <div className={cx('member-info')}>
+                                                        <div className={cx('name-line')}>
+                                                            <span className={cx('member-name')}>
+                                                                {isMe ? `${member.displayName || "Bạn"} (Bạn)` : (member.displayName || member.username || "Thành viên")}
+                                                            </span>
+                                                            {isThisCreator ? (
+                                                                <span className={cx('creator-badge')} title="Trưởng nhóm">
+                                                                    <Crown size={12} />
+                                                                    <span>Trưởng nhóm</span>
+                                                                </span>
+                                                            ) : isThisAdmin ? (
+                                                                <span className={cx('admin-badge')} title="Quản trị viên">
+                                                                    <Shield size={12} />
+                                                                    <span>Quản trị viên</span>
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                        {member.username && (
+                                                            <span className={cx('member-username')}>@{member.username}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {canManageThisMember && (
+                                                    <div className={cx('member-row-menu-container')} onClick={(e) => e.stopPropagation()}>
+                                                        <button 
+                                                            className={cx('member-menu-trigger')}
+                                                            onClick={() => setActiveMemberMenu(activeMemberMenu === memberIdStr ? null : memberIdStr)}
+                                                            title="Tùy chọn thành viên"
+                                                        >
+                                                            <MoreVertical size={16} />
+                                                        </button>
+
+                                                        {activeMemberMenu === memberIdStr && (
+                                                            <div className={cx('member-menu-popover')}>
+                                                                {isCurrentUserCreator && (member.role === 'admin' ? (
+                                                                    <button 
+                                                                        className={cx('menu-opt')}
+                                                                        onClick={() => handleUpdateRole(member._id, 'member')}
+                                                                    >
+                                                                        <ShieldAlert size={15} />
+                                                                        <span>Gỡ quyền Quản trị viên</span>
+                                                                    </button>
+                                                                ) : (
+                                                                    <button 
+                                                                        className={cx('menu-opt')}
+                                                                        onClick={() => handleUpdateRole(member._id, 'admin')}
+                                                                    >
+                                                                        <ShieldCheck size={15} />
+                                                                        <span>Bổ nhiệm Quản trị viên</span>
+                                                                    </button>
+                                                                ))}
+                                                                <button 
+                                                                    className={cx('menu-opt', 'danger')}
+                                                                    onClick={() => handleRemoveMember(member._id, member.displayName || member.username)}
+                                                                >
+                                                                    <UserMinus size={15} />
+                                                                    <span>Xóa khỏi nhóm</span>
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Group Danger Actions */}
+                                <div className={cx('group-danger-section')}>
                                     <button 
                                         type="button" 
-                                        className={cx('group-action-btn', 'disband')}
-                                        onClick={handleDisbandGroup}
+                                        className={cx('group-action-btn', 'leave')}
+                                        onClick={handleLeaveGroup}
                                     >
-                                        <Trash2 size={16} />
-                                        <span>Giải tán nhóm</span>
+                                        <LogOut size={16} />
+                                        <span>Rời khỏi nhóm</span>
                                     </button>
-                                )}
-                            </div>
-                        </Motion.div>
-                    )}
-                </AnimatePresence>
+                                    {isCurrentUserCreator && (
+                                        <button 
+                                            type="button" 
+                                            className={cx('group-action-btn', 'disband')}
+                                            onClick={handleDisbandGroup}
+                                        >
+                                            <Trash2 size={16} />
+                                            <span>Giải tán nhóm</span>
+                                        </button>
+                                    )}
+                                </div>
+                            </Motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
 
-            {/* Lightbox Modal */}
-            <AnimatePresence>
-                {selectedImage && (
-                    <Motion.div 
-                        className={cx('overlay')}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setSelectedImage(null)}
-                    >
-                        <Motion.img 
-                            src={selectedImage} 
-                            className={cx('full-img')}
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                        <button 
-                            className={cx('overlay-close')}
+            {/* Lightbox Modal - Portaled to document.body */}
+            {typeof document !== 'undefined' && createPortal(
+                <AnimatePresence>
+                    {selectedImage && (
+                        <Motion.div 
+                            className={cx('overlay')}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
                             onClick={() => setSelectedImage(null)}
-                            title="Đóng xem trước"
                         >
-                            <X size={24} />
-                        </button>
-                    </Motion.div>
-                )}
-            </AnimatePresence>
+                            <Motion.img 
+                                src={selectedImage} 
+                                className={cx('full-img')}
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                            <button 
+                                className={cx('overlay-close')}
+                                onClick={() => setSelectedImage(null)}
+                                title="Đóng xem trước"
+                            >
+                                <X size={24} />
+                            </button>
+                        </Motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body
+            )}
 
             {/* Add Member Modal */}
             {showAddMemberModal && (

@@ -8,7 +8,7 @@ import defaultAvatar from "../../../public/favicon.png";
 import LoadingSpin from "../common/loading/LoadingSpin.jsx";
 import GroupCallBanner from "./GroupCallBanner.jsx";
 import { useNavigate } from 'react-router-dom';
-import { Calendar, GraduationCap } from 'lucide-react';
+import { Calendar, GraduationCap, Users } from 'lucide-react';
 import { ASSET_BASE_URL } from '../../config/env.js';
 
 const cx = classNames.bind(styles);
@@ -131,7 +131,7 @@ const ChatBody = () => {
     }
 
     const getSenderInfo = (senderId) => {
-        if (!senderId) return { name: "Unknown User", avatar: defaultAvatar };
+        if (!senderId) return { name: "Người dùng", avatar: defaultAvatar };
         const senderIdStr = senderId.toString();
 
         let participant = null;
@@ -173,6 +173,15 @@ const ChatBody = () => {
         };
     };
 
+    const getSenderIdStr = (msg) => {
+        if (!msg) return '';
+        const raw = typeof msg.senderId === 'object' ? msg.senderId?._id : msg.senderId;
+        return raw ? raw.toString() : '';
+    };
+
+    const groupDisplayName = currentConvo?.name || currentConvo?.group?.name || 'Nhóm trò chuyện';
+    const groupParticipants = currentConvo?.participants || [];
+
     return (
         <div
             className={cx('chat-body-wrapper')}
@@ -195,9 +204,9 @@ const ChatBody = () => {
                             conversationId={activeConversationId}
                             groupInfo={{
                                 _id: currentConvo?._id,
-                                name: currentConvo?.name || currentConvo?.group?.name || 'Nhóm',
+                                name: groupDisplayName,
                                 avatarURL: currentConvo?.avatarURL || currentConvo?.group?.avatarURL,
-                                participantsCount: currentConvo?.participants?.length || 0,
+                                participantsCount: groupParticipants.length,
                             }}
                         />
                     )}
@@ -209,7 +218,51 @@ const ChatBody = () => {
                         </div>
                     )}
 
-                    {/* X-Style Profile Card on top of messages thread */}
+                    {/* Group Welcome Header at top of Group Thread */}
+                    {isGroup && !hasMore && (
+                        <div className={cx('x-profile-banner', 'group-banner')}>
+                            <div className={cx('banner-avatar-box')}>
+                                {currentConvo?.avatarURL || currentConvo?.group?.avatarURL ? (
+                                    <img
+                                        src={getAvatarSrc(currentConvo.avatarURL || currentConvo.group?.avatarURL)}
+                                        alt={groupDisplayName}
+                                        className={cx('banner-avatar')}
+                                        onError={(e) => { e.target.src = defaultAvatar; }}
+                                    />
+                                ) : (
+                                    <div className={cx('banner-group-stack')}>
+                                        <img
+                                            src={getSenderInfo(groupParticipants[0]?._id).avatar}
+                                            alt=""
+                                            className={cx('stack-img', 'first')}
+                                            onError={(e) => { e.target.src = defaultAvatar; }}
+                                        />
+                                        {groupParticipants.length > 1 && (
+                                            <img
+                                                src={getSenderInfo(groupParticipants[1]?._id).avatar}
+                                                alt=""
+                                                className={cx('stack-img', 'second')}
+                                                onError={(e) => { e.target.src = defaultAvatar; }}
+                                            />
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <h3 className={cx('banner-name')}>{groupDisplayName}</h3>
+                            <div className={cx('banner-meta')}>
+                                <Users size={14} />
+                                <span>{groupParticipants.length} thành viên</span>
+                            </div>
+                            {currentConvo?.group?.descriptionGroup && (
+                                <p className={cx('banner-bio')}>{currentConvo.group.descriptionGroup}</p>
+                            )}
+                            <p className={cx('banner-divider-note')}>
+                                Đây là điểm bắt đầu của cuộc trò chuyện nhóm <strong>{groupDisplayName}</strong>.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* X-Style Profile Card on top of 1-1 messages thread */}
                     {!isGroup && partner && (
                         <div className={cx('x-profile-banner')}>
                             <div className={cx('banner-avatar-box')}>
@@ -253,22 +306,42 @@ const ChatBody = () => {
                         </div>
                     )}
 
-                    {/* Messages with Date Separators */}
+                    {/* Messages with Date Separators & Smart Grouping */}
                     {messageList.map((message, index) => {
-                        const senderId = typeof message.senderId === 'object'
-                            ? message.senderId?._id
-                            : message.senderId;
+                        const senderIdStr = getSenderIdStr(message);
 
                         const isMe = message.isOwn !== undefined
                             ? message.isOwn
-                            : currentUser?._id && senderId === currentUser._id;
+                            : Boolean(currentUser?._id && senderIdStr === currentUser._id.toString());
 
-                        const senderInfo = isMe ? {} : getSenderInfo(senderId);
+                        const senderInfo = isMe ? {} : getSenderInfo(senderIdStr);
 
                         // Date divider check
                         const prevMessage = index > 0 ? messageList[index - 1] : null;
+                        const nextMessage = index < messageList.length - 1 ? messageList[index + 1] : null;
+
                         const showDateDivider = !prevMessage || (
                             new Date(message.createdAt).toDateString() !== new Date(prevMessage.createdAt).toDateString()
+                        );
+
+                        const nextHasDateDivider = !nextMessage || (
+                            new Date(nextMessage.createdAt).toDateString() !== new Date(message.createdAt).toDateString()
+                        );
+
+                        const GROUP_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+                        const isSameSenderAsPrev = Boolean(
+                            !showDateDivider &&
+                            prevMessage &&
+                            getSenderIdStr(prevMessage) === senderIdStr &&
+                            Math.abs(new Date(message.createdAt) - new Date(prevMessage.createdAt)) < GROUP_THRESHOLD_MS
+                        );
+
+                        const isSameSenderAsNext = Boolean(
+                            !nextHasDateDivider &&
+                            nextMessage &&
+                            getSenderIdStr(nextMessage) === senderIdStr &&
+                            Math.abs(new Date(nextMessage.createdAt) - new Date(message.createdAt)) < GROUP_THRESHOLD_MS
                         );
 
                         return (
@@ -290,6 +363,8 @@ const ChatBody = () => {
                                     isGroup={currentConvo?.isGroup}
                                     time={formatTime(message.createdAt)}
                                     isMe={isMe}
+                                    isFirstInGroup={!isSameSenderAsPrev}
+                                    isLastInGroup={!isSameSenderAsNext}
                                     reactions={message.reactions || []}
                                     onReact={(emoji) =>
                                         reactToMessageAction(

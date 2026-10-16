@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import classNames from 'classnames/bind';
 import { motion as Motion } from 'motion/react';
 import styles from '../../assets/css/Message.module.scss';
@@ -34,7 +35,9 @@ const Message = ({
     createdAt,
     callId = null,
     callStatus = 'ended',
-    poll = null
+    poll = null,
+    isFirstInGroup = true,
+    isLastInGroup = true
 }) => {
     const [pickerStyle, setPickerStyle] = useState({});
     const [showDropdown, setShowDropdown] = useState(false);
@@ -206,22 +209,31 @@ const Message = ({
     return (
         <Motion.div
             id={messageId ? `msg-${messageId}` : undefined}
-            className={cx('message-wrapper', { me: isMe })}
+            className={cx('message-wrapper', {
+                me: isMe,
+                'first-in-group': isFirstInGroup,
+                'last-in-group': isLastInGroup,
+                grouped: !isFirstInGroup
+            })}
             initial={{ opacity: 0, y: 6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ type: "spring", stiffness: 450, damping: 30 }}
         >
             {!isMe && (
-                <img 
-                    src={avatar} 
-                    alt="avatar" 
-                    className={cx('avatar')} 
-                    onError={(e) => { e.target.src = profilePic_test; }}
-                />
+                isLastInGroup ? (
+                    <img 
+                        src={avatar} 
+                        alt="avatar" 
+                        className={cx('avatar')} 
+                        onError={(e) => { e.target.src = profilePic_test; }}
+                    />
+                ) : (
+                    <div className={cx('avatar-spacer')} aria-hidden="true" />
+                )
             )}
 
             <div className={cx('message-content')}>
-                {!isMe && isGroup && senderName && (
+                {!isMe && isGroup && senderName && isFirstInGroup && (
                     <p className={cx('sender-name')}>{senderName}</p>
                 )}
 
@@ -235,11 +247,12 @@ const Message = ({
                 <div 
                     className={cx('message-container')} 
                     ref={containerRef}
+                    title={time}
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={handleMouseLeave}
                 >
                     {/* Reaction Picker */}
-                    {isPickerOpen && (
+                    {isPickerOpen && createPortal(
                         <div 
                             className={cx('reaction-picker')} 
                             style={pickerStyle}
@@ -307,7 +320,8 @@ const Message = ({
                                     </button>
                                 </div>
                             )}
-                        </div>
+                        </div>,
+                        document.body
                     )}
 
                     {/* Bubble Content */}
@@ -525,7 +539,7 @@ const Message = ({
                     )}
 
                     {/* X-Style Timestamp and Status BELOW Bubble */}
-                    {!isRecalled && (
+                    {!isRecalled && (isLastInGroup || isPinned) && (
                         <div className={cx('message-time-meta')}>
                             {isPinned && <Pin size={11} className={cx('meta-pin')} />}
                             <span className={cx('meta-time')}>{time}</span>
@@ -540,7 +554,7 @@ const Message = ({
             </div>
 
             {/* Image Modal Overlay */}
-            {isImageModalOpen && (
+            {isImageModalOpen && createPortal(
                 <div 
                     style={{
                         position: 'fixed',
@@ -552,7 +566,7 @@ const Message = ({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 10000
+                        zIndex: 99999
                     }} 
                     onClick={() => setIsImageModalOpen(false)}
                 >
@@ -579,7 +593,8 @@ const Message = ({
                     >
                         <X size={32} />
                     </button>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* Forward Modal Overlay */}

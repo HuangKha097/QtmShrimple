@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { Copy, Download, Loader2, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
+import { Copy, Crown, Download, Link2, Loader2, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '../../stores/useAuthStore.js';
 import { useChatStore } from '../../stores/useChatStore.js';
@@ -11,7 +11,6 @@ import styles from '../../assets/css/GroupDetails.module.scss';
 const errorMessage = error => error.response?.data?.message || 'Không thể thực hiện thao tác. Vui lòng thử lại.';
 
 const GroupInviteDialog = ({ chat, isLeader, onClose }) => {
-    const dialog = useRef(null);
     const qr = useRef(null);
     const [token, setToken] = useState('');
     const [busy, setBusy] = useState(true);
@@ -20,7 +19,6 @@ const GroupInviteDialog = ({ chat, isLeader, onClose }) => {
     const socket = useAuthStore(state => state.socket);
 
     useEffect(() => {
-        dialog.current.showModal();
         let alive = true;
         const load = async () => {
             try {
@@ -39,6 +37,14 @@ const GroupInviteDialog = ({ chat, isLeader, onClose }) => {
         socket?.on('groupInviteChanged', onChanged);
         return () => { alive = false; socket?.off('groupInviteChanged', onChanged); };
     }, [chat._id, socket]);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
 
     const copyLink = async () => {
         try { await navigator.clipboard.writeText(inviteUrl); toast.success('Đã sao chép liên kết mời'); }
@@ -60,39 +66,83 @@ const GroupInviteDialog = ({ chat, isLeader, onClose }) => {
         const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' }));
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'shrimple-group-qr.svg';
+        link.download = `shrimple-group-qr-${chat.group?.name || 'invite'}.svg`;
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
 
+    if (typeof document === 'undefined') return null;
+
     return createPortal(
-        <dialog ref={dialog} className={styles.dialog} onCancel={onClose} aria-labelledby="invite-title"
-            onClick={event => { if (event.target === dialog.current) onClose(); }}>
+        <div
+            className={styles.dialogBackdrop}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invite-title"
+            onClick={event => { if (event.target === event.currentTarget) onClose(); }}
+        >
             <div className={styles.dialogContent}>
-                <div className={styles.heading}>
-                    <h2 id="invite-title">Mời tham gia nhóm</h2>
-                    <button type="button" onClick={onClose} aria-label="Đóng"><X size={20} /></button>
+                <div className={styles.dialogHeader}>
+                    <div className={styles.dialogTitleGroup}>
+                        <div className={styles.dialogIconBox}>
+                            <Link2 size={18} />
+                        </div>
+                        <div>
+                            <h2 id="invite-title">Mời tham gia nhóm</h2>
+                            <span className={styles.dialogSubtitle}>{chat.name || chat.group?.name || 'Nhóm trò chuyện'}</span>
+                        </div>
+                    </div>
+                    <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Đóng">
+                        <X size={18} />
+                    </button>
                 </div>
-                <p>{chat.group?.name}</p>
-                {busy ? <div className={styles.loading} role="status"><Loader2 className={styles.spinner} /> Đang tải liên kết…</div> : error ?
-                    <p role="alert">{error}</p> : <>
-                        <div ref={qr} className={styles.qr}>
-                            <QRCodeSVG value={inviteUrl} size={224} level="M" marginSize={4} title="QR tham gia nhóm" />
+
+                <div className={styles.dialogBody}>
+                    {busy ? (
+                        <div className={styles.loading} role="status">
+                            <Loader2 className={styles.spinner} size={22} />
+                            <span>Đang tải liên kết mời…</span>
                         </div>
-                        <p>Quét QR hoặc mở liên kết để đăng nhập và tham gia nhóm.</p>
-                        <label className={styles.field}>Liên kết mời
-                            <input readOnly value={inviteUrl} onFocus={event => event.target.select()} />
-                        </label>
-                        <div className={styles.actions}>
-                            <button type="button" onClick={copyLink}><Copy size={16} /> Sao chép URL</button>
-                            <button type="button" onClick={downloadQr}><Download size={16} /> Tải QR</button>
-                        </div>
-                        {isLeader && <button type="button" className={styles.rotate} onClick={rotateLink} disabled={busy}>
-                            <RefreshCw size={16} /> Tạo liên kết mới
-                        </button>}
-                    </>}
+                    ) : error ? (
+                        <p className={styles.errorText} role="alert">{error}</p>
+                    ) : (
+                        <>
+                            <div ref={qr} className={styles.qrCard}>
+                                <QRCodeSVG value={inviteUrl} size={196} level="M" marginSize={2} title="QR tham gia nhóm" />
+                            </div>
+                            <p className={styles.qrHint}>Quét mã QR hoặc chia sẻ liên kết bên dưới để mời bạn bè vào nhóm.</p>
+
+                            <div className={styles.inviteLinkBox}>
+                                <input
+                                    readOnly
+                                    value={inviteUrl}
+                                    onFocus={event => event.target.select()}
+                                    aria-label="Liên kết mời"
+                                />
+                                <button type="button" className={styles.copyInlineBtn} onClick={copyLink} title="Sao chép liên kết">
+                                    <Copy size={15} />
+                                    <span>Sao chép</span>
+                                </button>
+                            </div>
+
+                            <div className={styles.dialogActions}>
+                                <button type="button" className={styles.secondaryBtn} onClick={downloadQr}>
+                                    <Download size={16} />
+                                    <span>Tải mã QR</span>
+                                </button>
+                                {isLeader && (
+                                    <button type="button" className={styles.secondaryBtn} onClick={rotateLink} disabled={busy}>
+                                        <RefreshCw size={15} />
+                                        <span>Đổi liên kết mới</span>
+                                    </button>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
-        </dialog>, document.body
+        </div>,
+        document.body
     );
 };
 
@@ -104,49 +154,104 @@ const GroupDetails = ({ chat, isLeader, showInvite, onCloseInvite, onClose }) =>
     const [description, setDescription] = useState('');
     const [busy, setBusy] = useState(false);
     const { updateGroup, deleteGroup } = useChatStore();
+
     const startEditing = () => {
-        setName(chat.group?.name || '');
+        setName(chat.name || chat.group?.name || '');
         setDescription(chat.group?.descriptionGroup || '');
         setEditing(true);
     };
+
     const save = async event => {
         event.preventDefault();
         if (!name.trim()) { toast.error('Vui lòng nhập tên nhóm'); return; }
         setBusy(true);
         try {
-            await updateGroup(chat._id, { name, descriptionGroup: description });
+            await updateGroup(chat._id, { name: name.trim(), descriptionGroup: description.trim() });
             setEditing(false);
             toast.success('Đã cập nhật thông tin nhóm');
         } catch (error) { toast.error(errorMessage(error)); }
         finally { setBusy(false); }
     };
+
     const remove = async () => {
-        if (!window.confirm(`Xóa nhóm "${chat.group?.name}" và toàn bộ tin nhắn? Thao tác này không thể hoàn tác.`)) return;
+        if (!window.confirm(`Xóa nhóm "${chat.name || chat.group?.name}" và toàn bộ tin nhắn? Thao tác này không thể hoàn tác.`)) return;
         setBusy(true);
         try { await deleteGroup(chat._id); onClose(); }
         catch (error) { toast.error(errorMessage(error)); }
         finally { setBusy(false); }
     };
-    const leader = chat.participants?.find(p => p.role === 'leader' || p._id === chat.group?.createdBy);
 
-    return <section className={styles.details} aria-label="Thông tin nhóm">
-        <div className={styles.heading}><h3>Thông tin nhóm</h3><span className={styles.role}>{isLeader ? 'Trưởng nhóm' : isAdmin ? 'Quản trị viên' : 'Thành viên'}</span></div>
-        <p>Trưởng nhóm: <strong>{leader?.displayName || leader?.username || 'Chưa xác định'}</strong></p>
-        <p className={styles.description}>{chat.group?.descriptionGroup || 'Nhóm chưa có mô tả.'}</p>
-        {isLeader && !editing && <div className={styles.actions}>
-            <button type="button" disabled={busy} onClick={startEditing}><Pencil size={16} /> Chỉnh sửa</button>
-            <button type="button" disabled={busy} className={styles.danger} onClick={remove}><Trash2 size={16} /> Xóa nhóm</button>
-        </div>}
-        {isLeader && editing && <form onSubmit={save}>
-            <label className={styles.field}>Tên nhóm<input value={name} onChange={event => setName(event.target.value)} required maxLength={100} disabled={busy} /></label>
-            <label className={styles.field}>Mô tả<textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={1000} rows={3} disabled={busy} /></label>
-            <div className={styles.actions}>
-                <button type="submit" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu thay đổi'}</button>
-                <button type="button" disabled={busy} onClick={() => setEditing(false)}>Hủy</button>
+    const creatorIdStr = (chat.group?.createdBy?._id || chat.group?.createdBy)?.toString();
+    const leader = chat.participants?.find(p => p.role === 'leader' || p._id?.toString() === creatorIdStr);
+
+    return (
+        <section className={styles.details} aria-label="Thông tin nhóm">
+            <div className={styles.metaHeader}>
+                <div className={styles.leaderLine}>
+                    <Crown size={14} className={styles.crownIcon} />
+                    <span>Trưởng nhóm: <strong>{leader?.displayName || leader?.username || 'Chưa xác định'}</strong></span>
+                </div>
+                <span className={styles.roleBadge}>
+                    {isLeader ? 'Trưởng nhóm' : isAdmin ? 'Quản trị viên' : 'Thành viên'}
+                </span>
             </div>
-        </form>}
-        {showInvite && <GroupInviteDialog chat={chat} isLeader={isLeader} onClose={onCloseInvite} />}
-    </section>;
+
+            {!editing ? (
+                <>
+                    <p className={styles.description}>
+                        {chat.group?.descriptionGroup || 'Nhóm chưa có mô tả.'}
+                    </p>
+                    {isLeader && (
+                        <div className={styles.actions}>
+                            <button type="button" className={styles.editBtn} disabled={busy} onClick={startEditing}>
+                                <Pencil size={14} />
+                                <span>Chỉnh sửa</span>
+                            </button>
+                            <button type="button" className={styles.danger} disabled={busy} onClick={remove}>
+                                <Trash2 size={14} />
+                                <span>Xóa nhóm</span>
+                            </button>
+                        </div>
+                    )}
+                </>
+            ) : (
+                <form className={styles.editForm} onSubmit={save}>
+                    <label className={styles.field}>
+                        <span>Tên nhóm</span>
+                        <input
+                            value={name}
+                            onChange={event => setName(event.target.value)}
+                            required
+                            maxLength={100}
+                            disabled={busy}
+                            placeholder="Nhập tên nhóm..."
+                        />
+                    </label>
+                    <label className={styles.field}>
+                        <span>Mô tả nhóm</span>
+                        <textarea
+                            value={description}
+                            onChange={event => setDescription(event.target.value)}
+                            maxLength={1000}
+                            rows={3}
+                            disabled={busy}
+                            placeholder="Thêm mô tả cho nhóm..."
+                        />
+                    </label>
+                    <div className={styles.actions}>
+                        <button type="submit" className={styles.saveBtn} disabled={busy}>
+                            {busy ? 'Đang lưu…' : 'Lưu thay đổi'}
+                        </button>
+                        <button type="button" className={styles.cancelBtn} disabled={busy} onClick={() => setEditing(false)}>
+                            Hủy
+                        </button>
+                    </div>
+                </form>
+            )}
+
+            {showInvite && <GroupInviteDialog chat={chat} isLeader={isLeader} onClose={onCloseInvite} />}
+        </section>
+    );
 };
 
 export default GroupDetails;
