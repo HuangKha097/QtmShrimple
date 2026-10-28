@@ -21,17 +21,17 @@ const originToFlip = (origin) => {
  * Renders cinematic animated light rays using WebGL (OGL)
  */
 const SideRays = ({
-    speed = 1.8,
+    speed = 1.6,
     rayColor1 = '#f97316',
     rayColor2 = '#fb923c',
-    intensity = 1.8,
-    spread = 2.0,
+    intensity = 1.1,
+    spread = 1.4,
     origin = 'top-left',
     tilt = 0,
-    saturation = 1.4,
-    blend = 0.7,
-    falloff = 1.5,
-    opacity = 0.7,
+    saturation = 1.25,
+    blend = 0.6,
+    falloff = 1.8,
+    opacity = 0.42,
     className = ''
 }) => {
     const containerRef = useRef(null);
@@ -118,11 +118,15 @@ uniform float iOpacity;
 float rayStrength(vec2 raySource, vec2 rayRefDirection, vec2 coord, float seedA, float seedB, float speed) {
   vec2 sourceToCoord = coord - raySource;
   float cosAngle = dot(normalize(sourceToCoord), rayRefDirection);
+  float cornerDist = length(vec2(0.1 * iResolution.x, 0.5 * iResolution.y));
+  float distFromCorner = max(0.0, length(sourceToCoord) - cornerDist);
+  float maxReach = max(iResolution.x, iResolution.y) * 0.48;
+  float distFade = clamp(1.0 - distFromCorner / maxReach, 0.0, 1.0);
+  distFade *= distFade;
   return clamp(
-    (0.45 + 0.15 * sin(cosAngle * seedA + iTime * speed)) +
-    (0.3 + 0.2 * cos(-cosAngle * seedB + iTime * speed)),
-    0.0, 1.0) *
-    clamp((iResolution.x - length(sourceToCoord)) / iResolution.x, 0.5, 1.0);
+    (0.26 + 0.22 * sin(cosAngle * seedA + iTime * speed)) +
+    (0.18 + 0.20 * cos(-cosAngle * seedB + iTime * speed)),
+    0.0, 1.0) * distFade;
 }
 
 void main() {
@@ -139,7 +143,7 @@ void main() {
   vec2 rel = coord - rayPos;
   vec2 tiltedCoord = vec2(rel.x * cs - rel.y * sn, rel.x * sn + rel.y * cs) + rayPos;
 
-  float halfSpread = iSpread * 0.275;
+  float halfSpread = iSpread * 0.22;
   vec2 rayRefDir1 = normalize(vec2(cos(0.785398 + halfSpread), sin(0.785398 + halfSpread)));
   vec2 rayRefDir2 = normalize(vec2(cos(0.785398 - halfSpread), sin(0.785398 - halfSpread)));
 
@@ -149,7 +153,7 @@ void main() {
   vec4 color = rays1 * (1.0 - iBlend) * 0.9 + rays2 * iBlend * 0.9;
 
   float distanceToLight = length(fragCoord.xy - vec2(rayPos.x, iResolution.y - rayPos.y)) / iResolution.y;
-  float brightness = iIntensity * 0.4 / pow(max(distanceToLight, 0.001), iFalloff);
+  float brightness = iIntensity * 0.36 / pow(max(distanceToLight + 0.25, 0.001), iFalloff);
   color.rgb *= brightness;
 
   float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));

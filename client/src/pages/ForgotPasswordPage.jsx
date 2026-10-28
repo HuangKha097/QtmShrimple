@@ -11,8 +11,6 @@ import XInput from '../components/ui/animate/XInput';
 import XButton from '../components/ui/animate/XButton';
 import OTPInput from '@/components/lightswind-pro/otp-input';
 
-const footerLinks = ['about', 'download', 'help', 'terms', 'privacy', 'cookies', 'accessibility', 'advertising'];
-
 const ForgotPasswordPage = () => {
     const navigate = useNavigate();
     const { t } = useTranslation();
@@ -120,7 +118,7 @@ const ForgotPasswordPage = () => {
 
     return (
         <div className={`${authStyles['page-wrapper']} ${reducedMotion ? styles['static-background'] : ''}`}>
-            {!reducedMotion && <SideRays origin="top-left" speed={1.6} rayColor1="#f97316" rayColor2="#fb923c" intensity={1.8} spread={2.2} opacity={0.65} falloff={1.5} />}
+            {!reducedMotion && <SideRays origin="top-left" speed={1.6} rayColor1="#f97316" rayColor2="#fb923c" intensity={1.1} spread={1.4} opacity={0.42} falloff={1.8} />}
             <main className={authStyles['main-content']}>
                 <div className={authStyles['brand-column']}>
                     <Motion.div className={authStyles['brand-content']} initial={reducedMotion ? false : { opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6 }}>
@@ -184,7 +182,6 @@ const ForgotPasswordPage = () => {
             </main>
             <footer className={authStyles['x-footer']}>
                 <nav className={authStyles['footer-nav']}>
-                    {footerLinks.map((name) => <a key={name} href={`#${name}`} onClick={(event) => event.preventDefault()}>{t(`recovery.footer.${name}`)}</a>)}
                     <span>© 2026 Shrimple Corp.</span>
                 </nav>
             </footer>

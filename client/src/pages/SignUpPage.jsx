@@ -135,10 +135,10 @@ const SignUpPage = () => {
                 speed={1.6}
                 rayColor1="#f97316"
                 rayColor2="#fb923c"
-                intensity={1.8}
-                spread={2.2}
-                opacity={0.65}
-                falloff={1.5}
+                intensity={1.1}
+                spread={1.4}
+                opacity={0.42}
+                falloff={1.8}
             />
 
             <div className={styles['main-content']}>
@@ -291,14 +291,6 @@ const SignUpPage = () => {
             {/* X-Style Footer */}
             <footer className={styles['x-footer']}>
                 <nav className={styles['footer-nav']}>
-                    <a href="#about" onClick={(e) => e.preventDefault()}>Giới thiệu</a>
-                    <a href="#download" onClick={(e) => e.preventDefault()}>Tải ứng dụng</a>
-                    <a href="#help" onClick={(e) => e.preventDefault()}>Trung tâm trợ giúp</a>
-                    <a href="#terms" onClick={(e) => e.preventDefault()}>Điều khoản dịch vụ</a>
-                    <a href="#privacy" onClick={(e) => e.preventDefault()}>Chính sách quyền riêng tư</a>
-                    <a href="#cookies" onClick={(e) => e.preventDefault()}>Chính sách Cookie</a>
-                    <a href="#accessibility" onClick={(e) => e.preventDefault()}>Khả năng truy cập</a>
-                    <a href="#advertising" onClick={(e) => e.preventDefault()}>Thông tin quảng cáo</a>
                     <span>© 2026 Shrimple Corp.</span>
                 </nav>
             </footer>
