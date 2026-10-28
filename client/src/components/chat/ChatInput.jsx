@@ -356,6 +356,35 @@ const ChatInput = ({ onOpenDrawTool }) => {
         }
     };
 
+    const currentConvo = useMemo(() => {
+        const safeConvos = Array.isArray(conversations) ? conversations : [];
+        return safeConvos.find(c => c && c._id === activeConversationId);
+    }, [conversations, activeConversationId]);
+
+    const mentionCandidates = useMemo(() => {
+        const parts = Array.isArray(currentConvo?.participants) ? currentConvo.participants : [];
+        const friendList = Array.isArray(friends) ? friends : [];
+        const friendById = new Map(
+            friendList
+                .filter(f => f && (f._id || f.id))
+                .map(f => [(f._id || f.id).toString(), f])
+        );
+
+        return parts.map(p => {
+            const raw = p?.userId && typeof p.userId === 'object' ? { ...p.userId, ...p } : p;
+            const idStr = (raw?._id || raw?.id || raw?.userId)?.toString();
+            const matchedFriend = idStr ? friendById.get(idStr) : null;
+            if (!matchedFriend) return raw;
+            return {
+                ...matchedFriend,
+                ...raw,
+                username: raw?.username || matchedFriend.username,
+                displayName: raw?.displayName || matchedFriend.displayName,
+                avatarURL: raw?.avatarURL || matchedFriend.avatarURL,
+            };
+        });
+    }, [currentConvo, friends]);
+
     if (!chatStatus.allowed) {
         return (
             <div className={cx('container')}>
@@ -368,17 +397,6 @@ const ChatInput = ({ onOpenDrawTool }) => {
 
     const hasContent = text.trim().length > 0 || Boolean(image);
 
-    const currentConvo = useMemo(() => {
-        const safeConvos = Array.isArray(conversations) ? conversations : [];
-        return safeConvos.find(c => c && c._id === activeConversationId);
-    }, [conversations, activeConversationId]);
-
-    const mentionCandidates = useMemo(() => {
-        const parts = currentConvo?.participants || [];
-        const friendList = Array.isArray(friends) ? friends : [];
-        return [...parts, ...friendList];
-    }, [currentConvo, friends]);
-
     return (
         <div className={cx('container')}>
             <MentionAutocomplete
@@ -386,7 +404,7 @@ const ChatInput = ({ onOpenDrawTool }) => {
                 onChange={setText}
                 inputRef={textInputRef}
                 candidates={mentionCandidates}
-                includeEveryone={true}
+                includeEveryone={Boolean(currentConvo?.isGroup)}
                 everyoneDesc={currentConvo?.isGroup ? "Nhắc tất cả thành viên trong nhóm" : "Nhắc mọi người trong cuộc trò chuyện"}
                 placement="top"
             />

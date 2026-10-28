@@ -23,7 +23,11 @@ const TrendsWidget = () => {
         fetchTrends();
     }, [fetchTrends]);
 
-    const displayTrends = trends && trends.length > 0 ? trends : DEFAULT_TRENDS;
+    const displayTrends = (
+        trends && trends.length > 0
+            ? [...trends].sort((a, b) => (b.count || 0) - (a.count || 0))
+            : DEFAULT_TRENDS
+    ).slice(0, 5);
 
     const handleTrendClick = (tagName) => {
         const cleanTag = tagName.replace(/^#/, '');

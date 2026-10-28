@@ -113,13 +113,14 @@
 
     .danger {
         flex: 1;
-        color: #f87171;
-        border-color: rgba(239, 68, 68, 0.3);
-        background: rgba(239, 68, 68, 0.08);
+        color: #ffffff;
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.05);
 
         &:hover:not(:disabled) {
-            background: rgba(239, 68, 68, 0.16);
-            border-color: rgba(239, 68, 68, 0.5);
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #ffffff;
         }
     }
 }

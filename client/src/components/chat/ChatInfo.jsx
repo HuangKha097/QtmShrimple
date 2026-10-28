@@ -682,14 +682,18 @@ const ChatInfo = ({ chat, onClose }) => {
                             >
                                 {isCurrentUserAdmin && (
                                     <div className={cx('members-actions-bar')}>
-                                        <button 
+                                        <Motion.button 
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                                             type="button"
                                             className={cx('add-member-header-btn')}
                                             onClick={() => setShowAddMemberModal(true)}
                                         >
+                                            <div className={cx('btn-shimmer')} aria-hidden="true" />
                                             <UserPlus size={16} />
                                             <span>Thêm thành viên</span>
-                                        </button>
+                                        </Motion.button>
                                     </div>
                                 )}
 

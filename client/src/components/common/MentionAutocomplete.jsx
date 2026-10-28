@@ -3,11 +3,18 @@ import classNames from 'classnames/bind';
 import { Users } from 'lucide-react';
 import styles from '../../assets/css/MentionAutocomplete.module.scss';
 import { useAuthStore } from '../../stores/useAuthStore.js';
+import { ASSET_BASE_URL } from '../../config/env.js';
 
 const cx = classNames.bind(styles);
 
 const DEFAULT_AVATAR =
     "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231f2937'><circle cx='12' cy='8' r='4' fill='%239ca3af'/><path d='M4 20c0-4 4-6 8-6s8 2 8 6' fill='%239ca3af'/></svg>";
+
+const resolveAvatarSrc = (url) => {
+    if (!url) return DEFAULT_AVATAR;
+    if (url.startsWith('http') || url.startsWith('data:')) return url;
+    return `${ASSET_BASE_URL}${url}`;
+};
 
 /**
  * Helper to insert '@' at cursor position (used by toolbar '@' button)
@@ -168,7 +175,7 @@ const MentionAutocomplete = ({
                     isEveryone: false,
                     username: username || displayName.replace(/\s+/g, '_').toLowerCase(),
                     displayName,
-                    avatarUrl: u.avatarUrl || DEFAULT_AVATAR,
+                    avatarUrl: resolveAvatarSrc(u.avatarURL || u.avatarUrl),
                 });
             }
         });

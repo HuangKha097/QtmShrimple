@@ -147,8 +147,6 @@ const GroupInviteDialog = ({ chat, isLeader, onClose }) => {
 };
 
 const GroupDetails = ({ chat, isLeader, showInvite, onCloseInvite, onClose }) => {
-    const currentUserId = useAuthStore(state => state.user?._id);
-    const isAdmin = chat.participants?.some(member => member._id === currentUserId && member.role === 'admin');
     const [editing, setEditing] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -191,9 +189,6 @@ const GroupDetails = ({ chat, isLeader, showInvite, onCloseInvite, onClose }) =>
                     <Crown size={14} className={styles.crownIcon} />
                     <span>Trưởng nhóm: <strong>{leader?.displayName || leader?.username || 'Chưa xác định'}</strong></span>
                 </div>
-                <span className={styles.roleBadge}>
-                    {isLeader ? 'Trưởng nhóm' : isAdmin ? 'Quản trị viên' : 'Thành viên'}
-                </span>
             </div>
 
             {!editing ? (

@@ -893,7 +893,7 @@ export const getTrends = async (req, res) => {
     try {
         const trends = await Hashtag.find({ count: { $gt: 0 } })
             .sort({ count: -1, lastUsedAt: -1 })
-            .limit(10)
+            .limit(5)
             .lean();
 
         res.status(200).json(trends);
