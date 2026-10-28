@@ -63,6 +63,7 @@ Thumbs.db
 Desktop.ini
 
 # Temporary files
+**/output/
 **/.tmp/
 **/tmp/
 **/temp/

@@ -43,7 +43,7 @@ const STROKE_SIZES = [
 /**
  * Shared store between Top-Pinned Toolbar (ChatDrawOverlay) and Scroll-Anchored Layer (ChatDrawScrollLayer)
  */
-export const useDrawToolStore = create((set) => ({
+const useDrawToolStore = create((set) => ({
     brushMode: 'neon', // 'neon' | 'solid' | 'highlighter' | 'dashed' | 'eraser'
     color: '#f97316',
     strokeSize: 6,
@@ -485,7 +485,6 @@ const ChatDrawOverlay = ({ conversationId }) => {
         setBrushMode,
         setColor,
         setStrokeSize,
-        setIsHiddenLocal,
         toggleHiddenLocal,
     } = useDrawToolStore();
 
@@ -637,8 +636,8 @@ const ChatDrawOverlay = ({ conversationId }) => {
     return (
         <>
             {!isDrawModeOpen ? (
-                <div className={cx('pinned-top-bar', { 'has-drawing': hasStrokes })}>
-                    {hasStrokes && (
+                hasStrokes ? (
+                    <div className={cx('pinned-top-bar', 'has-drawing')}>
                         <div className={cx('pinned-status-info')}>
                             <span className={cx('pulse-dot')} />
                             <span>Nét vẽ trong đoạn chat</span>
@@ -646,42 +645,25 @@ const ChatDrawOverlay = ({ conversationId }) => {
                                 <span className={cx('author-sub')}>({updatedByName})</span>
                             )}
                         </div>
-                    )}
 
-                    <button
-                        type="button"
-                        className={cx('pinned-pen-trigger')}
-                        onClick={() => {
-                            setIsHiddenLocal(false);
-                            setIsDrawModeOpen(true);
-                        }}
-                        title="Vẽ trực tiếp lên vị trí tin nhắn (Instagram Draw)"
-                    >
-                        <PenTool size={14} />
-                        <span>{hasStrokes ? 'Vẽ thêm' : 'Bút vẽ màn hình'}</span>
-                    </button>
-
-                    {hasStrokes && (
-                        <>
-                            <button
-                                type="button"
-                                className={cx('pinned-mini-btn')}
-                                onClick={toggleHiddenLocal}
-                                title={isHiddenLocal ? 'Hiện nét vẽ' : 'Tạm ẩn nét vẽ'}
-                            >
-                                {isHiddenLocal ? <Eye size={14} /> : <EyeOff size={14} />}
-                            </button>
-                            <button
-                                type="button"
-                                className={cx('pinned-mini-btn', 'danger')}
-                                onClick={handleClearAll}
-                                title="Xóa toàn bộ nét vẽ"
-                            >
-                                <Trash2 size={14} />
-                            </button>
-                        </>
-                    )}
-                </div>
+                        <button
+                            type="button"
+                            className={cx('pinned-mini-btn')}
+                            onClick={toggleHiddenLocal}
+                            title={isHiddenLocal ? 'Hiện nét vẽ' : 'Tạm ẩn nét vẽ'}
+                        >
+                            {isHiddenLocal ? <Eye size={14} /> : <EyeOff size={14} />}
+                        </button>
+                        <button
+                            type="button"
+                            className={cx('pinned-mini-btn', 'danger')}
+                            onClick={handleClearAll}
+                            title="Xóa toàn bộ nét vẽ"
+                        >
+                            <Trash2 size={14} />
+                        </button>
+                    </div>
+                ) : null
             ) : (
                 <div className={cx('draw-studio-dock')}>
                     <div className={cx('studio-top-row')}>

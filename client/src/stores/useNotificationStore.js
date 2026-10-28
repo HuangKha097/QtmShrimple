@@ -51,6 +51,39 @@ export const useNotificationStore = create((set, get) => ({
         }
     },
 
+    deleteNotification: async (id) => {
+        try {
+            await api.delete(`/api/notifications/${id}`);
+            set(state => {
+                const updated = state.notifications.filter(n => n._id !== id);
+                return {
+                    notifications: updated,
+                    unreadCount: updated.filter(n => !n.isRead).length,
+                };
+            });
+            return true;
+        } catch (error) {
+            console.error("Failed to delete notification:", error);
+            toast.error("Không thể xóa thông báo");
+            return false;
+        }
+    },
+
+    deleteAllNotifications: async () => {
+        try {
+            await api.delete("/api/notifications");
+            set({
+                notifications: [],
+                unreadCount: 0,
+            });
+            return true;
+        } catch (error) {
+            console.error("Failed to delete all notifications:", error);
+            toast.error("Không thể xóa tất cả thông báo");
+            return false;
+        }
+    },
+
     addNotification: (notif) => {
         set(state => {
             const exists = state.notifications.some(n => n._id === notif._id);

@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import classNames from 'classnames/bind';
 import { motion as Motion, AnimatePresence } from 'motion/react';
-import { Bell } from 'lucide-react';
+import { Bell, Trash2 } from 'lucide-react';
 import styles from '../../assets/css/NotificationDropdown.module.scss';
 import { useNotificationStore } from '../../stores/useNotificationStore';
 import { useChatStore } from '../../stores/useChatStore';
@@ -17,6 +17,7 @@ const NotificationDropdown = ({ align = 'right' }) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
+    const [popoverStyle, setPopoverStyle] = useState({});
     const wrapperRef = useRef(null);
 
     const {
@@ -25,6 +26,8 @@ const NotificationDropdown = ({ align = 'right' }) => {
         fetchNotifications,
         markAsRead,
         markAllAsRead,
+        deleteNotification,
+        deleteAllNotifications,
     } = useNotificationStore();
 
     const {
@@ -55,6 +58,46 @@ const NotificationDropdown = ({ align = 'right' }) => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [isOpen]);
+
+    const updatePopoverPosition = useCallback(() => {
+        if (!wrapperRef.current || typeof window === 'undefined') return;
+        const rect = wrapperRef.current.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const isMobile = vw <= 768;
+        const margin = isMobile ? 12 : 16;
+        const popoverWidth = Math.min(360, Math.max(260, vw - margin * 2));
+
+        let idealViewportLeft;
+        if (isMobile) {
+            idealViewportLeft = Math.max(margin, (vw - popoverWidth) / 2);
+        } else if (align === 'right') {
+            idealViewportLeft = rect.right - popoverWidth;
+        } else {
+            idealViewportLeft = rect.left - 50;
+        }
+
+        const minLeft = margin;
+        const maxLeft = Math.max(margin, vw - margin - popoverWidth);
+        const clampedViewportLeft = Math.min(Math.max(idealViewportLeft, minLeft), maxLeft);
+
+        setPopoverStyle({
+            width: `${popoverWidth}px`,
+            maxWidth: `${popoverWidth}px`,
+            left: `${Math.round(clampedViewportLeft - rect.left)}px`,
+            right: 'auto',
+        });
+    }, [align]);
+
+    useLayoutEffect(() => {
+        if (!isOpen) return undefined;
+        updatePopoverPosition();
+        window.addEventListener('resize', updatePopoverPosition);
+        window.addEventListener('orientationchange', updatePopoverPosition);
+        return () => {
+            window.removeEventListener('resize', updatePopoverPosition);
+            window.removeEventListener('orientationchange', updatePopoverPosition);
+        };
+    }, [isOpen, updatePopoverPosition]);
 
     const totalUnreadNotifs = (friendRequests?.length || 0) + (unreadActivityCount || 0);
 
@@ -125,6 +168,22 @@ const NotificationDropdown = ({ align = 'right' }) => {
         }
     };
 
+    const handleDeleteNotification = async (e, notifId) => {
+        e.stopPropagation();
+        const ok = await deleteNotification(notifId);
+        if (ok) {
+            toast.success('Đã xóa thông báo');
+        }
+    };
+
+    const handleDeleteAllNotifications = async (e) => {
+        e.stopPropagation();
+        const ok = await deleteAllNotifications();
+        if (ok) {
+            toast.success('Đã xóa tất cả thông báo');
+        }
+    };
+
     return (
         <div className={cx('notif-wrapper')} ref={wrapperRef}>
             <button
@@ -146,6 +205,7 @@ const NotificationDropdown = ({ align = 'right' }) => {
                 {isOpen && (
                     <Motion.div
                         className={cx('notif-popover', `align-${align}`)}
+                        style={popoverStyle}
                         initial={{ opacity: 0, y: -8, scale: 0.96 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -8, scale: 0.96 }}
@@ -160,13 +220,26 @@ const NotificationDropdown = ({ align = 'right' }) => {
                                 )}
                             </div>
                             {(notifications.length > 0 || friendRequests.length > 0) && (
-                                <button
-                                    type="button"
-                                    className={cx('notif-mark-read-btn')}
-                                    onClick={() => markAllAsRead()}
-                                >
-                                    {t('feed.markAllRead')}
-                                </button>
+                                <div className={cx('notif-header-actions')}>
+                                    <button
+                                        type="button"
+                                        className={cx('notif-mark-read-btn')}
+                                        onClick={() => markAllAsRead()}
+                                    >
+                                        {t('feed.markAllRead')}
+                                    </button>
+                                    {notifications.length > 0 && (
+                                        <button
+                                            type="button"
+                                            className={cx('notif-clear-all-btn')}
+                                            onClick={handleDeleteAllNotifications}
+                                            title={t('feed.deleteAllNotifications', 'Xóa tất cả')}
+                                        >
+                                            <Trash2 size={13} />
+                                            <span>{t('feed.deleteAllNotifications', 'Xóa tất cả')}</span>
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
 
@@ -290,7 +363,18 @@ const NotificationDropdown = ({ align = 'right' }) => {
                                                                 {formatRelativeTime(notif.createdAt)}
                                                             </span>
                                                         </div>
-                                                        {!notif.isRead && <span className={cx('unread-indicator')} />}
+                                                        <div className={cx('notif-item-meta')}>
+                                                            {!notif.isRead && <span className={cx('unread-indicator')} />}
+                                                            <button
+                                                                type="button"
+                                                                className={cx('notif-delete-btn')}
+                                                                onClick={(e) => handleDeleteNotification(e, notif._id)}
+                                                                title={t('feed.deleteNotification', 'Xóa thông báo')}
+                                                                aria-label={t('feed.deleteNotification', 'Xóa thông báo')}
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
