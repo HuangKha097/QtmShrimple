@@ -14,7 +14,6 @@ khai và nghiệm thu được phân biệt rõ trong kanban.
 | [Design](docs/design.md) | Màn hình, luồng UI, design token và khả năng truy cập |
 | [Plan](docs/plan.md) | Kiến trúc, API, dữ liệu và kế hoạch hoàn thiện |
 | [AGENTS.md](AGENTS.md) | Hướng dẫn agent làm việc trong repository |
-| [Kết quả cleanup](docs/validation/codebase-cleanup.md) | Phần đã dọn và các kiểm tra thực tế |
 
 ## Điểm nổi bật
 
@@ -24,9 +23,6 @@ khai và nghiệm thu được phân biệt rõ trong kanban.
 - **Cuộc gọi:** gọi thoại/video ngang hàng bằng WebRTC; server chuyển tiếp tín hiệu thiết lập cuộc gọi qua Socket.IO.
 - **Mic dịch thuật:** trong cuộc gọi 1–1 hoặc nhóm, người dùng có thể mở note dịch tiếng Anh/Việt theo tên người nói. Audio được chia thành clip ngắn, xử lý qua FastAPI và chỉ lưu note trong phiên giao diện hiện tại.
 - **Nội dung xã hội:** bài đăng, bảng tin, bình luận, reaction, nội dung đã lưu và bảng tin video ngắn.
-- **Cá nhân hóa:** giao diện sáng/tối và các thiết lập người dùng.
-- **Anti-Peep:** ghi nhớ chủ nhân bằng 5 embedding, quét camera ở nhịp thấp và chỉ khóa khi cùng một người lạ nhìn vào màn hình liên tục 3 giây. Camera tự dừng khi tab bị ẩn.
-- **Phân loại tin tiếng Việt tùy chọn:** mô hình TF-IDF/Random Forest đưa ra dự đoán mang tính heuristic. Kết quả không phải bằng chứng khẳng định một nội dung đúng hay sai và không thay thế việc kiểm chứng nguồn tin.
 
 ## Kiến trúc tổng quan
 
